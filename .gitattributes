@@ -1,0 +1,20 @@
+# Line endings are LF everywhere, in the repository and in the working tree.
+#
+# This is not a style preference. The golden SVG files are compared byte for
+# byte against freshly rendered output, and the emitter writes LF. If Git
+# checked them out with CRLF on Windows, every golden test would fail there and
+# pass everywhere else.
+* text=auto eol=lf
+
+# Rendered images and golden rasters are binary: never transform them, and do
+# not try to diff them as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ttf binary
+*.otf binary
+
+# Golden SVG is generated output. It is text, but a diff of it is noise rather
+# than review material.
+testdata/golden/*.svg linguist-generated=true
+docs/images/*         linguist-generated=true

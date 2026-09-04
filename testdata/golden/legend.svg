@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+<defs>
+<clipPath id="c1"><path d="M33.232,32.8 L553.316,32.8 L553.316,368.825 L33.232,368.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,400 L0,400 Z" fill="#ffffff"/>
+<polyline fill="none" points="33.232,32.8 33.232,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="163.253,32.8 163.253,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="293.274,32.8 293.274,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="423.295,32.8 423.295,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="553.316,32.8 553.316,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,368.825 553.316,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,284.819 553.316,284.819" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,200.812 553.316,200.812" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,116.806 553.316,116.806" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,32.8 553.316,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,368.825 553.316,368.825" stroke="#333333"/>
+<polyline fill="none" points="33.232,32.8 33.232,368.825" stroke="#333333"/>
+<polyline fill="none" points="33.232,368.825 33.232,373.825" stroke="#333333"/>
+<text x="33.232" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="163.253,368.825 163.253,373.825" stroke="#333333"/>
+<text x="163.253" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1</text>
+<polyline fill="none" points="293.274,368.825 293.274,373.825" stroke="#333333"/>
+<text x="293.274" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="423.295,368.825 423.295,373.825" stroke="#333333"/>
+<text x="423.295" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">3</text>
+<polyline fill="none" points="553.316,368.825 553.316,373.825" stroke="#333333"/>
+<text x="553.316" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="28.232,368.825 33.232,368.825" stroke="#333333"/>
+<text x="24.232" y="368.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="28.232,284.819 33.232,284.819" stroke="#333333"/>
+<text x="24.232" y="284.819" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">4</text>
+<polyline fill="none" points="28.232,200.812 33.232,200.812" stroke="#333333"/>
+<text x="24.232" y="200.812" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">8</text>
+<polyline fill="none" points="28.232,116.806 33.232,116.806" stroke="#333333"/>
+<text x="24.232" y="116.806" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">12</text>
+<polyline fill="none" points="28.232,32.8 33.232,32.8" stroke="#333333"/>
+<text x="24.232" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">16</text>
+<text x="293.274" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Two series</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="33.232,368.825 54.902,365.325 76.572,361.824 98.243,358.324 119.913,354.824 141.583,351.324 163.253,347.823 184.923,344.323 206.593,340.823 228.263,337.323 249.934,333.822 271.604,330.322 293.274,326.822 314.944,323.322 336.614,319.821 358.284,316.321 379.955,312.821 401.625,309.321 423.295,305.82 444.965,302.32 466.635,298.82 488.305,295.32 509.976,291.819 531.646,288.319 553.316,284.819" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="33.232,368.825 54.902,368.242 76.572,366.492 98.243,363.575 119.913,359.491 141.583,354.241 163.253,347.823 184.923,340.24 206.593,331.489 228.263,321.572 249.934,310.487 271.604,298.236 293.274,284.819 314.944,270.234 336.614,254.483 358.284,237.565 379.955,219.481 401.625,200.229 423.295,179.811 444.965,158.226 466.635,135.474 488.305,111.556 509.976,86.471 531.646,60.219 553.316,32.8" stroke="#d55e00" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 3"/>
+</g>
+<polyline fill="none" points="567.316,192.262 579.316,192.262" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round"/>
+<text x="585.316" y="192.262" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">linear</text>
+<polyline fill="none" points="567.316,209.363 579.316,209.363" stroke="#d55e00" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="5 3"/>
+<text x="585.316" y="209.363" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">square</text>
+</svg>

@@ -14,19 +14,23 @@
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
+*.cov
 *.coverprofile
 profile.cov
+
+# ...but the coverage badge endpoint is a committed artefact, not a profile.
+!docs/coverage.json
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Go workspace file
-go.work
+# Go workspace file. go.work is committed: this repository is multi-module
+# (core + backend/gg) and the workspace is how the two are built together.
 go.work.sum
 
 # env file
 .env
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/

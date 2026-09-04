@@ -1,0 +1,298 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Every build in this workflow is cgo-free. That is not an optimisation; it is
+  # the property the project claims, so it is what CI exercises.
+  CGO_ENABLED: "0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Formatting, vetting, and the dependency-purity check that guards the core's
+  # headline promise.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint and dependency purity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: |
+          go vet ./...
+          (cd backend/gg && go vet ./...)
+
+      - name: The core module must depend on nothing but the standard library
+        run: |
+          # A nested module is excluded from its parent's module graph, so this
+          # is a real invariant rather than a hope. See docs/adr/0001.
+          extra="$(go list -deps ./... | grep -v '^github.com/timzifer/refract' | grep '\.' || true)"
+          if [ -n "$extra" ]; then
+            echo "The core module has picked up non-stdlib dependencies:"
+            echo "$extra"
+            exit 1
+          fi
+          echo "core dependency graph is stdlib-only"
+
+  # ---------------------------------------------------------------------------
+  # Tests on every supported platform and on the declared minimum toolchain.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test (${{ matrix.os }}, Go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: [stable]
+        include:
+          # go.mod declares 1.25; check that the declaration is true rather than
+          # aspirational.
+          - os: ubuntu-latest
+            go: "1.25"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: Build
+        run: |
+          go build ./...
+          go build ./backend/gg/...
+
+      - name: Test the core
+        run: go test ./...
+
+      - name: Test the gg backend
+        working-directory: backend/gg
+        run: go test ./...
+
+  # ---------------------------------------------------------------------------
+  # The race detector needs cgo, so it gets its own job rather than weakening
+  # the cgo-free guarantee everything else is built under.
+  # ---------------------------------------------------------------------------
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: Test the core
+        run: go test -race ./...
+
+      - name: Test the gg backend
+        working-directory: backend/gg
+        run: go test -race ./...
+
+  # ---------------------------------------------------------------------------
+  # Cross-compilation. Being cgo-free is only worth claiming if it is checked.
+  # ---------------------------------------------------------------------------
+  cross:
+    name: Cross-compile
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: js, goarch: wasm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: Build the core for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...
+
+      - name: Build the gg backend for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./backend/gg/...
+
+  # ---------------------------------------------------------------------------
+  # Coverage across both modules, published as a shields.io endpoint so the
+  # README badge needs no third-party service.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: Measure
+        run: |
+          set -euo pipefail
+          # -coverpkg makes a package count as covered when another package's
+          # tests exercise it, which is what actually happens in a library laid out
+          # in layers: theme and ir are used by every render, not called directly
+          # by their own tests.
+          go test -covermode=atomic -coverpkg=./... -coverprofile=core.cov ./...
+          (cd backend/gg && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../gg.cov ./...)
+
+          # Merge the two profiles: one mode line, then every data line from both.
+          { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov; } > coverage.cov
+          go tool cover -func=coverage.cov | tail -n 1 | tee coverage-total.txt
+
+      - name: Write the badge endpoint
+        run: |
+          set -euo pipefail
+          pct="$(awk '{gsub(/%/,"",$NF); print $NF}' coverage-total.txt)"
+          echo "total coverage: ${pct}%"
+
+          # shields.io's own thresholds, so the colour means what readers expect.
+          color=red
+          awk -v p="$pct" 'BEGIN { exit !(p >= 50) }' && color=orange
+          awk -v p="$pct" 'BEGIN { exit !(p >= 70) }' && color=yellow
+          awk -v p="$pct" 'BEGIN { exit !(p >= 80) }' && color=green
+          awk -v p="$pct" 'BEGIN { exit !(p >= 90) }' && color=brightgreen
+
+          mkdir -p docs
+          cat > docs/coverage.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${pct}%",
+            "color": "${color}"
+          }
+          EOF
+          cat docs/coverage.json
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Coverage"
+            echo
+            echo '```'
+            go tool cover -func=coverage.cov | tail -n 20
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.cov
+            docs/coverage.json
+
+      - name: Commit the badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/coverage.json; then
+            echo "coverage unchanged"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/coverage.json
+          git commit -m "ci: update the coverage badge"
+          git push
+
+  # ---------------------------------------------------------------------------
+  # The documentation figures. Every chart in the README is generated code
+  # output, so it is checked like any other generated artefact: regenerate,
+  # compare, fail on a difference — and on main, commit the new renders.
+  # ---------------------------------------------------------------------------
+  figures:
+    name: Documentation figures
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+
+      - name: Check the committed figures against the code
+        id: check
+        continue-on-error: true
+        run: go run ./backend/gg/cmd/gallery -check
+
+      - name: Re-render
+        if: steps.check.outcome == 'failure'
+        run: go run ./backend/gg/cmd/gallery
+
+      # On a pull request a stale figure is a failure the author fixes: the
+      # regenerated images are attached so the change can be looked at.
+      - name: Publish the re-rendered figures for review
+        if: steps.check.outcome == 'failure' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rerendered-figures
+          path: docs/images/
+
+      - name: Fail the pull request on stale figures
+        if: steps.check.outcome == 'failure' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::The committed figures no longer match the code."
+          echo "Run 'go run ./backend/gg/cmd/gallery' and commit docs/images/."
+          echo "The re-rendered images are attached to this run as an artifact."
+          exit 1
+
+      # On main the figures are simply brought back in line.
+      - name: Commit the re-rendered figures
+        if: steps.check.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/images
+          git commit -m "ci: re-render the documentation figures"
+          git push
