@@ -62,6 +62,22 @@ The CPU rasterizer is the supported path —
 **gg is pinned exactly.** Upgrading it is a deliberate change with its own
 commit, not a side effect of `go get -u`.
 
+**Scales place a value with one explicit rounding, and it is not redundant.**
+`scale.place` writes `rlo + float32(float32(t)*(rhi-rlo))`. The inner
+conversion looks like a no-op — `t` is already being converted — and it is not:
+it is what stops Go contracting the multiply and the add into a fused
+multiply-add. The spec permits that contraction "possibly across statements",
+arm64 takes it and amd64 does not, and the result is a coordinate one float32
+ulp apart on the two.
+
+An ulp is invisible in a chart, which is why the golden files tolerate one. It
+is not invisible to a *decision*: `stat.LTTB` picks the row forming the largest
+triangle, so two candidates a hair apart swap places and a whole vertex moves.
+That is how this was found — a documentation figure that differed between
+architectures by a chosen sample rather than by a bit. The same rounding is
+therefore forced in LTTB's own area computation. Do not "simplify" either one
+away; nothing in the toolchain will tell you that you have.
+
 **Scales snap their endpoints.** `Map` returns the exact range bounds for the
 exact domain bounds. Without that, a tick on the plot edge lands a float32 ulp
 outside it and gets culled. There is a test; do not "simplify" it away. Every
@@ -171,13 +187,14 @@ but the same one applied to pixels rather than to an encoding of them. It is
 also why there is no golden SVG for a density chart in `testdata/golden`:
 pinning `compress/flate` is not a test of refract.
 
-**Do not compare device coordinates with `==` in a test.** They come out of a
-float32 mapping, and arm64 contracts `a*b + c` into an FMA where amd64 does not,
-so a value that is 20 on one is 19.999998 on the other. `geom`'s annotation
-tests carry `sameRect`/`samePoint` with `svgdiff.DefaultTolerance` for this;
-`TestTheCoordinateSlackIsTheRightWidth` pins the slack at wide enough for an
-ulp and narrow enough to catch a tenth of a pixel. Exact comparisons were green
-on amd64 for three milestones and red on every macOS run.
+**Do not compare device coordinates with `==` in a test.** `scale.place` now
+removes the fusion that a scale itself introduced, but everything downstream of
+it — a Catmull-Rom control point, a bar's half-width, a boxplot quantile — is
+still ordinary float arithmetic the compiler may contract. `geom`'s annotation
+tests carry `sameRect`/`samePoint` at `svgdiff.DefaultTolerance` for this, and
+`TestTheCoordinateSlackIsTheRightWidth` pins that slack from both sides. Exact
+comparisons were green on amd64 for three milestones and red on every macOS
+run.
 
 **A geom that holds data implements `geom.Faceter`; one that does not, must
 not.** Faceting splits the layers that have rows and replicates the ones that

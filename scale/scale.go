@@ -133,6 +133,26 @@ func (d *domainRange) span() (float64, float64) {
 	return d.dmin, d.dmax
 }
 
+// place puts a normalised position t in [0, 1] onto the device range.
+//
+// The multiplication is rounded to float32 before the addition, which is what
+// stops Go contracting the pair into a fused multiply-add. That contraction is
+// permitted — the spec allows it "possibly across statements" — and arm64 takes
+// it where amd64 does not, so the same chart came out with coordinates one
+// float32 unit in the last place apart on the two: 20 on an x86 runner,
+// 19.999998 on an Apple Silicon one.
+//
+// A last bit is invisible in a chart, and the golden comparisons tolerate it.
+// It is not invisible to a *decision*. [stat.LTTB] picks the row forming the
+// largest triangle, and two candidates whose areas are a hair apart swap
+// places, moving a whole vertex — which is how this surfaced: a documentation
+// figure that differed between architectures by one chosen sample rather than
+// by one bit. One explicit rounding here is what makes a chart the same chart
+// on every machine.
+func place(rlo, rhi float32, t float64) float32 {
+	return rlo + float32(float32(t)*(rhi-rlo))
+}
+
 func (d *domainRange) rangeOf() (float32, float32) {
 	if !d.rset {
 		return 0, 1

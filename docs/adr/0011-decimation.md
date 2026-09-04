@@ -78,6 +78,14 @@ question.
   wants the marks anyway.
 - `stat` is a new core package and, like everything else in the core, depends
   on nothing.
+- Reducing on device coordinates put a *decision* downstream of float32
+  arithmetic, and that turned an invisible difference into a visible one: a
+  scale's mapping could be contracted into a fused multiply-add on arm64 but not
+  on amd64, and LTTB's largest-triangle search then chose a different sample on
+  the two. Both ends are now explicitly rounded — `scale.place` and the area
+  computation in `stat.AppendLTTB` — so a chart is the same chart on every
+  machine. That is a property worth having on its own; the decimation figure
+  is only what made its absence visible.
 - `stat`'s `Append` forms are allocation-free, and CI keeps them that way:
   `BenchmarkLTTB` and `BenchmarkMinMax` are pinned at zero allocations per
   operation by `.github/scripts/allocgate.awk`. That is not a performance

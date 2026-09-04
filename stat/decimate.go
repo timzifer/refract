@@ -52,7 +52,16 @@ func AppendLTTB[F Float](dst []int, x, y []F, threshold int) []int {
 			// Twice the area of the triangle (prev, candidate, next mean).
 			// The factor of two is common to every candidate, so it never
 			// changes which one wins and is not worth halving away.
-			area := math.Abs((px-ax)*(float64(y[j])-py) - (px-float64(x[j]))*(ay-py))
+			//
+			// Each product is rounded before the subtraction, which stops Go
+			// contracting the pair into a fused multiply-add. Two candidates
+			// can be a hair apart, and on that hair hangs which sample the
+			// reader sees — so an architecture that fuses would draw a
+			// different chart from one that does not. See scale.place; this is
+			// the same hazard at the other end of the same pipeline.
+			area := math.Abs(float64((px-ax)*(float64(y[j])-py)) - float64((px-float64(x[j]))*(ay-py)))
+			// A tie keeps the earlier row: the comparison is strict, so the
+			// result does not depend on which order the bucket is walked in.
 			if area > bestArea {
 				best, bestArea = j, area
 			}

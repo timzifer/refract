@@ -125,7 +125,7 @@ func (l *logScale) Map(v float64) float32 {
 		return rhi
 	}
 	t := (math.Log(v) - math.Log(lo)) / (math.Log(hi) - math.Log(lo))
-	return rlo + float32(t)*(rhi-rlo)
+	return place(rlo, rhi, t)
 }
 
 func (l *logScale) Invert(pos float32) float64 {

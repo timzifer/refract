@@ -111,7 +111,7 @@ func (s *symlogScale) Map(v float64) float32 {
 		return rlo
 	}
 	t := (s.forward(v) - flo) / (fhi - flo)
-	return rlo + float32(t)*(rhi-rlo)
+	return place(rlo, rhi, t)
 }
 
 func (s *symlogScale) Invert(pos float32) float64 {

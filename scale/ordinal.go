@@ -139,7 +139,7 @@ func (o *ordinal) Map(v float64) float32 {
 		return rhi
 	}
 	t := (v - lo) / (hi - lo)
-	return rlo + float32(t)*(rhi-rlo)
+	return place(rlo, rhi, t)
 }
 
 func (o *ordinal) Invert(pos float32) float64 {

@@ -232,3 +232,59 @@ func TestAppendFormsDoNotReadTheCallersTail(t *testing.T) {
 		t.Errorf("LTTB appended %d first, want row 0", got)
 	}
 }
+
+// LTTB decides by comparing areas, and a decision is where a last-bit
+// difference stops being invisible: two candidates a hair apart swap places and
+// a whole vertex moves. That is why the area is computed with each product
+// rounded before the subtraction — Go is otherwise free to fuse them, and arm64
+// does where amd64 does not.
+//
+// The fusion itself cannot be observed from a test on one architecture. What
+// can be pinned is the other half of the same requirement: that the search is
+// decided by the data and not by the order the bucket happens to be walked in.
+func TestLTTBBreaksATieTowardsTheEarlierRow(t *testing.T) {
+	// A flat line with two candidates that form exactly the same triangle,
+	// mirrored about the bucket's centre.
+	n := 400
+	x := make([]float64, n)
+	y := make([]float64, n)
+	for i := range n {
+		x[i] = float64(i)
+	}
+	y[100], y[300] = 5, 5
+
+	got := stat.LTTB(x, y, 3)
+	// Budget 3 is first, one interior row, last. Both spikes tie; the earlier
+	// one has to win, every time, on every machine.
+	if len(got) != 3 {
+		t.Fatalf("kept %d rows, want 3", len(got))
+	}
+	if got[1] != 100 {
+		t.Errorf("kept row %d, want 100: a tie must go to the earlier row", got[1])
+	}
+	for range 20 {
+		if again := stat.LTTB(x, y, 3); again[1] != got[1] {
+			t.Fatalf("two runs over the same data chose %d and %d", got[1], again[1])
+		}
+	}
+}
+
+// The reduction is what a documentation figure is rendered through, so it has
+// to be a pure function of its input: same rows in, same rows out, whatever
+// else the process has been doing.
+func TestDecimationIsAPureFunctionOfItsInput(t *testing.T) {
+	x, y := ramp(20_000)
+	for i := range y {
+		y[i] += 0.001 * float64((i*7919)%13)
+	}
+	first := stat.LTTB(x, y, 600)
+	second := stat.LTTB(append([]float64(nil), x...), append([]float64(nil), y...), 600)
+	if !slices.Equal(first, second) {
+		t.Error("LTTB chose differently for the same values in different memory")
+	}
+	a := stat.MinMax(x, 200, y)
+	b := stat.MinMax(append([]float64(nil), x...), 200, append([]float64(nil), y...))
+	if !slices.Equal(a, b) {
+		t.Error("MinMax chose differently for the same values in different memory")
+	}
+}
