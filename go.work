@@ -1,0 +1,12 @@
+// Development workspace.
+//
+// The gg backend is a separate module so that importing refract's core keeps a
+// stdlib-only dependency graph. During development the two modules are built
+// together from this workspace; released builds resolve the core through the
+// require directive in backend/gg/go.mod.
+go 1.25.0
+
+use (
+	.
+	./backend/gg
+)
