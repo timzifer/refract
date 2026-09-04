@@ -45,7 +45,8 @@ CGO_ENABLED=0 GOOS=js    GOARCH=wasm  go build ./...
 
 ## Golden files
 
-Two sets, both compared byte for byte where the output is deterministic.
+Two sets, both compared with a tolerance narrow enough that only a real change
+to a chart trips them.
 
 **Golden SVG** (`testdata/golden/`) pins what the core renders:
 
@@ -62,6 +63,23 @@ cd backend/gg && go test . -update
 
 Regenerate deliberately, and **read the diff before committing it**. A golden
 file that changes without an intended reason is the test doing its job.
+
+### Why the comparison has a tolerance
+
+Neither set is compared byte for byte, and cannot be. Go may contract `a*b + c`
+into a fused multiply-add, and arm64 does while amd64 does not — so the same
+chart prints a coordinate one float32 unit in the last place apart on an Apple
+Silicon Mac and on an x86 runner. That is enough to change a rounded third
+decimal and fail a byte comparison on output that is visually identical.
+
+So SVG is compared with `internal/svgdiff`: everything that is not a number must
+match exactly — element and attribute order, ids, colours, path verbs, text —
+and coordinates may differ by a hundredth of a pixel. PNG is compared with a
+small per-channel tolerance. Both are orders of magnitude below anything visible
+and orders of magnitude above the noise they exist to absorb.
+
+Do not widen either tolerance to make a failure go away. Narrowing one is an
+improvement; widening one hides the thing the test is for.
 
 ## Documentation figures
 

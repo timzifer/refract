@@ -37,9 +37,14 @@ the wrong place — say so rather than routing around it.
 
 ## Things that will bite
 
-**Golden files are byte-exact.** The SVG emitter fixes attribute order and
-number formatting on purpose. If output changes, the golden tests fail; that is
-correct. Regenerate with `-update`, read the diff, and only then commit.
+**Golden files are compared structurally, not byte for byte.** The SVG emitter
+fixes attribute order and number formatting on purpose, so two runs on one
+machine are identical — but arm64 and amd64 disagree in the last bit of a
+float32, because Go contracts `a*b + c` into an FMA on one and not the other. So
+`internal/svgdiff` compares everything but the numbers exactly and allows
+coordinates a hundredth of a pixel. If output changes beyond that, the golden
+tests fail; that is correct. Regenerate with `-update`, read the diff, and only
+then commit. **Never widen a tolerance to make a failure go away.**
 
 **Documentation figures are generated.** Everything in `docs/images/` comes from
 `backend/gg/cmd/gallery`. Never hand-edit them. A test and a CI job both check

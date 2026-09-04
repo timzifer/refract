@@ -25,6 +25,7 @@ import (
 	"github.com/timzifer/refract"
 	ggbackend "github.com/timzifer/refract/backend/gg"
 	"github.com/timzifer/refract/geom"
+	"github.com/timzifer/refract/internal/svgdiff"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/palette"
 	"github.com/timzifer/refract/scale"
@@ -67,10 +68,12 @@ func run(dir string, check bool) error {
 
 // verify re-renders every figure and compares it to what is on disk.
 //
-// The SVG halves are compared byte for byte: the emitter is deterministic by
-// design, so any difference is a real change. The PNG halves are compared with
-// a tolerance, because a raster is the one artefact that can legitimately shift
-// by a hair between platforms.
+// Both halves are compared with a tolerance, for the same underlying reason:
+// floating-point results are not bit-identical across architectures. In the SVG
+// half everything but the numbers must match exactly and coordinates may differ
+// by a hundredth of a pixel (see internal/svgdiff); in the PNG half a small
+// per-channel difference is allowed. Neither tolerance is wide enough to hide a
+// real change to a chart.
 func verify(dir string) error {
 	var problems []string
 	for _, f := range figures() {
@@ -78,7 +81,7 @@ func verify(dir string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", f.name, err)
 		}
-		if msg := compareExact(filepath.Join(dir, f.name+".svg"), svg); msg != "" {
+		if msg := compareSVG(filepath.Join(dir, f.name+".svg"), svg); msg != "" {
 			problems = append(problems, msg)
 		}
 		if msg := compareImage(filepath.Join(dir, f.name+".png"), png); msg != "" {
@@ -96,13 +99,16 @@ func verify(dir string) error {
 	return nil
 }
 
-func compareExact(path string, want []byte) string {
-	got, err := os.ReadFile(path)
+// compareSVG checks a freshly rendered figure against the committed one.
+// "got" is what the code produces now, "want" is what is on disk — the same
+// convention the golden tests use, so the failure messages read the same way.
+func compareSVG(path string, got []byte) string {
+	want, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Sprintf("%s: %v", path, err)
 	}
-	if !bytes.Equal(got, want) {
-		return fmt.Sprintf("%s: differs (%d bytes on disk, %d rendered)", path, len(got), len(want))
+	if ok, why := svgdiff.Equal(got, want, svgdiff.DefaultTolerance); !ok {
+		return fmt.Sprintf("%s: %s", path, why)
 	}
 	return ""
 }

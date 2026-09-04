@@ -14,6 +14,7 @@ import (
 	"github.com/timzifer/refract"
 	"github.com/timzifer/refract/backend/svg"
 	"github.com/timzifer/refract/geom"
+	"github.com/timzifer/refract/internal/svgdiff"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/palette"
 	"github.com/timzifer/refract/scale"
@@ -28,9 +29,11 @@ var update = flag.Bool("update", false, "rewrite the golden SVG files")
 // failure shows up as a handful of changed lines in a diff rather than as one
 // enormous line.
 //
-// The comparison is exact. The emitter is deterministic by construction, so any
-// difference is a real change in what refract draws, and seeing it in a diff is
-// the point of the test.
+// Everything except numbers is compared byte for byte; coordinates are allowed
+// to differ by a hundredth of a pixel. That is not slack for sloppy rendering —
+// it is the width of a float32 unit in the last place, which arm64 and amd64
+// genuinely disagree about because Go contracts a*b+c into an FMA on one and
+// not the other. See internal/svgdiff for the full reasoning.
 func golden(t *testing.T, name string, p *refract.Plot) {
 	t.Helper()
 
@@ -56,31 +59,9 @@ func golden(t *testing.T, name string, p *refract.Plot) {
 	if err != nil {
 		t.Fatalf("%v (run `go test ./... -update` to create it)", err)
 	}
-	if !bytes.Equal(got, want) {
-		t.Errorf("%s differs from the golden file.\nfirst difference at byte %d\n%s",
-			name, firstDiff(got, want), context(got, want))
+	if ok, why := svgdiff.Equal(got, want, svgdiff.DefaultTolerance); !ok {
+		t.Errorf("%s differs from the golden file: %s", name, why)
 	}
-}
-
-func firstDiff(a, b []byte) int {
-	n := min(len(a), len(b))
-	for i := range n {
-		if a[i] != b[i] {
-			return i
-		}
-	}
-	return n
-}
-
-func context(got, want []byte) string {
-	at := firstDiff(got, want)
-	lo := max(at-60, 0)
-	var b strings.Builder
-	b.WriteString("got:  ...")
-	b.Write(got[lo:min(at+60, len(got))])
-	b.WriteString("\nwant: ...")
-	b.Write(want[lo:min(at+60, len(want))])
-	return b.String()
 }
 
 // --- the charts ----------------------------------------------------------

@@ -487,8 +487,10 @@ between milestones are expected.
 - Two backends: built-in `svg` (zero deps) and `gg` raster (text/AA via gg).
 - Scales: linear + time; extended-Wilkinson ticks; dedicated time-axis ticks.
 - Geoms: line, scatter, bar; axes, title, basic legend.
-- Golden-image tests: byte-exact golden SVG in the core, tolerance-compared
-  golden PNG in the gg backend, plus a cross-backend parity test.
+- Golden-image tests: golden SVG in the core and golden PNG in the gg backend,
+  both compared with a tolerance below anything visible — bit-identical float
+  results are not available across architectures — plus a cross-backend parity
+  test.
 - **API model decided and documented** (GoG-lite, per [§13](#13-api-sketch)).
 - *DoD:* static SVG + PNG, `CGO_ENABLED=0`, gg pinned. ✔
 
