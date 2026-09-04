@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="360" viewBox="0 0 560 360">
+<defs>
+<clipPath id="c1"><path d="M50.332,32.8 L531.495,32.8 L531.495,328.825 L50.332,328.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L560,0 L560,360 L0,360 Z" fill="#ffffff"/>
+<polyline fill="none" points="50.332,328.825 531.495,328.825" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,258.343 531.495,258.343" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,187.861 531.495,187.861" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,117.379 531.495,117.379" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,46.896 531.495,46.896" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,328.825 531.495,328.825" stroke="#333333"/>
+<polyline fill="none" points="50.332,32.8 50.332,328.825" stroke="#333333"/>
+<polyline fill="none" points="98.448,328.825 98.448,333.825" stroke="#333333"/>
+<text x="98.448" y="337.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">north</text>
+<polyline fill="none" points="194.681,328.825 194.681,333.825" stroke="#333333"/>
+<text x="194.681" y="337.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">south</text>
+<polyline fill="none" points="290.913,328.825 290.913,333.825" stroke="#333333"/>
+<text x="290.913" y="337.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">east</text>
+<polyline fill="none" points="387.146,328.825 387.146,333.825" stroke="#333333"/>
+<text x="387.146" y="337.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">west</text>
+<polyline fill="none" points="483.378,328.825 483.378,333.825" stroke="#333333"/>
+<text x="483.378" y="337.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">central</text>
+<polyline fill="none" points="45.332,328.825 50.332,328.825" stroke="#333333"/>
+<text x="41.332" y="328.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="45.332,258.343 50.332,258.343" stroke="#333333"/>
+<text x="41.332" y="258.343" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10</text>
+<polyline fill="none" points="45.332,187.861 50.332,187.861" stroke="#333333"/>
+<text x="41.332" y="187.861" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">20</text>
+<polyline fill="none" points="45.332,117.379 50.332,117.379" stroke="#333333"/>
+<text x="41.332" y="117.379" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">30</text>
+<polyline fill="none" points="45.332,46.896 50.332,46.896" stroke="#333333"/>
+<text x="41.332" y="46.896" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">40</text>
+<text x="290.913" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Sales by region</text>
+<text x="20.616" y="180.812" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 180.812)">k€</text>
+<g clip-path="url(#c1)">
+<path d="M59.955,201.957 L136.941,201.957 L136.941,328.825 L59.955,328.825 Z" fill="#440154"/>
+<path d="M156.188,32.8 L233.174,32.8 L233.174,328.825 L156.188,328.825 Z" fill="#fde725"/>
+<path d="M252.42,110.33 L329.406,110.33 L329.406,328.825 L252.42,328.825 Z" fill="#209b8a"/>
+<path d="M348.653,152.62 L425.639,152.62 L425.639,328.825 L348.653,328.825 Z" fill="#365e8c"/>
+<path d="M444.885,68.041 L521.871,68.041 L521.871,328.825 L444.885,328.825 Z" fill="#79cf55"/>
+</g>
+</svg>

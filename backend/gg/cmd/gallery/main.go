@@ -213,9 +213,10 @@ func figures() []figure {
 		{
 			name: "bars", width: 700, high: 400, theme: theme.Light, title: "Response time distribution",
 			build: func(p *refract.Plot) {
-				// Bin centres on a continuous axis: v0.1 has no ordinal scale,
-				// and a histogram is the bar chart that genuinely wants a
-				// numeric X anyway.
+				// Bin centres on a continuous axis. A histogram is the bar
+				// chart that genuinely wants a numeric X: the gaps between
+				// bins carry meaning, which is exactly what an ordinal axis
+				// throws away.
 				bins := ramp(5, 95, 10)
 				counts := []float64{18, 47, 82, 96, 71, 44, 25, 13, 6, 2}
 				src := refract.Float64Columns(map[string][]float64{"ms": bins, "count": counts})
@@ -224,7 +225,100 @@ func figures() []figure {
 				p.Add(geom.Bar(src, geom.X("ms"), geom.Y("count"), geom.Color(palette.Green)))
 			},
 		},
+		{
+			name: "area", width: 700, high: 400, theme: theme.Light, title: "Estimate and interval",
+			build: func(p *refract.Plot) {
+				xs := ramp(0, 12, 120)
+				src := refract.Float64Columns(map[string][]float64{
+					"x":  xs,
+					"y":  apply(xs, func(x float64) float64 { return math.Sin(x) + x/6 }),
+					"lo": apply(xs, func(x float64) float64 { return math.Sin(x) + x/6 - 0.3 - x/20 }),
+					"hi": apply(xs, func(x float64) float64 { return math.Sin(x) + x/6 + 0.3 + x/20 }),
+				})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice()))
+				p.Add(
+					geom.Area(src, geom.X("x"), geom.Y("hi"), geom.Y2("lo"),
+						geom.Label("interval"), geom.Color(palette.SkyBlue), geom.Width(1)),
+					geom.Line(src, geom.X("x"), geom.Y("y"),
+						geom.Label("estimate"), geom.Color(palette.Blue)),
+				)
+			},
+		},
+		{
+			name: "steps", width: 700, high: 380, theme: theme.Dark, title: "Replicas over the day",
+			build: func(p *refract.Plot) {
+				hours := ramp(0, 23, 24)
+				replicas := []float64{2, 2, 2, 2, 2, 3, 5, 8, 12, 14, 14, 13, 13, 14, 15, 15, 13, 10, 7, 5, 4, 3, 2, 2}
+				src := refract.Float64Columns(map[string][]float64{"hour": hours, "n": replicas})
+				p.X(scale.Linear())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(geom.Step(src, geom.X("hour"), geom.Y("n"),
+					geom.Color(palette.Yellow), geom.Width(2)))
+			},
+		},
+		{
+			name: "categories", width: 700, high: 400, theme: theme.Light, title: "Sales by region",
+			build: func(p *refract.Plot) {
+				src := refract.NewTable().
+					String("region", []string{"north", "south", "east", "west", "central", "overseas"}).
+					Float64("sales", []float64{18, 42, 31, 25, 37, 12})
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(geom.Bar(src, geom.X("region"), geom.Y("sales"),
+					geom.ColorBy("sales", scale.Sequential(palette.Viridis))))
+			},
+		},
+		{
+			name: "boxplot", width: 700, high: 400, theme: theme.Light, title: "Latency by cohort",
+			build: func(p *refract.Plot) {
+				keys, vals := cohorts()
+				src := refract.NewTable().String("cohort", keys).Float64("ms", vals)
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice()))
+				p.Add(geom.Boxplot(src, geom.X("cohort"), geom.Y("ms"), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			name: "logscale", width: 700, high: 400, theme: theme.Dark, title: "Requests per second",
+			build: func(p *refract.Plot) {
+				xs := ramp(0, 14, 140)
+				src := refract.Float64Columns(map[string][]float64{
+					"week":  xs,
+					"rps":   apply(xs, func(x float64) float64 { return 5 * math.Exp(0.72*x) }),
+					"floor": apply(xs, func(x float64) float64 { return 5 * math.Exp(0.45*x) }),
+				})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Log(scale.LogNice()))
+				p.Add(
+					geom.Line(src, geom.X("week"), geom.Y("rps"),
+						geom.Label("actual"), geom.Color(palette.Green)),
+					geom.Line(src, geom.X("week"), geom.Y("floor"),
+						geom.Label("plan"), geom.Color(palette.Orange), geom.Dash(6, 4)),
+				)
+			},
+		},
 	}
+}
+
+// cohorts builds three deterministic latency distributions, each with a tail.
+// A fixed recurrence rather than math/rand keeps the figure byte-stable across
+// Go releases, which is what makes -check meaningful.
+func cohorts() ([]string, []float64) {
+	names := []string{"alpha", "beta", "gamma"}
+	var keys []string
+	var vals []float64
+	for g, name := range names {
+		for i := range 40 {
+			t := float64(i) / 40
+			v := 24 + float64(g)*7 + 9*math.Sin(9*t+float64(g)) + 3*math.Sin(37*t) + 2*math.Cos(61*t)
+			keys, vals = append(keys, name), append(vals, v)
+		}
+		// One tail observation per cohort, so the outlier path is exercised by
+		// a figure and not only by a test.
+		keys, vals = append(keys, name), append(vals, 62+float64(g)*5)
+	}
+	return keys, vals
 }
 
 // --- sample data ---------------------------------------------------------

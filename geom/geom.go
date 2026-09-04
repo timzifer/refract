@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
+	"strconv"
+	"time"
 
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
@@ -83,18 +86,25 @@ type Option func(*config)
 
 type config struct {
 	xcol, ycol string
+	y2col      string
 	label      string
 
-	color    *ir.Color
-	width    float32
-	dash     []float32
-	tension  float64
-	missing  Missing
-	marker   ir.Marker
-	size     float32
-	barWidth float64
-	baseline float64
-	fill     *ir.Color
+	color      *ir.Color
+	width      float32
+	dash       []float32
+	tension    float64
+	missing    Missing
+	marker     ir.Marker
+	size       float32
+	barWidth   float64
+	baseline   float64
+	fill       *ir.Color
+	opacity    float64
+	steps      StepPos
+	colorCol   string
+	colorScale scale.ColorScale
+	whisker    float64
+	outliers   bool
 }
 
 // X selects the column mapped to the horizontal axis.
@@ -138,11 +148,57 @@ func Size(s float32) Option { return func(c *config) { c.size = s } }
 // in (0, 1]. The default is 0.8.
 func BarWidth(f float64) Option { return func(c *config) { c.barWidth = f } }
 
-// Baseline sets the value bars grow from. The default is 0.
+// Baseline sets the value bars and areas grow from. The default is 0.
 func Baseline(v float64) Option { return func(c *config) { c.baseline = v } }
 
+// Y2 selects a second Y column, turning an area into a band between the two
+// series rather than between one series and a baseline. It is how a confidence
+// interval or a min/max envelope is drawn.
+func Y2(col string) Option { return func(c *config) { c.y2col = col } }
+
+// Opacity scales the fill alpha, in [0, 1]. The default is 1 for an explicit
+// [Fill] colour and 0.25 for an area that takes its colour from the palette —
+// a filled band has to sit behind the lines it belongs to.
+func Opacity(f float64) Option { return func(c *config) { c.opacity = f } }
+
+// StepPos is where a step geom changes value between two rows.
+type StepPos uint8
+
+// The step positions. StepPost is the default: the value holds from each row
+// until the next one, which is what a sampled signal or a state over time
+// actually did.
+const (
+	StepPost StepPos = iota
+	StepPre
+	StepMid
+)
+
+// Steps sets where a [Step] geom changes value.
+func Steps(where StepPos) Option { return func(c *config) { c.steps = where } }
+
+// ColorBy maps a numeric column through a colour scale, giving every mark its
+// own colour. It applies to [Scatter] and [Bar]; geoms whose mark is one
+// connected shape ignore it.
+//
+// A layer coloured this way contributes no legend entry: the guide such a
+// layer needs is a colourbar, and colourbars are a v0.3 milestone. Naming a
+// colour scale is not a substitute for one, so the legend says nothing rather
+// than saying something misleading.
+func ColorBy(col string, s scale.ColorScale) Option {
+	return func(c *config) { c.colorCol, c.colorScale = col, s }
+}
+
+// Whisker sets how far a boxplot whisker reaches, as a multiple of the
+// interquartile range. The default is 1.5, Tukey's original choice.
+func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
+
+// Outliers turns the individual points beyond the whiskers on or off. They are
+// on by default: a boxplot that hides them is a boxplot that hides exactly the
+// rows a reader opened the chart to find.
+func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
+
 func newConfig(opts []Option) config {
-	c := config{barWidth: 0.8}
+	c := config{barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1}
 	for _, o := range opts {
 		o(&c)
 	}
@@ -169,9 +225,13 @@ func (c config) labelFor() string {
 	return c.ycol
 }
 
-// series is a resolved pair of columns, already converted to float64.
+// series is a resolved set of columns, already converted to float64.
+//
+// y2 and c are optional: y2 carries the second bound of a band, c the values a
+// colour scale is read from. Both are nil when the geom was not given one.
 type series struct {
-	x, y []float64
+	x, y  []float64
+	y2, c []float64
 }
 
 // ErrNoColumn reports a column named by an option that the source does not
@@ -179,35 +239,90 @@ type series struct {
 // comes from user input or a config file.
 var ErrNoColumn = errors.New("refract/geom: column not found")
 
+// ErrCategorical reports a text column mapped onto an axis that has no
+// position for a name.
+var ErrCategorical = errors.New("refract/geom: categorical column on a continuous scale")
+
 // resolve reads the configured columns out of src.
-func resolve(src data.Source, c config) (series, error) {
+//
+// The scales are passed in because reading a column is not independent of the
+// axis it feeds: a text column only has numbers at all once a categorical
+// scale has assigned them, and doing that anywhere else would mean two layers
+// on one axis disagreeing about which category is which.
+func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 	if src == nil {
 		return series{}, errors.New("refract/geom: nil data source")
 	}
-	x, err := column(src, c.xcol)
+	xs, err := column(src, c.xcol, x)
 	if err != nil {
 		return series{}, err
 	}
-	y, err := column(src, c.ycol)
+	ys, err := column(src, c.ycol, y)
 	if err != nil {
 		return series{}, err
 	}
-	if len(x) != len(y) {
-		return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.ycol, len(x), len(y))
+	if len(xs) != len(ys) {
+		return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.ycol, len(xs), len(ys))
 	}
-	return series{x: x, y: y}, nil
+	s := series{x: xs, y: ys}
+	if c.y2col != "" {
+		v, err := column(src, c.y2col, y)
+		if err != nil {
+			return series{}, err
+		}
+		if len(v) != len(xs) {
+			return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.y2col, len(xs), len(v))
+		}
+		s.y2 = v
+	}
+	if c.colorCol != "" {
+		if _, text := src.StringColumn(c.colorCol); text {
+			return series{}, fmt.Errorf("%w: column %q holds category names and a colour scale reads numbers", ErrCategorical, c.colorCol)
+		}
+		v, err := column(src, c.colorCol, nil)
+		if err != nil {
+			return series{}, err
+		}
+		if len(v) != len(xs) {
+			return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.colorCol, len(xs), len(v))
+		}
+		s.c = v
+	}
+	return s, nil
 }
 
-// column reads one column as float64, converting a time column to Unix
-// nanoseconds so that a time scale sees the same numeric domain as any other.
-func column(src data.Source, name string) ([]float64, error) {
+// column reads one column as float64 for the axis it feeds.
+//
+// A numeric column on a continuous scale is returned as it lies — that is the
+// zero-copy path the data layer exists for. A time column becomes Unix
+// nanoseconds, so a time scale sees the same numeric domain as any other. A
+// text column is encoded through the scale, which must be categorical.
+//
+// A numeric or time column on a *categorical* scale is encoded too, one
+// category per distinct formatted value: asking for an ordinal axis over
+// numbers means asking for equally spaced slots rather than a numeric line.
+func column(src data.Source, name string, s scale.Scale) ([]float64, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: no column selected (use geom.X/geom.Y)", ErrNoColumn)
 	}
+	cat, _ := s.(scale.Categorical)
+
+	if v, ok := src.StringColumn(name); ok {
+		if cat == nil {
+			return nil, fmt.Errorf("%w: column %q holds category names; give that axis a scale.Ordinal", ErrCategorical, name)
+		}
+		return encode(cat, v, func(l string) string { return l }), nil
+	}
 	if v, ok := src.Float64Column(name); ok {
-		return v, nil
+		if cat == nil {
+			return v, nil
+		}
+		return encode(cat, v, func(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }), nil
 	}
 	if t, ok := src.TimeColumn(name); ok {
+		if cat != nil {
+			return encode(cat, t, func(tv time.Time) string { return tv.Format(time.RFC3339) }), nil
+		}
 		out := make([]float64, len(t))
 		for i, tv := range t {
 			out[i] = scale.Nanos(tv)
@@ -217,8 +332,31 @@ func column(src data.Source, name string) ([]float64, error) {
 	return nil, fmt.Errorf("%w: %q", ErrNoColumn, name)
 }
 
+// encode maps a column through a categorical scale, naming each value with
+// label.
+func encode[T any](cat scale.Categorical, vs []T, label func(T) string) []float64 {
+	out := make([]float64, len(vs))
+	for i, v := range vs {
+		out[i] = cat.Encode(label(v))
+	}
+	return out
+}
+
 // finite reports whether v can be plotted.
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// defined reports whether s has a position for v. A scale that excludes part
+// of the real line — a log scale, an ordinal one — says so through
+// [scale.Definite]; every other scale takes any finite value.
+func defined(s scale.Scale, v float64) bool {
+	if !finite(v) {
+		return false
+	}
+	if d, ok := s.(scale.Definite); ok {
+		return d.Defined(v)
+	}
+	return true
+}
 
 // trainFinite feeds only plottable values into a scale, so one NaN does not
 // blow the domain out to the whole real line.
@@ -230,15 +368,173 @@ func trainFinite(s scale.Scale, vs []float64) {
 	}
 }
 
-// checkMissing enforces the Error policy.
-func (s series) checkMissing(c config) error {
+// plottable marks the rows a geom can draw: finite values that both scales
+// have a position for.
+//
+// It is computed once per build rather than tested per use, because the
+// answer feeds three different traversals — segmenting, interpolating and
+// projecting — and they must agree on it exactly.
+func (s series) plottable(x, y scale.Scale) []bool {
+	ok := make([]bool, len(s.x))
+	for i := range s.x {
+		ok[i] = defined(x, s.x[i]) && defined(y, s.y[i])
+		if ok[i] && s.y2 != nil {
+			ok[i] = defined(y, s.y2[i])
+		}
+	}
+	return ok
+}
+
+// checkMissing enforces the Error policy. It runs against the scales, so a
+// negative reading on a log axis is caught by the same policy that catches a
+// NaN — from the chart's point of view they are the same failure.
+func (s series) checkMissing(c config, x, y scale.Scale) error {
 	if c.missing != Error {
 		return nil
 	}
-	for i := range s.x {
-		if !finite(s.x[i]) || !finite(s.y[i]) {
-			return fmt.Errorf("refract/geom: missing value at row %d and OnMissing(Error) is set", i)
+	for i, ok := range s.plottable(x, y) {
+		if !ok {
+			return fmt.Errorf("refract/geom: row %d has no position on the scales and OnMissing(Error) is set", i)
 		}
 	}
 	return nil
+}
+
+// fillFor resolves the interior colour of a filled geom.
+//
+// An explicit [Fill] is taken at face value — a caller who names a colour has
+// already decided how solid it should be. A fill inherited from the palette is
+// faded to defaultOpacity instead, because a geom that fills the plot area has
+// to sit behind the lines and points it belongs to rather than bury them.
+func (c config) fillFor(f Frame, defaultOpacity float64) ir.Color {
+	base := c.colorFor(f)
+	op := defaultOpacity
+	if c.fill != nil {
+		base, op = *c.fill, 1
+	}
+	if c.opacity >= 0 {
+		op = clamp01(c.opacity)
+	}
+	return ir.Fade(base, op)
+}
+
+// colorRun is a set of marks that share a colour.
+type colorRun struct {
+	color ir.Color
+	pts   []ir.Point
+}
+
+// groupByColor batches marks by colour.
+//
+// The IR carries one style per drawing call and does not have a per-vertex
+// colour channel; adding one would touch every backend for the sake of two
+// geoms. Grouping instead costs one call per distinct colour, which for a
+// continuous ramp over real data is far fewer calls than there are points, and
+// for a handful of categories is a handful. See docs/adr/0007.
+//
+// Groups come out in order of first appearance, so a render is reproducible.
+func groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
+	runs := make([]colorRun, 0, 8)
+	at := make(map[ir.Color]int, 8)
+	for i, p := range pts {
+		c := cols[i]
+		j, ok := at[c]
+		if !ok {
+			j = len(runs)
+			at[c] = j
+			runs = append(runs, colorRun{color: c})
+		}
+		runs[j].pts = append(runs[j].pts, p)
+	}
+	return runs
+}
+
+// trainColors feeds the colour column into the colour scale. It is separate
+// from training the positional scales because a colour scale is not a Scale:
+// it maps to paint, not to a position.
+func (c config) trainColors(s series) {
+	if c.colorScale == nil || s.c == nil {
+		return
+	}
+	for _, v := range s.c {
+		if finite(v) {
+			c.colorScale.Train(v)
+		}
+	}
+}
+
+// colorsFor resolves the per-mark colours for the rows in idx, or nil if this
+// layer is a single colour.
+func (c config) colorsFor(f Frame, s series, idx []int) []ir.Color {
+	if c.colorScale == nil || s.c == nil {
+		return nil
+	}
+	out := make([]ir.Color, len(idx))
+	for i, row := range idx {
+		out[i] = c.colorScale.Color(s.c[row])
+	}
+	return out
+}
+
+// varying reports whether this layer paints each mark from a colour scale.
+func (c config) varying(s series) bool { return c.colorScale != nil && s.c != nil }
+
+// smallestGap is the spacing between adjacent positions in data units: the
+// smallest distance between distinct values. Using the smallest rather than
+// the average means marks never overlap on irregularly spaced data.
+func smallestGap(vs []float64) float64 {
+	xs := make([]float64, 0, len(vs))
+	for _, v := range vs {
+		if finite(v) {
+			xs = append(xs, v)
+		}
+	}
+	if len(xs) < 2 {
+		return 1
+	}
+	sort.Float64s(xs)
+	gap := math.Inf(1)
+	for i := 1; i < len(xs); i++ {
+		if d := xs[i] - xs[i-1]; d > 0 && d < gap {
+			gap = d
+		}
+	}
+	if math.IsInf(gap, 0) {
+		return 1
+	}
+	return gap
+}
+
+// markSpan returns the device-space edges of a mark centred on data position
+// x.
+//
+// A band scale knows the width of a slot and is asked for it. On a continuous
+// axis the width is halfWidth in data units on each side, mapped through the
+// scale — so a bar on a log axis is narrower on its high side, as it must be.
+func markSpan(f Frame, x, halfWidth float64) (float32, float32) {
+	if band, ok := f.X.(scale.Band); ok {
+		c, w := f.X.Map(x), band.Bandwidth()
+		return c - w/2, c + w/2
+	}
+	x0, x1 := f.X.Map(x-halfWidth), f.X.Map(x+halfWidth)
+	if x1 < x0 {
+		x0, x1 = x1, x0
+	}
+	return x0, x1
+}
+
+// baselinePos maps the value a bar or area grows from.
+//
+// A log axis has no position for zero, which is the default baseline. Falling
+// back to the bottom of the plot is the only honest answer: the bar still
+// starts at the axis, and the axis still says where that is.
+func baselinePos(f Frame, v float64) float32 {
+	if defined(f.Y, v) {
+		return f.Y.Map(v)
+	}
+	lo, hi := f.Y.Domain()
+	if f.Y.Map(lo) > f.Y.Map(hi) {
+		return f.Y.Map(lo)
+	}
+	return f.Y.Map(hi)
 }

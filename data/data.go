@@ -30,6 +30,10 @@ type Source interface {
 	// TimeColumn returns a time column by name. ok is false if the column does
 	// not exist or is not temporal.
 	TimeColumn(name string) (data []time.Time, ok bool)
+
+	// StringColumn returns a categorical column by name. ok is false if the
+	// column does not exist or is not textual.
+	StringColumn(name string) (data []string, ok bool)
 }
 
 // Float64Columns builds a Source over the given numeric columns.
@@ -68,13 +72,17 @@ func (s *float64Source) Float64Column(name string) ([]float64, bool) {
 
 func (s *float64Source) TimeColumn(string) ([]time.Time, bool) { return nil, false }
 
-// Table is a Source that mixes numeric and temporal columns.
+func (s *float64Source) StringColumn(string) ([]string, bool) { return nil, false }
+
+// Table is a Source that mixes numeric, temporal and categorical columns.
 //
-// It is the general-purpose implementation: use it when a chart plots time
-// against values, which is the common case for the Time scale.
+// It is the general-purpose implementation: use it when a chart plots time or
+// a category against values, which is the common case for the Time and Ordinal
+// scales.
 type Table struct {
 	nums  map[string][]float64
 	times map[string][]time.Time
+	strs  map[string][]string
 	names []string
 	n     int
 	fixed bool // true once the row count has been established
@@ -82,7 +90,11 @@ type Table struct {
 
 // NewTable returns an empty Table.
 func NewTable() *Table {
-	return &Table{nums: map[string][]float64{}, times: map[string][]time.Time{}}
+	return &Table{
+		nums:  map[string][]float64{},
+		times: map[string][]time.Time{},
+		strs:  map[string][]string{},
+	}
 }
 
 // Float64 adds a numeric column, borrowing the slice. It returns t so calls
@@ -103,11 +115,26 @@ func (t *Table) Time(name string, v []time.Time) *Table {
 	return t
 }
 
+// String adds a categorical column, borrowing the slice. It returns t so calls
+// can be chained. It panics if the column length disagrees with columns
+// already added, or if the name is already taken.
+//
+// Plot such a column against a [scale.Ordinal] axis; a continuous scale has no
+// position for a category name and a geom says so rather than guessing one.
+func (t *Table) String(name string, v []string) *Table {
+	t.claim(name, len(v))
+	t.strs[name] = v
+	return t
+}
+
 func (t *Table) claim(name string, n int) {
 	if _, dup := t.nums[name]; dup {
 		panic("refract/data: duplicate column " + name)
 	}
 	if _, dup := t.times[name]; dup {
+		panic("refract/data: duplicate column " + name)
+	}
+	if _, dup := t.strs[name]; dup {
 		panic("refract/data: duplicate column " + name)
 	}
 	if t.fixed && n != t.n {
@@ -132,5 +159,11 @@ func (t *Table) Float64Column(name string) ([]float64, bool) {
 // TimeColumn returns a temporal column by name.
 func (t *Table) TimeColumn(name string) ([]time.Time, bool) {
 	c, ok := t.times[name]
+	return c, ok
+}
+
+// StringColumn returns a categorical column by name.
+func (t *Table) StringColumn(name string) ([]string, bool) {
+	c, ok := t.strs[name]
 	return c, ok
 }

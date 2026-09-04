@@ -103,7 +103,11 @@ per-geom options; an option a geom has no use for is accepted and ignored.
 
 **A scale** goes in `scale/`, implements `scale.Scale`, and owns both its
 mapping and its tick generation. That pairing is why a time axis can label
-itself in calendar units without anything above it knowing.
+itself in calendar units without anything above it knowing. If it cannot place
+every finite value, implement `scale.Definite` too — that is what keeps a NaN
+coordinate out of a backend. If it positions categories in slots, implement
+`scale.Categorical` and `scale.Band`; see
+[ADR 0008](docs/adr/0008-categorical-axes.md).
 
 **A backend** implements `ir.Backend` and `ir.Target`. If it needs a dependency
 the core must not have, it belongs in its own nested module. Keep its contact

@@ -2,7 +2,6 @@ package geom
 
 import (
 	"math"
-	"sort"
 
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
@@ -22,21 +21,29 @@ type barGeom struct {
 }
 
 func (g *barGeom) Train(x, y scale.Scale) error {
-	g.s, g.err = resolve(g.src, g.cfg)
+	g.s, g.err = resolve(g.src, g.cfg, x, y)
 	if g.err != nil {
 		return g.err
 	}
-	if err := g.s.checkMissing(g.cfg); err != nil {
+	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
 	trainFinite(x, g.s.x)
 	trainFinite(y, g.s.y)
+	g.cfg.trainColors(g.s)
 	// A bar is read as the area between the baseline and the value, so the
 	// baseline must be in the domain or the chart lies about magnitude.
 	y.Train(g.cfg.baseline)
 
-	// Bars have width, so the outermost bars would be clipped in half by a
-	// domain that stops at the data. Widen by half a slot on each side.
+	// A band scale already reserves a slot per bar, so widening its domain
+	// would only add an empty category at each end.
+	if _, band := x.(scale.Band); band {
+		return nil
+	}
+
+	// On a continuous axis bars have width, so the outermost bars would be
+	// clipped in half by a domain that stops at the data. Widen by half a slot
+	// on each side.
 	half := g.slot() / 2 * g.widthFraction()
 	if half > 0 {
 		lo, hi := math.Inf(1), math.Inf(-1)
@@ -59,31 +66,8 @@ func (g *barGeom) widthFraction() float64 {
 	return g.cfg.barWidth
 }
 
-// slot is the spacing between adjacent bars in data units: the smallest gap
-// between distinct X values. Using the smallest rather than the average means
-// bars never overlap on irregularly spaced data.
-func (g *barGeom) slot() float64 {
-	xs := make([]float64, 0, len(g.s.x))
-	for _, v := range g.s.x {
-		if finite(v) {
-			xs = append(xs, v)
-		}
-	}
-	if len(xs) < 2 {
-		return 1
-	}
-	sort.Float64s(xs)
-	gap := math.Inf(1)
-	for i := 1; i < len(xs); i++ {
-		if d := xs[i] - xs[i-1]; d > 0 && d < gap {
-			gap = d
-		}
-	}
-	if math.IsInf(gap, 0) {
-		return 1
-	}
-	return gap
-}
+// slot is the spacing between adjacent bars in data units.
+func (g *barGeom) slot() float64 { return smallestGap(g.s.x) }
 
 func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
@@ -97,28 +81,44 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
-	halfW := g.slot() * g.widthFraction() / 2
-	base := f.Y.Map(g.cfg.baseline)
+	base := baselinePos(f, g.cfg.baseline)
+	ok := g.s.plottable(f.X, f.Y)
 
-	var p ir.Path
+	// Collect the bars first, so that a layer coloured from a scale can batch
+	// them by colour and one coloured uniformly can still emit a single path.
+	rects := make([]ir.Rect, 0, len(g.s.x))
+	rows := make([]int, 0, len(g.s.x))
 	for i := range g.s.x {
-		x, y := g.s.x[i], g.s.y[i]
-		if !finite(x) || !finite(y) {
+		if !ok[i] {
 			continue
 		}
-		x0, x1 := f.X.Map(x-halfW), f.X.Map(x+halfW)
-		if x1 < x0 {
-			x0, x1 = x1, x0
-		}
-		top := f.Y.Map(y)
-		y0, y1 := top, base
+		x0, x1 := markSpan(f, g.s.x[i], g.slot()*g.widthFraction()/2)
+		y0, y1 := f.Y.Map(g.s.y[i]), base
 		if y1 < y0 {
 			y0, y1 = y1, y0
 		}
-		p.Rect(ir.R(x0, y0, x1, y1))
+		rects = append(rects, ir.R(x0, y0, x1, y1))
+		rows = append(rows, i)
 	}
-	if p.Empty() {
+	if len(rects) == 0 {
 		return nil
+	}
+
+	if cols := g.cfg.colorsFor(f, g.s, rows); cols != nil {
+		for i, r := range rects {
+			if cols[i].A == 0 {
+				continue
+			}
+			var p ir.Path
+			p.Rect(r)
+			b.FillPath(&p, ir.Solid(cols[i]), ir.NonZero)
+		}
+		return nil
+	}
+
+	var p ir.Path
+	for _, r := range rects {
+		p.Rect(r)
 	}
 	b.FillPath(&p, ir.Solid(fill), ir.NonZero)
 
@@ -129,7 +129,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 }
 
 func (g *barGeom) Legend(f Frame) (LegendEntry, bool) {
-	if g.err != nil {
+	if g.err != nil || g.cfg.varying(g.s) {
 		return LegendEntry{}, false
 	}
 	col := g.cfg.colorFor(f)

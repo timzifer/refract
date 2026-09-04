@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<defs>
+<clipPath id="c1"><path d="M43.011,32.8 L584.942,32.8 L584.942,368.825 L43.011,368.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L600,0 L600,400 L0,400 Z" fill="#ffffff"/>
+<polyline fill="none" points="43.011,32.8 43.011,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="133.333,32.8 133.333,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="223.655,32.8 223.655,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="313.977,32.8 313.977,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="404.298,32.8 404.298,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="494.62,32.8 494.62,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="584.942,32.8 584.942,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,330.046 584.942,330.046" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,220.222 584.942,220.222" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,200.812 584.942,200.812" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,181.403 584.942,181.403" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,71.579 584.942,71.579" stroke="#dddddd"/>
+<polyline fill="none" points="43.011,368.825 584.942,368.825" stroke="#333333"/>
+<polyline fill="none" points="43.011,32.8 43.011,368.825" stroke="#333333"/>
+<polyline fill="none" points="43.011,368.825 43.011,373.825" stroke="#333333"/>
+<text x="43.011" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">-6</text>
+<polyline fill="none" points="133.333,368.825 133.333,373.825" stroke="#333333"/>
+<text x="133.333" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">-4</text>
+<polyline fill="none" points="223.655,368.825 223.655,373.825" stroke="#333333"/>
+<text x="223.655" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">-2</text>
+<polyline fill="none" points="313.977,368.825 313.977,373.825" stroke="#333333"/>
+<text x="313.977" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="404.298,368.825 404.298,373.825" stroke="#333333"/>
+<text x="404.298" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="494.62,368.825 494.62,373.825" stroke="#333333"/>
+<text x="494.62" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="584.942,368.825 584.942,373.825" stroke="#333333"/>
+<text x="584.942" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">6</text>
+<polyline fill="none" points="38.011,330.046 43.011,330.046" stroke="#333333"/>
+<text x="34.011" y="330.046" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">-100</text>
+<polyline fill="none" points="38.011,220.222 43.011,220.222" stroke="#333333"/>
+<text x="34.011" y="220.222" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">-1</text>
+<polyline fill="none" points="38.011,200.812 43.011,200.812" stroke="#333333"/>
+<text x="34.011" y="200.812" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="38.011,181.403 43.011,181.403" stroke="#333333"/>
+<text x="34.011" y="181.403" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">1</text>
+<polyline fill="none" points="38.011,71.579 43.011,71.579" stroke="#333333"/>
+<text x="34.011" y="71.579" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">100</text>
+<text x="313.977" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Signed residual</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="43.011,368.825 54.301,361.824 65.591,354.824 76.882,347.823 88.172,340.823 99.462,333.822 110.752,326.822 122.043,319.821 133.333,312.821 144.623,305.82 155.913,298.82 167.204,291.819 178.494,284.819 189.784,277.818 201.074,270.818 212.364,263.817 223.655,256.817 234.945,249.816 246.235,242.816 257.525,235.815 268.816,228.815 280.106,221.814 291.396,214.814 302.686,207.813 313.977,200.812 325.267,193.812 336.557,186.811 347.847,179.811 359.137,172.81 370.428,165.81 381.718,158.809 393.008,151.809 404.298,144.808 415.589,137.808 426.879,130.807 438.169,123.807 449.459,116.806 460.75,109.806 472.04,102.805 483.33,95.805 494.62,88.804 505.91,81.804 517.201,74.803 528.491,67.803 539.781,60.802 551.071,53.802 562.362,46.801 573.652,39.801 584.942,32.8" stroke="#cc79a7" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
