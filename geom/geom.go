@@ -104,6 +104,9 @@ type config struct {
 	colorScale scale.ColorScale
 	whisker    float64
 	outliers   bool
+	decimate   Decimation
+	budget     int
+	cellSize   float64
 
 	dashSet  bool
 	extend   bool
@@ -384,15 +387,14 @@ func defined(s scale.Scale, v float64) bool {
 	return true
 }
 
-// trainFinite feeds only plottable values into a scale, so one NaN does not
-// blow the domain out to the whole real line.
-func trainFinite(s scale.Scale, vs []float64) {
-	for _, v := range vs {
-		if finite(v) {
-			s.Train(v)
-		}
-	}
-}
+// trainColumn feeds a whole column into a scale in one call.
+//
+// [scale.Scale.Train] is documented to ignore NaN and infinities, and every
+// scale here does — so filtering row by row here was doing the scale's job
+// twice, and doing it through a variadic interface method allocated the
+// argument slice once per row. On a million-row column that was a million
+// allocations to establish two numbers.
+func trainColumn(s scale.Scale, vs []float64) { s.Train(vs...) }
 
 // plottable marks the rows a geom can draw: finite values that both scales
 // have a position for.
@@ -459,20 +461,30 @@ type colorRun struct {
 // for a handful of categories is a handful. See docs/adr/0007.
 //
 // Groups come out in order of first appearance, so a render is reproducible.
-func groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
-	runs := make([]colorRun, 0, 8)
-	at := make(map[ir.Color]int, 8)
+// Each group's point buffer is kept between frames — which is why the runs are
+// held full-length in the scratch and only the used prefix is returned.
+func (sc *scratch) groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
+	if sc.at == nil {
+		sc.at = make(map[ir.Color]int, 8)
+	}
+	clear(sc.at)
+	n := 0
 	for i, p := range pts {
 		c := cols[i]
-		j, ok := at[c]
+		j, ok := sc.at[c]
 		if !ok {
-			j = len(runs)
-			at[c] = j
-			runs = append(runs, colorRun{color: c})
+			j = n
+			n++
+			if j == len(sc.runs) {
+				sc.runs = append(sc.runs, colorRun{})
+			}
+			sc.runs[j].color = c
+			sc.runs[j].pts = sc.runs[j].pts[:0]
+			sc.at[c] = j
 		}
-		runs[j].pts = append(runs[j].pts, p)
+		sc.runs[j].pts = append(sc.runs[j].pts, p)
 	}
-	return runs
+	return sc.runs[:n]
 }
 
 // trainColors feeds the colour column into the colour scale. It is separate
@@ -482,24 +494,21 @@ func (c config) trainColors(s series) {
 	if c.colorScale == nil || s.c == nil {
 		return
 	}
-	for _, v := range s.c {
-		if finite(v) {
-			c.colorScale.Train(v)
-		}
-	}
+	c.colorScale.Train(s.c...)
 }
 
 // colorsFor resolves the per-mark colours for the rows in idx, or nil if this
-// layer is a single colour.
-func (c config) colorsFor(f Frame, s series, idx []int) []ir.Color {
+// layer is a single colour. It writes into the scratch's buffer, so a chart
+// redrawn every frame recolours the same memory.
+func (sc *scratch) colorsFor(c config, s series, idx []int) []ir.Color {
 	if c.colorScale == nil || s.c == nil {
 		return nil
 	}
-	out := make([]ir.Color, len(idx))
+	sc.cols = grow(sc.cols, len(idx))
 	for i, row := range idx {
-		out[i] = c.colorScale.Color(s.c[row])
+		sc.cols[i] = c.colorScale.Color(s.c[row])
 	}
-	return out
+	return sc.cols
 }
 
 // varying reports whether this layer paints each mark from a colour scale.

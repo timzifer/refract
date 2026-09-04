@@ -65,7 +65,7 @@ func (s *timeScale) Map(v float64) float32 {
 	case hi:
 		return rhi
 	}
-	return rlo + float32((v-lo)/(hi-lo))*(rhi-rlo)
+	return place(rlo, rhi, (v-lo)/(hi-lo))
 }
 
 func (s *timeScale) Invert(pos float32) float64 {

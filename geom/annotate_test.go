@@ -1,15 +1,56 @@
 package geom_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/irtest"
+	"github.com/timzifer/refract/internal/svgdiff"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/palette"
 	"github.com/timzifer/refract/scale"
 	"github.com/timzifer/refract/theme"
 )
+
+// Device coordinates come out of a float32 mapping, and arm64 and amd64
+// disagree about the last bit of one: Go may contract `a*b + c` into a fused
+// multiply-add, and one architecture does while the other does not. Mapping 8
+// onto a 0..10 domain across a hundred pixels lands on 20 exactly on amd64 and
+// on 19.999998 on arm64 — visually the same place, a different float32.
+//
+// So an annotation's geometry is compared the way the golden files are: with a
+// hundredth of a pixel of slack, which is two orders of magnitude below
+// anything visible and four above the disagreement it exists to absorb. See
+// internal/svgdiff for the full reasoning.
+const coordEps = svgdiff.DefaultTolerance
+
+func sameRect(a, b ir.Rect) bool {
+	return samePoint(a.Min, b.Min) && samePoint(a.Max, b.Max)
+}
+
+func samePoint(a, b ir.Point) bool {
+	return math.Abs(float64(a.X-b.X)) <= coordEps && math.Abs(float64(a.Y-b.Y)) <= coordEps
+}
+
+// The slack has to be wide enough for the disagreement and narrow enough to
+// catch a real move. A test that compared device coordinates exactly is what
+// turned CI red on macOS; one that compared them loosely would have caught
+// nothing.
+func TestTheCoordinateSlackIsTheRightWidth(t *testing.T) {
+	// One float32 unit in the last place near 20, which is what an FMA
+	// contraction costs: 20 came back as 19.999998 on arm64.
+	if !sameRect(ir.R(0, 19.999998, 100, 80), ir.R(0, 20, 100, 80)) {
+		t.Error("the slack is too narrow to absorb a float32 ulp")
+	}
+	// A tenth of a pixel is not noise; something moved.
+	if sameRect(ir.R(0, 20.1, 100, 80), ir.R(0, 20, 100, 80)) {
+		t.Error("the slack is wide enough to hide a real change")
+	}
+	if samePoint(ir.Point{X: 0, Y: 20.1}, ir.Point{X: 0, Y: 20}) {
+		t.Error("the slack is wide enough to hide a real change")
+	}
+}
 
 // annotFrame trains every layer into one pair of scales and returns the frame,
 // the way render does — an annotation's position depends on what the data
@@ -128,7 +169,7 @@ func TestBandsFillTheirStrip(t *testing.T) {
 		t.Fatalf("emitted %d fills, want 1", len(calls))
 	}
 	got := calls[0].Path.Bounds()
-	if got != ir.R(0, 20, 100, 80) {
+	if !sameRect(got, ir.R(0, 20, 100, 80)) {
 		t.Errorf("band covers %v, want the strip from y=20 to y=80 across the plot", got)
 	}
 	if a := calls[0].Fill.Color.A; a == 0 || a == 255 {
@@ -141,7 +182,7 @@ func TestVBandFillsItsColumn(t *testing.T) {
 	f := annotFrame(t, geom.Line(src(map[string][]float64{"x": {0, 10}, "y": {0, 10}}),
 		geom.X("x"), geom.Y("y")), band)
 	got := draw(t, f, band).Filter("FillPath")[0].Path.Bounds()
-	if got != ir.R(20, 0, 80, 100) {
+	if !sameRect(got, ir.R(20, 0, 80, 100)) {
 		t.Errorf("band covers %v, want x=20..80 across the height", got)
 	}
 }
@@ -161,7 +202,7 @@ func TestSegmentConnectsTwoPoints(t *testing.T) {
 	seg := geom.Segment(0, 0, 10, 10)
 	f := annotFrame(t, seg)
 	pts := draw(t, f, seg).Filter("Polyline")[0].Points
-	if pts[0] != (ir.Point{X: 0, Y: 100}) || pts[1] != (ir.Point{X: 100, Y: 0}) {
+	if !samePoint(pts[0], ir.Point{X: 0, Y: 100}) || !samePoint(pts[1], ir.Point{X: 100, Y: 0}) {
 		t.Errorf("segment runs %v -> %v", pts[0], pts[1])
 	}
 }
@@ -177,7 +218,7 @@ func TestRegionFillsItsRectangle(t *testing.T) {
 	if n := r.Count("StrokePath"); n != 0 {
 		t.Errorf("emitted %d outlines for a region with no explicit colour, want 0", n)
 	}
-	if got := r.Filter("FillPath")[0].Path.Bounds(); got != ir.R(20, 20, 80, 80) {
+	if got := r.Filter("FillPath")[0].Path.Bounds(); !sameRect(got, ir.R(20, 20, 80, 80)) {
 		t.Errorf("region covers %v", got)
 	}
 }
@@ -209,7 +250,7 @@ func TestNotePlacesText(t *testing.T) {
 	if run.Text != "here" {
 		t.Errorf("text = %q", run.Text)
 	}
-	if run.At != (ir.Point{X: 50, Y: 50}) {
+	if !samePoint(run.At, ir.Point{X: 50, Y: 50}) {
 		t.Errorf("placed at %v, want (50,50)", run.At)
 	}
 	if run.H != ir.AlignCenter || run.V != ir.AlignBottom {

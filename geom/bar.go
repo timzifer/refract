@@ -28,8 +28,8 @@ func (g *barGeom) Train(x, y scale.Scale) error {
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
-	trainFinite(x, g.s.x)
-	trainFinite(y, g.s.y)
+	trainColumn(x, g.s.x)
+	trainColumn(y, g.s.y)
 	g.cfg.trainColors(g.s)
 	// A bar is read as the area between the baseline and the value, so the
 	// baseline must be in the domain or the chart lies about magnitude.
@@ -81,13 +81,19 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
+	sc := acquire()
+	defer sc.release()
+
 	base := baselinePos(f, g.cfg.baseline)
-	ok := g.s.plottable(f.X, f.Y)
+	ok := sc.plottable(g.s, f.X, f.Y)
 
 	// Collect the bars first, so that a layer coloured from a scale can batch
 	// them by colour and one coloured uniformly can still emit a single path.
-	rects := make([]ir.Rect, 0, len(g.s.x))
-	rows := make([]int, 0, len(g.s.x))
+	//
+	// A bar already aggregates whatever it counted, so there is no reduction to
+	// apply here: dropping bars would drop categories rather than pixels.
+	rects := sc.rects[:0]
+	rows := sc.rows[:0]
 	for i := range g.s.x {
 		if !ok[i] {
 			continue
@@ -100,30 +106,31 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		rects = append(rects, ir.R(x0, y0, x1, y1))
 		rows = append(rows, i)
 	}
+	sc.rects, sc.rows = rects, rows
 	if len(rects) == 0 {
 		return nil
 	}
 
-	if cols := g.cfg.colorsFor(f, g.s, rows); cols != nil {
+	if cols := sc.colorsFor(g.cfg, g.s, rows); cols != nil {
 		for i, r := range rects {
 			if cols[i].A == 0 {
 				continue
 			}
-			var p ir.Path
-			p.Rect(r)
-			b.FillPath(&p, ir.Solid(cols[i]), ir.NonZero)
+			sc.fill.Reset()
+			sc.fill.Rect(r)
+			b.FillPath(&sc.fill, ir.Solid(cols[i]), ir.NonZero)
 		}
 		return nil
 	}
 
-	var p ir.Path
+	sc.fill.Reset()
 	for _, r := range rects {
-		p.Rect(r)
+		sc.fill.Rect(r)
 	}
-	b.FillPath(&p, ir.Solid(fill), ir.NonZero)
+	b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 
 	if g.cfg.fill != nil && g.cfg.color != nil {
-		b.StrokePath(&p, ir.Stroke{Color: *g.cfg.color, Width: pick(g.cfg.width, 1)})
+		b.StrokePath(&sc.fill, ir.Stroke{Color: *g.cfg.color, Width: pick(g.cfg.width, 1)})
 	}
 	return nil
 }

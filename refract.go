@@ -107,6 +107,8 @@ type Plot struct {
 
 	legend    bool
 	legendSet bool
+
+	serial bool
 }
 
 // Option configures a Plot at construction.
@@ -154,6 +156,17 @@ func YTitle(s string) Option { return func(p *Plot) { p.yTitle = s } }
 func Legend(show bool) Option {
 	return func(p *Plot) { p.legend, p.legendSet = show, true }
 }
+
+// Parallel controls whether a multi-panel chart builds its panels
+// concurrently. It is on by default and produces identical output either way:
+// each panel is recorded on its own goroutine and the recordings are replayed
+// in panel order.
+//
+// Turn it off to keep a render on one goroutine — inside a benchmark that is
+// measuring something else, or in a process that has already committed its
+// cores elsewhere. It has no effect on a chart with a single panel, which has
+// nothing to overlap.
+func Parallel(on bool) Option { return func(p *Plot) { p.serial = !on } }
 
 // New creates a Plot.
 func New(opts ...Option) *Plot {
@@ -240,6 +253,7 @@ func (p *Plot) chart() (render.Chart, error) {
 		Y:          p.scaleY(),
 		Layers:     p.layers,
 		ShowLegend: p.showLegend(),
+		Serial:     p.serial,
 	}
 	if p.facet == nil {
 		return c, nil

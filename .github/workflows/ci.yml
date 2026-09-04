@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: gofmt
         run: |
@@ -44,6 +45,7 @@ jobs:
         run: |
           go vet ./...
           (cd backend/gg && go vet ./...)
+          (cd arrow && go vet ./...)
 
       - name: The core module must depend on nothing but the standard library
         run: |
@@ -81,17 +83,23 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: Build
         run: |
           go build ./...
           go build ./backend/gg/...
+          go build ./arrow/...
 
       - name: Test the core
         run: go test ./...
 
       - name: Test the gg backend
         working-directory: backend/gg
+        run: go test ./...
+
+      - name: Test the Arrow adapter
+        working-directory: arrow
         run: go test ./...
 
   # ---------------------------------------------------------------------------
@@ -111,12 +119,17 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: Test the core
         run: go test -race ./...
 
       - name: Test the gg backend
         working-directory: backend/gg
+        run: go test -race ./...
+
+      - name: Test the Arrow adapter
+        working-directory: arrow
         run: go test -race ./...
 
   # ---------------------------------------------------------------------------
@@ -141,6 +154,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: Build the core for ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
@@ -153,6 +167,65 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build ./backend/gg/...
+
+      - name: Build the Arrow adapter for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./arrow/...
+
+  # ---------------------------------------------------------------------------
+  # Benchmarks, and the gate they exist for. CONCEPT.md §11 promises that a
+  # frame's cost in allocations does not grow with the data it draws; this is
+  # where that is checked on every commit, from real benchmark output rather
+  # than from a claim.
+  #
+  # Running every benchmark also keeps them from rotting: a benchmark nobody
+  # runs is a benchmark that stops compiling.
+  # ---------------------------------------------------------------------------
+  bench:
+    name: Benchmarks and the allocation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+            arrow/go.sum
+
+      # The gate's own tests. They live behind //go:build !race because the
+      # race detector allocates on refract's behalf, so they are invisible to
+      # the race job and need running here.
+      - name: The allocation gate as a test
+        run: go test -count=1 -run 'AllocatePerPoint|AllocationBudget' -v .
+
+      # -benchtime=10x, because this job gates allocation counts — which are
+      # deterministic — and not times, which a shared runner cannot measure.
+      - name: Run every benchmark
+        run: |
+          set -euo pipefail
+          {
+            go test -run='^$' -bench=. -benchtime=10x -count=1 ./...
+            (cd backend/gg && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+            (cd arrow && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+          } | tee bench.txt
+
+      - name: The allocation gate as a benchmark
+        run: awk -f .github/scripts/allocgate.awk bench.txt
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Benchmarks"
+            echo
+            echo '```'
+            grep -E '^Benchmark' bench.txt || echo "no benchmark output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
   # Coverage across both modules, published as a shields.io endpoint so the
@@ -171,6 +244,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: Measure
         run: |
@@ -181,9 +255,10 @@ jobs:
           # by their own tests.
           go test -covermode=atomic -coverpkg=./... -coverprofile=core.cov ./...
           (cd backend/gg && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../gg.cov ./...)
+          (cd arrow && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../arrow.cov ./...)
 
-          # Merge the two profiles: one mode line, then every data line from both.
-          { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov; } > coverage.cov
+          # Merge the profiles: one mode line, then every data line from each.
+          { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov arrow.cov; } > coverage.cov
           go tool cover -func=coverage.cov | tail -n 1 | tee coverage-total.txt
 
       - name: Write the badge endpoint
@@ -259,6 +334,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            arrow/go.sum
 
       - name: Check the committed figures against the code
         id: check

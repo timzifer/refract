@@ -32,8 +32,8 @@ func (g *stepGeom) Train(x, y scale.Scale) error {
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
-	trainFinite(x, g.s.x)
-	trainFinite(y, g.s.y)
+	trainColumn(x, g.s.x)
+	trainColumn(y, g.s.y)
 	return nil
 }
 
@@ -51,8 +51,15 @@ func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 	if !stroke.Visible() {
 		return nil
 	}
-	for _, seg := range segments(g.s, g.s.plottable(f.X, f.Y), g.cfg.missing) {
-		pts := stepPoints(project(seg, f), g.cfg.steps)
+	sc := acquire()
+	defer sc.release()
+
+	// A staircase is its transitions, so the reduction that keeps its extremes
+	// per column is the one that keeps the picture. See [Decimate].
+	mode, budget := g.cfg.reduction(shapeStair, g.s, f)
+	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
+		x, y, _ := sc.project(seg, f)
+		pts := sc.stepPoints(sc.marks(x, y, sc.reduce(mode, budget, x, y, nil)), g.cfg.steps)
 		if len(pts) < 2 {
 			continue
 		}
@@ -79,7 +86,7 @@ func (g *stepGeom) Legend(f Frame) (LegendEntry, bool) {
 // A right angle is a corner in the stroke, not a data point, so the geom
 // strokes with a butt cap and a miter join: rounding the corners would round
 // the very thing the step is drawn to show.
-func stepPoints(pts []ir.Point, where StepPos) []ir.Point {
+func (sc *scratch) stepPoints(pts []ir.Point, where StepPos) []ir.Point {
 	if len(pts) < 2 {
 		return pts
 	}
@@ -87,7 +94,8 @@ func stepPoints(pts []ir.Point, where StepPos) []ir.Point {
 	if where == StepMid {
 		n = 3*len(pts) - 2
 	}
-	out := make([]ir.Point, 0, n)
+	out := grow(sc.edge, n)[:0]
+	defer func() { sc.edge = out }()
 	out = append(out, pts[0])
 	for i := 1; i < len(pts); i++ {
 		a, c := pts[i-1], pts[i]

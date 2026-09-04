@@ -17,6 +17,15 @@ import "image"
 // self-contained. The only state is the transform/clip stack managed by Push
 // and Pop.
 //
+// # Ownership
+//
+// Everything a drawing call is given — a point slice, a [Path], an
+// [image.Image] — is **lent for the duration of that call**. refract draws from
+// pooled buffers so that a chart redrawn every frame allocates nothing that
+// grows with its data, which means the next call may write over what the last
+// one was handed. A Backend that needs to keep any of it must copy it;
+// [Recorder] is the worked example.
+//
 // # Concurrency
 //
 // A Backend is not safe for concurrent use. refract may build IR on several

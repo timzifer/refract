@@ -38,10 +38,10 @@ func (g *areaGeom) Train(x, y scale.Scale) error {
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
-	trainFinite(x, g.s.x)
-	trainFinite(y, g.s.y)
+	trainColumn(x, g.s.x)
+	trainColumn(y, g.s.y)
 	if g.s.y2 != nil {
-		trainFinite(y, g.s.y2)
+		trainColumn(y, g.s.y2)
 		return nil
 	}
 	// The baseline is part of the shape, so it has to be inside the domain or
@@ -65,33 +65,46 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 	tension := float32(clamp01(g.cfg.tension))
 	base := baselinePos(f, g.cfg.baseline)
 
-	for _, seg := range segments(g.s, g.s.plottable(f.X, f.Y), g.cfg.missing) {
-		top := project(seg, f)
+	sc := acquire()
+	defer sc.release()
+
+	// A band is bounded by both of its edges, so its reduction has to see both;
+	// an area over a baseline is a line with a fill under it. See [Decimate].
+	shape := shapePath
+	if g.s.y2 != nil {
+		shape = shapeBand
+	}
+	mode, budget := g.cfg.reduction(shape, g.s, f)
+
+	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
+		x, y, z := sc.project(seg, f)
+		keep := sc.reduce(mode, budget, x, y, z)
+		top := sc.marks(x, y, keep)
 		if len(top) < 2 {
 			continue
 		}
 		if fill.A != 0 {
-			var p ir.Path
-			appendCurve(&p, top, tension, true)
-			if seg.y2 != nil {
-				appendCurve(&p, projectY2(seg, f), tension, false)
+			sc.fill.Reset()
+			appendCurve(&sc.fill, top, tension, true)
+			if z != nil {
+				appendCurve(&sc.fill, sc.lowerEdge(x, z, keep), tension, false)
 			} else {
-				p.LineTo(top[len(top)-1].X, base)
-				p.LineTo(top[0].X, base)
+				sc.fill.LineTo(top[len(top)-1].X, base)
+				sc.fill.LineTo(top[0].X, base)
 			}
-			p.Close()
-			b.FillPath(&p, ir.Solid(fill), ir.NonZero)
+			sc.fill.Close()
+			b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 		}
 		if !stroke.Visible() {
 			continue
 		}
-		var edge ir.Path
-		appendCurve(&edge, top, tension, true)
-		b.StrokePath(&edge, stroke)
-		if seg.y2 != nil {
-			var lower ir.Path
-			appendCurve(&lower, projectY2(seg, f), tension, true)
-			b.StrokePath(&lower, stroke)
+		sc.line.Reset()
+		appendCurve(&sc.line, top, tension, true)
+		b.StrokePath(&sc.line, stroke)
+		if z != nil {
+			sc.line.Reset()
+			appendCurve(&sc.line, sc.lowerEdge(x, z, keep), tension, true)
+			b.StrokePath(&sc.line, stroke)
 		}
 	}
 	return nil

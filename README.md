@@ -12,10 +12,10 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.3**, "layout, theming, PDF". The
-> API is not stable; every release below `v1.0.0` may contain breaking changes
-> without a deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and
-> the road ahead.
+> **Status: pre-alpha.** This is milestone **v0.4**, "big data". The API is not
+> stable; every release below `v1.0.0` may contain breaking changes without a
+> deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
+> ahead.
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
@@ -36,6 +36,7 @@ PDF. Add one module and the same specification renders to PNG and JPEG through
 |---|---|---|
 | `github.com/timzifer/refract` | **stdlib only** | SVG, PDF |
 | `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG |
+| `github.com/timzifer/refract/arrow` | `apache/arrow-go` — zero CGO | — (a data source) |
 
 Raster, GPU, browser and interactive rendering all live behind the same
 `ir.Backend` interface. The rest are milestones, not architecture changes.
@@ -45,6 +46,7 @@ Raster, GPU, browser and interactive rendering all live behind the same
 ```sh
 go get github.com/timzifer/refract               # core: SVG and PDF, stdlib only
 go get github.com/timzifer/refract/backend/gg    # raster: PNG and JPEG
+go get github.com/timzifer/refract/arrow         # optional: plot Arrow data
 ```
 
 Go 1.25 or newer ([why](docs/adr/0005-go-version.md)).
@@ -119,6 +121,7 @@ picture here cannot drift away from the code that produced it.
 | ![Bars by region, coloured by value with a colourbar](docs/images/categories.png) | ![Latency distributions as boxplots](docs/images/boxplot.png) |
 | ![Two growth curves on a log axis](docs/images/logscale.png) | ![A series read against thresholds and a shaded window](docs/images/annotations.png) |
 | ![Throughput faceted into one panel per region](docs/images/facets.png) | ![Four subplots on one dark canvas](docs/images/subplots.png) |
+| ![A quarter of a million samples drawn as a clean line](docs/images/decimation.png) | ![A million points drawn as a density raster](docs/images/density.png) |
 
 ## What it does
 
@@ -155,12 +158,23 @@ picture here cannot drift away from the code that produced it.
   ([Okabe-Ito](https://jfly.uni-koeln.de/color/)) default palette and
   perceptually uniform sequential ramps (Viridis, Cividis, Magma). `Theme.With`
   edits one; `theme.Register` and `theme.ByName` resolve one from a config file.
+- **Big data** — a layer with more rows than the plot has pixels reduces itself
+  before it draws: `stat.LTTB` for a line, min/max per pixel column for a
+  staircase or a band, density binning to an image for a point cloud. It happens
+  when the chart is drawn, never when the scales are trained, so the axes still
+  report the data rather than the subset that survived
+  ([ADR 0011](docs/adr/0011-decimation.md)).
+- **Parallel panels** — a facet or a grid builds its panels on separate
+  goroutines and replays them in panel order, so the output is byte-identical to
+  a serial render ([ADR 0012](docs/adr/0012-parallel-panels.md)).
 - **Data** — columnar and batch-oriented, carrying numeric, time and categorical
-  columns. A `[]float64`-backed source is borrowed, never copied.
+  columns. A `[]float64`-backed source is borrowed, never copied, and so is a
+  null-free `float64` column read straight out of an **Apache Arrow** record
+  through the optional `refract/arrow` module.
 - **Backends** — two built-in emitters, SVG and PDF, and the gg raster adapter.
 
-Deliberately **not** here yet: decimation, Arrow, the JSON spec, interactivity,
-GPU, browser. Each is a later milestone in
+Deliberately **not** here yet: the JSON spec, interactivity, GPU, browser. Each
+is a later milestone in
 [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones).
 
 ## Categories, distributions and orders of magnitude
@@ -213,6 +227,56 @@ err := g.Render(refract.PDF("overview.pdf"))
 
 A runnable version of both, with annotations and PDF output, is in
 [`examples/dashboard`](examples/dashboard).
+
+## A million rows
+
+```go
+p := refract.New(refract.Size(800, 500), refract.Title("A million samples"))
+p.Add(geom.Line(src, geom.X("i"), geom.Y("v")))   // nothing else needed
+```
+
+That renders in about 60 ms into under 30 kB of SVG. Drawing every row takes six
+times as long and produces 15 MB — of a picture that is 800 pixels wide, so the
+extra 999,000 vertices land on top of each other.
+
+The layer sees how many rows it has against how wide the plot is and reduces
+itself accordingly: `LTTB` for a line, min/max per pixel column for a step or a
+band, a density raster for a scatter dense enough that its markers would bury
+one another. Override it per layer when the default is not what you want:
+
+```go
+geom.Line(src, geom.X("i"), geom.Y("v"), geom.Decimate(geom.MinMax))    // keep every spike
+geom.Line(src, geom.X("i"), geom.Y("v"), geom.Decimate(geom.NoDecimation)) // every row
+geom.Scatter(src, geom.X("x"), geom.Y("y"), geom.Budget(4000))          // at most 4000 marks
+```
+
+The reduction happens when the chart is drawn, not when its scales are trained,
+so the axes are the data's either way — a spike survives the reduction *and* the
+axis still reaches it.
+
+The same milestone made a redrawn chart cheap: everything sized by the data comes
+from a pool, so a steady-state frame over a million rows costs the same handful
+of allocations as one over a thousand. There is a test that fails if that stops
+being true.
+
+A runnable version — two million samples with a spike and a dropout in them, and
+a million-point cloud — is in [`examples/bigdata`](examples/bigdata).
+
+## Plotting Arrow data
+
+```go
+import "github.com/timzifer/refract/arrow"
+
+src := arrow.Source(rec)      // rec is an arrow.Record
+p.Add(geom.Line(src, geom.X("t"), geom.Y("p99")))
+```
+
+A `float64` column with no nulls is Arrow's own buffer — no copy, no conversion.
+Everything else (integers, `float32`, timestamps, dictionary-encoded strings)
+converts once on first use and is cached, so a record with forty columns and a
+chart that plots two pays for two. An Arrow null becomes `NaN`, which means the
+missing-data policy you already set covers it
+([ADR 0013](docs/adr/0013-arrow-adapter.md)).
 
 ## How it fits together
 

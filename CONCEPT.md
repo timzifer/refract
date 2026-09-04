@@ -2,10 +2,10 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **pre-alpha.** Milestones **v0.1 through v0.3 are implemented** — see
+> Status: **pre-alpha.** Milestones **v0.1 through v0.4 are implemented** — see
 > [§14](#14-roadmap--milestones) for what that covers and the
 > [README](README.md) to use it. This document remains the working concept for
-> everything past v0.3. The API is **not** stable: every release below `v1.0.0`
+> everything past v0.4. The API is **not** stable: every release below `v1.0.0`
 > may contain breaking changes without deprecation cycles (see
 > [Versioning](#15-versioning--stability)) — v0.2 added a method to
 > `data.Source`, which is exactly the kind of break that policy exists for.
@@ -237,7 +237,10 @@ type DataSource interface {
 - **Zero-copy common case** — a `[]float64`-backed source returns its slice
   directly.
 - **Arrow adapter as a separate module** (`refract/arrow`) so the core never links
-  Apache Arrow.
+  Apache Arrow. Shipped in v0.4: a null-free `float64` column is borrowed
+  outright, everything else converts once and caches, and an Arrow null becomes
+  a `NaN` so that one missing-data policy covers both
+  ([ADR 0013](docs/adr/0013-arrow-adapter.md)).
 - **Missing-data policy is explicit** — `NaN`/`Inf`: interpolate, gap, or error.
   (gg is already NaN-safe at the path level, so a gap never corrupts a render.)
   Since v0.2 the same policy covers a value the *scale* cannot place — zero on a
@@ -392,13 +395,22 @@ GPU path, which is a compatibility fallback, not a throughput path.
 ## 11. Concurrency & allocation
 
 - **Parallel subplots** — independent subplots build IR on separate goroutines,
-  composited at the end.
+  composited at the end. Shipped in v0.4: each panel records into an
+  `ir.Recorder` and the recordings replay into the backend *in panel order*, so
+  a parallel render emits byte-identical output to a serial one
+  ([ADR 0012](docs/adr/0012-parallel-panels.md)).
 - **Snapshot streaming** — producer and renderer never share mutable state; the
   renderer reads an immutable snapshot (copy-on-swap). gg's damage tracking then
-  repaints only dirty regions.
+  repaints only dirty regions. **v0.5, not yet implemented.**
 - **Allocation discipline** — refract keeps its IR construction allocation-light
   and leans on gg's zero-alloc fill/stroke/text paths. A benchmark gate asserts no
-  per-frame allocations on the hot path.
+  per-frame allocations on the hot path. Shipped in v0.4: everything sized by the
+  data comes from a pool, so a steady-state frame costs the same handful of
+  allocations over a thousand rows and over a million.
+  `TestARenderDoesNotAllocatePerPoint` is the gate as a test, and CI's
+  `Benchmarks and the allocation gate` job is the gate as a benchmark —
+  `.github/scripts/allocgate.awk` reads `go test -bench` output and enforces the
+  same property from the numbers, over all three modules.
 
 ---
 
@@ -406,15 +418,21 @@ GPU path, which is a compatibility fallback, not a throughput path.
 
 Two decoupled tiers:
 
-- **CPU tier (always, pure Go).** Aggregate before rendering:
+- **CPU tier (always, pure Go).** Aggregate before rendering — **shipped in
+  v0.4**, in `stat/`, applied by geoms at draw time
+  ([ADR 0011](docs/adr/0011-decimation.md)):
     - **LTTB** for line/time-series (sorted x, one y per x; lossy but shape-preserving).
-    - **Min/max-per-pixel-column** for signal envelopes.
+    - **Min/max-per-pixel-column** for signal envelopes and staircases.
     - **Density binning → raster** (datashader-style) for large scatter / point
       clouds; emit an `Image` primitive.
 - **GPU tier (opt-in).** Interactive pan/zoom over the full dataset at framerate
   via the gg GPU backend, with float64 origin rebasing for precision at deep zoom.
+  **v0.6, not yet implemented.**
 
-Default per geom and dataset size; user-overridable.
+Default per geom and dataset size; user-overridable through `geom.Decimate`,
+`geom.Budget` and `geom.NoDecimation`. The reduction happens in `Build`, never
+in `Train`, so an axis always reports the data rather than the subset that
+survived.
 
 ---
 
@@ -555,12 +573,41 @@ Guides are v0.3.
 Colourbars close the gap v0.2 left open: a layer using `geom.ColorBy` now
 contributes a colour guide instead of nothing.
 
-### v0.4 — Big data (CPU tier)
+### v0.4 — Big data (CPU tier) — **shipped**
 
-- Decimation family: LTTB, min/max-per-column, density binning → raster.
-- Allocation pass; benchmark gate on zero per-frame allocations.
-- Arrow adapter (separate module).
-- Parallel subplot rendering.
+- Decimation family in `stat/`: LTTB, min/max-per-pixel-column, density binning
+  → raster. Geoms apply it at draw time, on device coordinates, and choose one
+  by mark and by size unless told otherwise
+  ([ADR 0011](docs/adr/0011-decimation.md)). `Train` still sees every row, so a
+  reduced chart's axes are the data's, not the subset's.
+- Allocation pass; a benchmark gate on per-frame allocations, running in CI over
+  all three modules. Everything sized by the data comes from a pool, and both
+  `TestARenderDoesNotAllocatePerPoint` and `.github/scripts/allocgate.awk`
+  assert that a frame over a million rows allocates what a frame over a thousand
+  does — 76 either way. Along the way, feeding a column into a scale row by row
+  through a variadic interface method turned out to cost one allocation per
+  row; it is now one call per column.
+- Arrow adapter as a separate module, `refract/arrow`. A null-free `float64`
+  column is Arrow's own buffer; everything else converts once and caches; an
+  Arrow null becomes `NaN`, so the missing-data policy that was already there
+  covers it ([ADR 0013](docs/adr/0013-arrow-adapter.md)).
+- Parallel subplot rendering. Each panel records into an `ir.Recorder` on its
+  own goroutine and the recordings replay **in panel order**, so the output is
+  byte-identical to a serial render and one set of golden files covers both
+  ([ADR 0012](docs/adr/0012-parallel-panels.md)). `scale.Snapshotter` is what
+  removes the sharing that panels sharing an axis otherwise have.
+- *DoD:* a chart over a million rows renders, with no option set and no spike
+  lost, in around 60 ms into under 30 kB of SVG — where drawing every row takes
+  six times as long and produces 15 MB — and the same chart redrawn every frame
+  allocates nothing that grows with its data. ✔
+
+Not in v0.4, in case they look like oversights. Streaming is v0.5: there is no
+`StreamSource` and no snapshot/swap, because the interesting half of that is
+damage-aware repaint, which needs the interactive backends. `stat` carries the
+decimation family only — smoothing, regression and hexbin are stats rather than
+big-data machinery, and they belong with the geoms that would draw them. And
+the GPU tier is untouched, which is the point of the CPU tier: big-data
+*stills* are complete without it.
 
 ### v0.5 — Web & interactivity
 
@@ -627,7 +674,8 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
   data/                      # Source, Float64Columns, Table              (v0.1)
   scale/                     # linear, time (+ log, symlog, ordinal, colour) (v0.1)
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
-  stat/                      # bin, density, smooth, aggregate
+  stat/                      # LTTB, min/max, density binning              (v0.4)
+                             # (smooth and aggregate are still to come)
   coord/                     # cartesian (pluggable stage)
   layout/                    # panel-grid constraint solver               (v0.3)
   render/                    # model -> IR lowering                       (v0.1)
@@ -646,10 +694,11 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
                              # see ADR 0009.
     cmd/gallery/             # renders every documented figure            (v0.1)
 
-refract/arrow                # optional Arrow adapter (separate module)
+  arrow/                     # NESTED MODULE: Apache Arrow adapter        (v0.4)
+                             # Depends on apache/arrow-go. Zero CGO.
 ```
 
-`backend/gg` and `refract/arrow` depend on the core, never the reverse. A nested
+`backend/gg` and `arrow` depend on the core, never the reverse. A nested
 module is excluded from its parent's module graph, so importing only `refract`
 yields a graph with no external packages in it at all — CI asserts this on every
 commit. SVG output works with no GoGPU present. See
