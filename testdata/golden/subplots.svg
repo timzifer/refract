@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" viewBox="0 0 760 460">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" viewBox="0 0 760 460" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Fleet overview</title>
 <defs>
 <clipPath id="c1"><path d="M50.332,50.975 L376.434,50.975 L376.434,206.675 L50.332,206.675 Z"/></clipPath>
 <clipPath id="c2"><path d="M415.782,50.975 L741.884,50.975 L741.884,206.675 L415.782,206.675 Z"/></clipPath>

@@ -20,6 +20,29 @@ func In(loc *time.Location) TimeOption {
 	}
 }
 
+// Origin sets the instant the scale measures its domain from, so that a
+// domain value is nanoseconds since t rather than nanoseconds since 1970.
+//
+// It is what makes a deep zoom exact. A float64 holds 53 bits of mantissa, and
+// a Unix nanosecond count in this century needs 61 — so two instants a
+// nanosecond apart become the *same* float64, and an axis zoomed to a
+// microsecond window has nothing left to separate them with. Measured from an
+// origin near the data, the same two instants are 1.0 apart, and stay whole
+// numbers of nanoseconds for the hundred days either side of it that a
+// float64 counts exactly.
+//
+// The origin is part of the scale's domain space: every value handed to
+// [Scale.Map] or [Scale.Train] on this scale, and every value it returns from
+// [Scale.Invert] or [Scale.Domain], is measured from it. Use [Temporal] —
+// or the package helpers [ValueOf] and [InstantOf] — to convert, rather than
+// [Nanos] and [FromNanos], which are the origin-free pair and stay so.
+// A geom reading a time column does this for you.
+//
+// The default origin is the Unix epoch, which is exactly [Nanos].
+func Origin(t time.Time) TimeOption {
+	return func(s *timeScale) { s.origin = t.UnixNano() }
+}
+
 // TimeFormat overrides tick label formatting. The unit the tick sequence
 // settled on is passed so a caller can vary detail with zoom level.
 func TimeFormat(fn func(t time.Time, unit time.Duration) string) TimeOption {
@@ -45,12 +68,59 @@ func Nanos(t time.Time) float64 { return float64(t.UnixNano()) }
 // FromNanos converts a time scale's domain value back to a time.
 func FromNanos(v float64) time.Time { return time.Unix(0, int64(v)) }
 
+// Temporal is implemented by scales whose domain is time.
+//
+// It is the seam between an exact timestamp and the float64 a Scale maps: a
+// scale that measures from an [Origin] converts across it in int64 and loses
+// nothing, and one that does not is exactly [Nanos] and [FromNanos]. Anything
+// turning a timestamp into a domain value — a geom reading a time column, a
+// document writing an axis down — goes through it rather than assuming the
+// Unix epoch, which is what [ValueOf] and [InstantOf] are for.
+//
+// It is an optional interface, like every other in this package: a scale that
+// does not implement it is not a time axis.
+type Temporal interface {
+	// Value converts an instant into the scale's domain space.
+	Value(t time.Time) float64
+
+	// Instant converts a domain value back into an instant. It is the inverse
+	// of Value.
+	Instant(v float64) time.Time
+}
+
+// ValueOf converts an instant into s's domain space, falling back to [Nanos]
+// for a scale that is not [Temporal] — including a nil one, which is what a
+// geom reading a column for a colour scale has.
+func ValueOf(s Scale, t time.Time) float64 {
+	if ts, ok := s.(Temporal); ok {
+		return ts.Value(t)
+	}
+	return Nanos(t)
+}
+
+// InstantOf converts a domain value of s back into an instant, falling back to
+// [FromNanos] for a scale that is not [Temporal].
+func InstantOf(s Scale, v float64) time.Time {
+	if ts, ok := s.(Temporal); ok {
+		return ts.Instant(v)
+	}
+	return FromNanos(v)
+}
+
 type timeScale struct {
 	domainRange
 	loc    *time.Location
 	fixed  bool
+	origin int64 // the instant the domain is measured from, in Unix nanoseconds
 	format func(time.Time, time.Duration) string
 }
+
+// Value converts an instant into this scale's domain space, exactly: the
+// subtraction happens in int64, so no precision is lost before the float64.
+func (s *timeScale) Value(t time.Time) float64 { return float64(t.UnixNano() - s.origin) }
+
+// Instant converts a domain value back into an instant.
+func (s *timeScale) Instant(v float64) time.Time { return time.Unix(0, s.origin+int64(v)) }
 
 // Train ignores a pinned domain, so that a view set by [Zoomer.SetDomain]
 // survives the next render's training pass.
@@ -134,7 +204,7 @@ func (s *timeScale) Ticks(want int) []Tick {
 		want = 2
 	}
 	lo, hi := s.span()
-	start, end := FromNanos(lo).In(s.loc), FromNanos(hi).In(s.loc)
+	start, end := s.Instant(lo).In(s.loc), s.Instant(hi).In(s.loc)
 	span := end.Sub(start)
 	if span <= 0 {
 		return []Tick{{Value: lo, Pos: s.Map(lo), Label: s.label(start, timeUnits[3])}}
@@ -145,7 +215,7 @@ func (s *timeScale) Ticks(want int) []Tick {
 
 	out := make([]Tick, 0, len(times))
 	for _, t := range times {
-		v := Nanos(t)
+		v := s.Value(t)
 		if v < lo || v > hi {
 			continue
 		}

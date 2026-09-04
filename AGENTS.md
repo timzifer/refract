@@ -8,10 +8,10 @@ constraints that are easy to break without noticing.
 
 **The core module must never gain a dependency.** `go.mod` at the repository
 root has no `require` block, and it stays that way. Anything that needs
-`gogpu/gg`, `x/image`, Arrow, or anything else belongs in a nested module —
-`backend/gg` and `arrow` are the two that exist. `syscall/js` is the standard
-library, which is why the browser backend is in the core rather than beside
-them.
+`gogpu/gg`, `gogpu/gogpu`, `x/image`, Arrow, or anything else belongs in a
+nested module — `backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow` are
+the four that exist. `syscall/js` is the standard library, which is why the
+browser backend is in the core rather than beside them.
 
 CI checks it:
 
@@ -29,9 +29,10 @@ data, stat                                    →  rows in, rows out
 geom, scale, facet, layout, render            →  produce IR
 ir                                            →  the interface
 interact                                      →  reads IR back
-spec                                          →  writes the model down
+spec, a11y                                    →  write the model down
+mathtext                                      →  places text, measures through IR
 backend/svg, backend/pdf, backend/canvas,     →  consume IR
-backend/gg
+backend/gg, backend/window
 ```
 
 - A geom must not import a backend, know about SVG, or measure text except
@@ -46,6 +47,11 @@ backend/gg
   that knew about JSON would be a geom in the wrong package; `geom.Desc`,
   `scale.Desc` and `facet.Desc` are how a model type says what it is without
   knowing what will be done with the answer.
+- `a11y` sits exactly where `spec` does, for the same reason: a geom that knew
+  what a screen reader was would be a geom in the wrong package.
+- `mathtext` neither draws nor knows about a chart. It is given a label, a font
+  and a `Measure`, and it answers with positions — which is why it can be
+  installed by wrapping the backend and reach every label at once.
 - `interact` consumes IR and scales and produces neither. It wraps a backend
   rather than replacing one.
 
@@ -321,6 +327,77 @@ rather than an error. Its tests run under node in CI, against a recording
 context — node has no canvas, and a test that needed one would be a test nobody
 could run.
 
+**`backend/gg` still must not import `gg/gpu`, and the GPU tier is a module
+below it.** `backend/gg/gpu` is nested *inside* `backend/gg` so that the raster
+backend's own module graph stays gg, `x/image` and the core; importing the tier
+is the whole opt-in — [ADR 0022](docs/adr/0022-gpu-tier.md). Moving the blank
+import up one directory would put `wgpu`, `naga` and `goffi` into every program
+that renders a PNG, and would cost the module its js/wasm target.
+
+**gogpu is pinned exactly, and its pin is tied to gg's.** `backend/window`
+requires gogpu v0.52.1 because that is the release whose `gputypes` and
+`gpucontext` resolve to the versions gg v0.52.5 compiles against. A newer gogpu
+pulls a `gputypes` that gg at this pin does not build with, and the failure is a
+wall of "too many arguments" inside gg's internals rather than anything naming a
+version. Upgrade the two together or not at all.
+
+**A backend wrapper hides the optional interfaces of what it wraps.** `Damage`,
+`Resize` and `Describe` are all reached by type assertion, so a wrapper that
+does not declare them silently drops them. `ir.Recorder` and `interact`'s probe
+both forward `Describe`; `render.Draw` keeps the *unwrapped* backend for the
+semantics question, because it wraps the backend to install a typesetter. A
+`<title>` that quietly disappears from interactive charts only is what this
+costs when it is forgotten, and there is a test.
+
+**A description costs a pass over the data, so a render must not take one.**
+`Plot.Describe` is a method that does work rather than an option that sets a
+flag: it reads every plotted column. The title alone is free and is always
+written; the long description is written when someone asked for one. Wiring the
+description into `chart()` so that every frame recomputes it would put a data
+pass in the frame budget, and `TestARenderDoesNotAllocatePerPoint` would not
+notice — it counts allocations, not passes.
+
+**Redundant encoding is a default, not an override.** `theme.Redundant` fills in
+a dash and a marker ladder, and `config.dashFor`/`markerFor` use them only when
+the layer set neither `geom.Dash` nor `geom.Shape`. That is why `config` carries
+`markerSet` beside `dashSet` and why `geom.Desc` carries `MarkerSet`: a circle
+is both the zero value and a shape somebody may have asked for, and without the
+flag a round trip through the spec turns an unset shape into a pinned one.
+
+**A time domain is nanoseconds since the scale's origin, not since 1970.**
+`scale.Origin` moves it, `scale.ValueOf`/`InstantOf` convert across it, and
+`geom.column` uses them — so a time column is read in the axis's own space.
+The default origin is the Unix epoch, which is exactly `scale.Nanos`, so nothing
+changes for a scale that never asked. What does change is that `scale.Nanos` is
+the wrong conversion to reach for near a rebased axis: the domain values, the
+`Invert` results and the `Desc` bounds are all measured from the origin, and the
+JSON spec writes it out for that reason.
+
+**The raster backend draws italic now, and `WithFont` takes three fonts.**
+`ir.FontRef.Italic` has existed since v0.1 and `backend/gg` ignored it, which
+was invisible until a typesetter started producing italic runs — at which point
+the PNG and the SVG of the same chart would have disagreed in the
+documentation. The default set parses `goitalic` alongside `goregular` and
+`gobold`; a caller supplying their own passes nil for a style they do not have,
+and gets the regular face for it.
+
+**A typeset label is measured by laying it out.** `render`'s `mathBackend`
+answers `Measure` from the typesetter and `Text` from the same layout, so the
+margin a title is given is the width the title turns out to have. Measuring the
+markup and drawing the notation would leave a fraction hanging out of the
+canvas, and nothing would fail.
+
+**A resized frame is not comparable with the last one.** `Live.Resize` clears
+`drawn`, because every coordinate moved and there is no damage to compute. It
+also keeps whatever the scales were zoomed to, on purpose: a reader who dragged
+a view into place has not asked to leave it.
+
+**Responsive scaling multiplies lengths and must not mutate a shared theme.**
+`theme.Scaled` copies every dash slice it touches rather than scaling in place —
+`theme.Light` is a package variable, and scaling its grid dash would scale it
+for every chart in the process, once per render. There is a reason that is a
+sentence in the code as well as here.
+
 ## Open questions
 
 [CONCEPT.md §17](CONCEPT.md#17-open-decisions) lists the design decisions that
@@ -333,9 +410,10 @@ passing; it needs its own ADR.
 Optional interfaces are how this codebase extends a type without breaking
 everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
-`scale.Describer`, `scale.ColorDescriber`, `geom.Faceter`, `geom.Guided`,
-`geom.Describer`, `ir.Partial`. Reach for one before adding a method to
-`Scale`, `Geom` or `Backend`.
+`scale.Describer`, `scale.ColorDescriber`, `scale.Temporal`, `geom.Faceter`,
+`geom.Guided`, `geom.Describer`, `ir.Partial`, `ir.Semantics`, `ir.Resizer`,
+`mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
+`Backend`.
 
 `Cloner`, `Snapshotter` and `Zoomer` are three different things and none
 substitutes for another: Clone hands back an *untrained* copy for a free facet
@@ -345,12 +423,29 @@ scale in place for a pan or a zoom.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. Through v0.4 the project deliberately omits
-the JSON spec, interactivity, streaming, GPU and the browser. Adding a stub for
-one of them is not progress towards it — the seams exist, that is enough.
+project is doing and in what order. Everything through v0.6 has shipped; what is
+left before v1.0 is the extension API, the docs and a public benchmark suite,
+and past it the coordinate systems, stats, animation and 3D that §14 lists.
+Adding a stub for one of those is not progress towards it — the seams exist,
+that is enough.
 
-Things v0.5 deliberately did not do. There is no native window and no GPU tier;
-both are v0.6 and both need GoGPU packages this milestone does not touch. A hit
+Things v0.6 deliberately did not do. The GPU tier is opt-in beta and stays that
+way past v1.0 — for server-side stills the CPU rasterizer and the vector
+emitters are the supported path. The window is compiled by CI and never opened
+by it, because a runner has no display; what is tested is everything that is not
+the window, which is the same hole `backend/canvas` has about a browser. The
+built-in typesetter is a deliberately small subset: no matrices, no growing
+delimiters, no document-class macros, and a label needing those wants an engine
+plugged into `mathtext.Typesetter`. Accessibility stops at the document: no
+per-mark `<title>`, no tab order through the marks, no reduced-motion or
+contrast handling — a chart with ten thousand points has no useful reading as
+ten thousand elements, and the data table is the better answer to the same
+question. And a description is a snapshot: data that changes afterwards leaves
+it stale, which is why `Describe` is a call rather than a flag.
+
+Things v0.5 deliberately did not do. There was no native window and no GPU tier;
+both landed in v0.6 and both needed GoGPU packages that milestone did not touch.
+A hit
 reports data values rather than a row number, because carrying row identity
 through decimation is bookkeeping the design avoids. Damage is per drawing
 call, so moving one point of a line repaints the line's box. And the browser

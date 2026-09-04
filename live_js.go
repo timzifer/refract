@@ -2,10 +2,7 @@
 
 package refract
 
-import (
-	"math"
-	"syscall/js"
-)
+import "syscall/js"
 
 // Bind wires a DOM element's pointer input to the chart and returns a function
 // that unwires it.
@@ -20,10 +17,15 @@ import (
 // translates a browser event into a pan, a zoom or a hover. The canvas backend
 // draws; this steers.
 //
+// The steering itself is [Input], which is portable — a native window drives
+// the same state machine from its own event loop. This is the DOM half: which
+// events to listen to, where the pointer is in them, and how a browser counts
+// a wheel.
+//
 // What it wires:
 //
 //   - moving the pointer hovers, and leaving the element fires [Leave];
-//   - a click clicks;
+//   - pressing and releasing without moving clicks;
 //   - the wheel zooms about the pointer, and the page does not scroll;
 //   - dragging pans;
 //   - a double click autoscales, which is the "reset view" every interactive
@@ -37,9 +39,7 @@ import (
 // loop goroutine.
 func (l *Live) Bind(el js.Value) (unbind func()) {
 	var (
-		dragging   bool
-		lastX      float64
-		lastY      float64
+		in         = l.Input()
 		listeners  []js.Func
 		names      []string
 		addHandler func(name string, fn func(js.Value))
@@ -63,34 +63,28 @@ func (l *Live) Bind(el js.Value) (unbind func()) {
 
 	addHandler("pointermove", func(ev js.Value) {
 		x, y := at(ev)
-		if dragging {
-			l.PanBy(x-lastX, y-lastY)
-			lastX, lastY = x, y
-			return
-		}
-		l.Move(x, y)
+		in.Move(x, y)
 	})
-	addHandler("pointerleave", func(js.Value) {
-		dragging = false
-		l.Leave()
-	})
+	addHandler("pointerleave", func(js.Value) { in.Leave() })
 	addHandler("pointerdown", func(ev js.Value) {
-		dragging = true
-		lastX, lastY = at(ev)
+		x, y := at(ev)
+		in.Down(x, y)
 		if id := ev.Get("pointerId"); id.Truthy() {
 			el.Call("setPointerCapture", id)
 		}
 	})
-	addHandler("pointerup", func(js.Value) { dragging = false })
-	addHandler("click", func(ev js.Value) {
+	// The click comes from the release rather than from the DOM's own click
+	// event, because a drag that ends over a mark is not a click on it — and
+	// the browser fires click for that too.
+	addHandler("pointerup", func(ev js.Value) {
 		x, y := at(ev)
-		l.Click(x, y)
+		in.Up(x, y)
 	})
-	addHandler("dblclick", func(js.Value) { l.Autoscale() })
+	addHandler("dblclick", func(js.Value) { in.DoubleClick() })
 	addHandler("wheel", func(ev js.Value) {
 		ev.Call("preventDefault")
 		x, y := at(ev)
-		l.Wheel(x, y, wheelFactor(ev))
+		in.Wheel(x, y, wheelDelta(ev))
 	})
 
 	return func() {
@@ -101,18 +95,16 @@ func (l *Live) Bind(el js.Value) (unbind func()) {
 	}
 }
 
-// wheelFactor turns a wheel event into a zoom factor.
+// wheelDelta reads a wheel event in the pixel convention [Input.Wheel] takes.
 //
-// The exponential keeps a fast scroll from inverting: any deltaY maps into
-// (0, ∞) and never through zero, so holding the wheel down zooms smoothly
-// rather than jumping. The rate is chosen so that one notch on a mouse — 100
-// units in the browser's pixel mode — is about 10%, which is the step a reader
-// expects from a map.
-func wheelFactor(ev js.Value) float64 {
+// A browser reports the wheel in one of three units, and says which in
+// deltaMode: pixels, lines, or pages. Line and page modes report a handful of
+// units where the pixel mode reports a hundred, so they are scaled up to it
+// rather than zooming a fortieth as far on the trackpads that use them.
+func wheelDelta(ev js.Value) float64 {
 	delta := ev.Get("deltaY").Float()
 	if mode := ev.Get("deltaMode"); mode.Type() == js.TypeNumber && mode.Int() != 0 {
-		// Line and page modes report a handful of units rather than a hundred.
 		delta *= 40
 	}
-	return math.Exp(delta / 1000)
+	return delta
 }

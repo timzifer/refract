@@ -383,3 +383,87 @@ func TestAnImageGoesThroughAScratchCanvas(t *testing.T) {
 		t.Errorf("drawImage = %v, want the raster scaled into a 100x100 box", got)
 	}
 }
+
+// element builds a fake <canvas>: an object that answers getContext with the
+// recording context, remembers the attributes set on it, and carries a style
+// object. Node has no DOM either, so a canvas element is faked for the same
+// reason the context is.
+func (f *fake) element() js.Value {
+	el := js.Global().Get("Object").New()
+	el.Set("style", js.Global().Get("Object").New())
+	el.Set("attrs", js.Global().Get("Object").New())
+	f.define(el, "getContext", func(js.Value, []js.Value) any { return f.ctx })
+	f.define(el, "setAttribute", func(this js.Value, args []js.Value) any {
+		this.Get("attrs").Set(args[0].String(), args[1].String())
+		return nil
+	})
+	return el
+}
+
+func TestTheCanvasIsNamedForAScreenReader(t *testing.T) {
+	f := newFake(t)
+	defer f.release()
+
+	el := f.element()
+	p := linePlot()
+	p.Describe()
+	if err := p.Render(canvas.Element(el)); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	attrs := el.Get("attrs")
+	if got := attrs.Get("role").String(); got != "img" {
+		t.Errorf("the canvas has role %q, want img", got)
+	}
+	label := attrs.Get("aria-label").String()
+	if !strings.HasPrefix(label, "Canvas") {
+		t.Errorf("aria-label is %q, want it to start with the chart's title", label)
+	}
+	if !strings.Contains(label, "row") {
+		t.Errorf("aria-label carries no description of the data: %q", label)
+	}
+}
+
+func TestAnUndescribedCanvasIsLeftAlone(t *testing.T) {
+	f := newFake(t)
+	defer f.release()
+
+	el := f.element()
+	src := refract.Float64Columns(map[string][]float64{"x": {0, 1}, "y": {0, 1}})
+	p := refract.New(refract.Size(200, 150))
+	p.Add(geom.Line(src, geom.X("x"), geom.Y("y")))
+	if err := p.Render(canvas.Element(el)); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if got := el.Get("attrs").Get("role"); got.Type() == js.TypeString {
+		t.Errorf("a chart with no name set role=%q anyway", got.String())
+	}
+}
+
+func TestResizingRedrawsAtTheNewSize(t *testing.T) {
+	f := newFake(t)
+	defer f.release()
+
+	el := f.element()
+	live, err := linePlot().Live(canvas.Element(el))
+	if err != nil {
+		t.Fatalf("Live: %v", err)
+	}
+	defer live.Close()
+	if err := live.Draw(); err != nil {
+		t.Fatalf("Draw: %v", err)
+	}
+	if err := live.Resize(240, 180); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+
+	if got := el.Get("width").Int(); got != 240 {
+		t.Errorf("the backing store is %d wide, want 240", got)
+	}
+	if got := el.Get("style").Get("height").String(); got != "180px" {
+		t.Errorf("the element is %s tall, want 180px", got)
+	}
+	if w, h := live.Size(); w != 240 || h != 180 {
+		t.Errorf("the chart reports %dx%d", w, h)
+	}
+}

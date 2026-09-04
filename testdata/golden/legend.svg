@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Two series</title>
 <defs>
 <clipPath id="c1"><path d="M33.232,32.8 L553.316,32.8 L553.316,368.825 L33.232,368.825 Z"/></clipPath>
 </defs>

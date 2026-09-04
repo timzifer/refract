@@ -31,6 +31,8 @@ type backend struct {
 
 	faces map[faceKey]fontmetrics.Face
 
+	desc ir.Description
+
 	rootRef int
 	infoRef int
 
@@ -597,6 +599,15 @@ func (b *backend) face(f ir.FontRef) fontmetrics.Face {
 	return face
 }
 
+// Describe records what the document says about itself, which a PDF carries in
+// its information dictionary: the title names the file in a reader's window and
+// its document properties, and the long reading goes in the subject, which is
+// the only field a PDF has for a paragraph.
+//
+// A title given to the target with [WithTitle] wins: that one names the
+// document, and this one describes the chart in it.
+func (b *backend) Describe(d ir.Description) { b.desc = d }
+
 // --- finishing -----------------------------------------------------------
 
 func (b *backend) Flush() error {
@@ -638,6 +649,12 @@ func (b *backend) Flush() error {
 // when output changes.
 func (b *backend) info() int {
 	o := b.opts
+	if o.title == "" {
+		o.title = b.desc.Title
+	}
+	if o.subject == "" {
+		o.subject = b.desc.Detail
+	}
 	if o.title == "" && o.author == "" && o.subject == "" {
 		return 0
 	}

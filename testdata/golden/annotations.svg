@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Latency against its budget</title>
 <defs>
 <clipPath id="c1"><path d="M56.448,32.8 L620.644,32.8 L620.644,351.725 L56.448,351.725 Z"/></clipPath>
 </defs>

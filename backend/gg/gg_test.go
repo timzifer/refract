@@ -206,7 +206,7 @@ func TestFileTargets(t *testing.T) {
 func TestBadFontIsReportedNotIgnored(t *testing.T) {
 	var buf bytes.Buffer
 	err := plot(100, 100).Render(ggbackend.Writer(&buf, ggbackend.FormatPNG,
-		ggbackend.WithFont([]byte("not a font"), nil)))
+		ggbackend.WithFont([]byte("not a font"), nil, nil)))
 	if err == nil {
 		t.Fatal("a malformed font must fail the render, not silently fall back")
 	}

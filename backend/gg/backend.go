@@ -1,7 +1,9 @@
 package gg
 
 import (
+	"fmt"
 	"image"
+	"math"
 
 	gogg "github.com/gogpu/gg"
 	"github.com/gogpu/gg/text"
@@ -13,6 +15,8 @@ type backend struct {
 	ctx   *gogg.Context
 	fonts *fontSet
 	depth int
+	dpr   float64 // the device scale the context was made with, for damage
+	dirty bool    // a damage clip is in force and has to be unwound at Flush
 	err   error
 }
 
@@ -138,7 +142,7 @@ func (b *backend) Text(run ir.TextRun) {
 	if run.Text == "" || run.Color.A == 0 {
 		return
 	}
-	face := b.fonts.apply(b.ctx, run.Font.Size, run.Font.Weight)
+	face := b.fonts.apply(b.ctx, run.Font.Size, run.Font.Weight, run.Font.Italic)
 	x, y := anchor(face, run)
 
 	b.ctx.SetColor(run.Color)
@@ -267,7 +271,7 @@ func matrixOf(a ir.Affine) gogg.Matrix {
 }
 
 func (b *backend) Measure(run ir.TextRun) ir.TextMetrics {
-	face := b.fonts.face(run.Font.Size, run.Font.Weight)
+	face := b.fonts.face(run.Font.Size, run.Font.Weight, run.Font.Italic)
 	m := face.Metrics()
 	adv := face.Advance(run.Text)
 	return ir.TextMetrics{
@@ -278,7 +282,116 @@ func (b *backend) Measure(run ir.TextRun) ir.TextMetrics {
 	}
 }
 
-func (b *backend) Flush() error { return b.err }
+// Damage implements [ir.Partial]: it limits the next frame to the rectangles
+// that changed.
+//
+// The frame is clipped to them and they are cleared first, because a repaint
+// composites: drawing an antialiased stroke a second time over the first one
+// darkens its edges, so the pixels have to go before the frame is replayed.
+//
+// The clip and the clear both take the bounding box of the rectangles rather
+// than each of them. A pixel inside the box and outside every rectangle is
+// repainted for nothing, which costs a little; a pixel outside the box is not
+// touched, which is the saving that matters. [ir.Damage] has already collapsed
+// a scattered list into its own bounding box for the same reason.
+//
+// A nil list is the whole frame, which is what a first frame and a structural
+// change both ask for.
+func (b *backend) Damage(rects []ir.Rect) {
+	b.undamage()
+	if rects == nil {
+		b.ctx.Clear()
+		return
+	}
+	box := rects[0]
+	for _, r := range rects[1:] {
+		box.Min.X = min(box.Min.X, r.Min.X)
+		box.Min.Y = min(box.Min.Y, r.Min.Y)
+		box.Max.X = max(box.Max.X, r.Max.X)
+		box.Max.Y = max(box.Max.Y, r.Max.Y)
+	}
+	b.clear(box)
+
+	b.ctx.Push()
+	b.dirty = true
+	b.ctx.ClearPath()
+	b.ctx.MoveTo(float64(box.Min.X), float64(box.Min.Y))
+	b.ctx.LineTo(float64(box.Max.X), float64(box.Min.Y))
+	b.ctx.LineTo(float64(box.Max.X), float64(box.Max.Y))
+	b.ctx.LineTo(float64(box.Min.X), float64(box.Max.Y))
+	b.ctx.ClosePath()
+	b.ctx.Clip()
+}
+
+// clear empties a rectangle of the pixel buffer.
+//
+// It works on the pixmap rather than by filling a path, because filling with a
+// transparent colour composites to nothing and filling with an opaque one is
+// the background the backend does not know. The rectangle is in logical units
+// and the buffer is in device pixels, so it is scaled here — the one place in
+// this backend that has to know the difference, because everything else goes
+// through gg's own device scale.
+func (b *backend) clear(r ir.Rect) {
+	pm := b.ctx.ResizeTarget()
+	if pm == nil {
+		return
+	}
+	s := b.dpr
+	if s <= 0 {
+		s = 1
+	}
+	box := image.Rect(
+		int(math.Floor(float64(r.Min.X)*s)),
+		int(math.Floor(float64(r.Min.Y)*s)),
+		int(math.Ceil(float64(r.Max.X)*s)),
+		int(math.Ceil(float64(r.Max.Y)*s)),
+	).Intersect(pm.Bounds())
+	if box.Empty() {
+		return
+	}
+	pm.FillRect(box, 0, 0, 0, 0)
+}
+
+// undamage releases a damage clip left over from the last frame.
+func (b *backend) undamage() {
+	if b.dirty {
+		b.ctx.Pop()
+		b.dirty = false
+	}
+}
+
+// Resize implements [ir.Resizer]: it resizes the pixel buffer the chart is
+// drawn into, which is what a window being dragged wider needs.
+//
+// A change of device scale reallocates the context, because the scale is fixed
+// when one is made; a change of size alone resizes the buffer in place, which
+// is the common case and the cheap one.
+func (b *backend) Resize(widthPx, heightPx int, dpr float64) error {
+	if widthPx <= 0 || heightPx <= 0 {
+		return fmt.Errorf("refract/backend/gg: size %dx%d is not positive", widthPx, heightPx)
+	}
+	if dpr <= 0 {
+		dpr = b.dpr
+	}
+	b.undamage()
+	if dpr != b.dpr {
+		old := b.ctx
+		b.ctx = gogg.NewContextWithScale(widthPx, heightPx, dpr)
+		b.dpr = dpr
+		if old != nil {
+			_ = old.Close()
+		}
+		return nil
+	}
+	return b.ctx.Resize(widthPx, heightPx)
+}
+
+func (b *backend) Flush() error {
+	// A damage clip lasts until the frame it limits has been drawn, which is
+	// exactly here.
+	b.undamage()
+	return b.err
+}
 
 func (b *backend) fail(err error) {
 	if err != nil && b.err == nil {

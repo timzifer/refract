@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="560" height="340" viewBox="0 0 560 340">
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="340" viewBox="0 0 560 340" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Workers</title>
 <defs>
 <clipPath id="c1"><path d="M27.116,32.8 L544.942,32.8 L544.942,291.725 L27.116,291.725 Z"/></clipPath>
 </defs>

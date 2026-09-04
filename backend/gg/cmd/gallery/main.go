@@ -28,6 +28,7 @@ import (
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/svgdiff"
 	"github.com/timzifer/refract/ir"
+	"github.com/timzifer/refract/mathtext"
 	"github.com/timzifer/refract/palette"
 	"github.com/timzifer/refract/scale"
 	"github.com/timzifer/refract/theme"
@@ -151,6 +152,10 @@ type figure struct {
 	grid  func(*refract.Grid)
 	theme theme.Theme
 	title string
+	// opts are extra plot options, for a figure documenting something that is
+	// configured at construction rather than added as a layer — a typesetter,
+	// a responsive theme, an axis title.
+	opts []refract.Option
 }
 
 // chart is anything that can be rendered into a target: a plot, or a grid of
@@ -170,11 +175,11 @@ func (f figure) chart() chart {
 		f.grid(g)
 		return g
 	}
-	p := refract.New(
+	p := refract.New(append([]refract.Option{
 		refract.Theme(f.theme),
 		refract.Size(f.width, f.high),
 		refract.Title(f.title),
-	)
+	}, f.opts...)...)
 	f.build(p)
 	return p
 }
@@ -393,6 +398,36 @@ func figures() []figure {
 				// be decided by row order, so the layer counts per cell and
 				// draws the counts instead.
 				p.Add(geom.Scatter(src, geom.X("x"), geom.Y("y"), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			// Two v0.6 features that are only visible in a picture: notation in
+			// the labels, and layers told apart by dash and shape as well as by
+			// colour. The theme is the light one with redundant encoding turned
+			// on, which is one option rather than a second theme.
+			name: "notation", width: 760, high: 420,
+			theme: theme.Light.With(theme.Redundant(true)),
+			title: `Standard error of $\bar{x}$`,
+			opts: []refract.Option{
+				refract.Math(mathtext.TeX()),
+				refract.XTitle(`sample size $n$`),
+				refract.YTitle(`$\frac{\sigma}{\sqrt{n}}$ (mV)`),
+				refract.Legend(true),
+			},
+			build: func(p *refract.Plot) {
+				ns := ramp(4, 64, 31)
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				src := refract.Float64Columns(map[string][]float64{
+					"n":       ns,
+					"sigma-1": apply(ns, func(n float64) float64 { return 1 / math.Sqrt(n) }),
+					"sigma-2": apply(ns, func(n float64) float64 { return 2 / math.Sqrt(n) }),
+					"sigma-3": apply(ns, func(n float64) float64 { return 3 / math.Sqrt(n) }),
+				})
+				for i, col := range []string{"sigma-1", "sigma-2", "sigma-3"} {
+					p.Add(geom.Line(src, geom.X("n"), geom.Y(col),
+						geom.Label(fmt.Sprintf(`$\sigma = %d$`, i+1))))
+				}
 			},
 		},
 		{

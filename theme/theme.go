@@ -98,6 +98,17 @@ type Theme struct {
 	Sequential palette.Ramp
 	Diverging  palette.Ramp
 
+	// SeriesDashes and SeriesMarkers are the redundant encoding: a second and
+	// a third channel a layer is told apart by, so that colour is not the only
+	// one. A layer that set neither [github.com/timzifer/refract/geom.Dash]
+	// nor [github.com/timzifer/refract/geom.Shape] takes the entry at its own
+	// index, the same way it takes its colour from Palette.
+	//
+	// Both are empty by default, which draws exactly what refract has always
+	// drawn. [Redundant] fills them in. See docs/adr/0024.
+	SeriesDashes  [][]float32
+	SeriesMarkers []ir.Marker
+
 	// Default geometry weights.
 	LineWidth  float32
 	MarkerSize float32
@@ -217,6 +228,78 @@ func FontSize(size float64) Option {
 	}
 }
 
+// Redundant turns redundant encoding on: every layer gets a dash pattern and
+// a marker shape of its own alongside its colour, so that a chart survives
+// being printed in greyscale, photocopied, or read by the eight percent of men
+// who cannot separate its first two palette entries.
+//
+// It changes nothing about a layer that named its own [Dash] or [Shape]: an
+// explicit choice is a choice, and this is a default.
+//
+// The dash ladder runs solid, dashed, dotted, dash-dot, long-dash, and the
+// marker ladder circle, square, triangle, diamond, plus, cross. Both start
+// with what a chart already draws, so the first layer is unchanged and only
+// the second one onwards picks up a difference — which is the right shape for
+// a default, and the reason the ladders are not alphabetical.
+//
+// Pass false to turn it back off, which is what a theme built from tokens
+// already is.
+func Redundant(on bool) Option {
+	return func(t *Theme) {
+		if !on {
+			t.SeriesDashes, t.SeriesMarkers = nil, nil
+			return
+		}
+		t.SeriesDashes = DefaultSeriesDashes
+		t.SeriesMarkers = DefaultSeriesMarkers
+	}
+}
+
+// DefaultSeriesDashes is the ladder [Redundant] uses. The first entry is nil —
+// a solid line — so that a single-layer chart looks the way it always did.
+//
+// The patterns are in device units at the theme's own scale; [Scaled] scales
+// them with everything else, because a dash that stayed 6pt long on a chart
+// drawn at half size would read as a different pattern.
+var DefaultSeriesDashes = [][]float32{
+	nil,
+	{6, 3},
+	{1.5, 2.5},
+	{7, 3, 1.5, 3},
+	{12, 4},
+	{4, 2, 1.5, 2, 1.5, 2},
+}
+
+// DefaultSeriesMarkers is the shape ladder [Redundant] uses, starting with the
+// circle a scatter draws anyway.
+var DefaultSeriesMarkers = []ir.Marker{
+	ir.MarkerCircle,
+	ir.MarkerSquare,
+	ir.MarkerTriangle,
+	ir.MarkerDiamond,
+	ir.MarkerPlus,
+	ir.MarkerCross,
+}
+
+// SeriesDash returns the dash pattern for the layer at index i, or nil when
+// the theme carries no redundant encoding.
+func (t Theme) SeriesDash(i int) []float32 {
+	if len(t.SeriesDashes) == 0 || i < 0 {
+		return nil
+	}
+	return t.SeriesDashes[i%len(t.SeriesDashes)]
+}
+
+// SeriesMarker returns the marker shape for the layer at index i, and ok false
+// when the theme carries no redundant encoding — which leaves the geom's own
+// default in place rather than replacing it with a circle.
+func (t Theme) SeriesMarker(i int) (ir.Marker, bool) {
+	if len(t.SeriesMarkers) == 0 || i < 0 {
+		return 0, false
+	}
+	return t.SeriesMarkers[i%len(t.SeriesMarkers)], true
+}
+
 // Palette sets the qualitative sequence layers take their colours from.
 func Palette(p palette.Qualitative) Option { return func(t *Theme) { t.Palette = p } }
 
@@ -278,6 +361,85 @@ func Density(f float64) Option {
 		t.StripPad *= s
 		t.Margin *= s
 	}
+}
+
+// Scaled multiplies every length in the theme by f: type sizes, stroke
+// widths, spacings, the marker diameter, the margin. It is what makes a chart
+// responsive — a plot drawn at half the size it was designed for wants half
+// the type, not the same 12pt labels crowding a smaller canvas.
+//
+// It differs from [Density], which moves the spacings and deliberately leaves
+// the text alone: Density is a decision about how tightly a chart is packed,
+// and this one is a decision about how big the whole drawing is. Applying it
+// to the text is the entire point.
+//
+// Colours are not lengths and are left alone. See [github.com/timzifer/refract.Responsive],
+// which applies this to a plot from the size it is actually being drawn at.
+func Scaled(f float64) Option {
+	return func(t *Theme) {
+		if f <= 0 || f == 1 {
+			return
+		}
+		s := float32(f)
+
+		t.TitleSize *= f
+		t.LabelSize *= f
+		t.TickSize *= f
+		t.StripSize *= f
+
+		t.AxisWidth *= s
+		t.GridWidth *= s
+		// A dash pattern is a slice, and the theme it came from is a package
+		// variable every chart shares — so it is scaled into a new one rather
+		// than in place. Scaling theme.Light's grid dash would scale it for
+		// every chart in the process, once per render.
+		t.GridDash = scaleDash(t.GridDash, s)
+		t.TickLength *= s
+		t.TickLabelPad *= s
+		t.AxisTitlePad *= s
+
+		t.LegendSwatch *= s
+		t.LegendPad *= s
+		t.LegendGap *= s
+		t.LegendPadding *= s
+
+		t.GuideGap *= s
+		t.ColorbarThickness *= s
+
+		t.AnnotationWidth *= s
+		t.AnnotationDash = scaleDash(t.AnnotationDash, s)
+
+		t.PanelGap *= s
+		t.StripPad *= s
+		t.Margin *= s
+
+		t.LineWidth *= s
+		t.MarkerSize *= s
+
+		t.SeriesDashes = scaleDashes(t.SeriesDashes, s)
+	}
+}
+
+func scaleDash(d []float32, f float32) []float32 {
+	if len(d) == 0 {
+		return d
+	}
+	out := make([]float32, len(d))
+	for i, v := range d {
+		out[i] = v * f
+	}
+	return out
+}
+
+func scaleDashes(ds [][]float32, f float32) [][]float32 {
+	if len(ds) == 0 {
+		return ds
+	}
+	out := make([][]float32, len(ds))
+	for i, d := range ds {
+		out[i] = scaleDash(d, f)
+	}
+	return out
 }
 
 // Background sets the canvas colour behind everything.

@@ -77,7 +77,7 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 	f.Marks(pts, sc.sourceRows(g.s, rows))
 	cols := sc.colorsFor(g.cfg, g.s, rows)
 	if cols == nil {
-		b.Markers(g.cfg.marker, pts, style)
+		b.Markers(g.cfg.markerFor(f), pts, style)
 		return nil
 	}
 	for _, run := range sc.groupByColor(pts, cols) {
@@ -86,7 +86,7 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 		}
 		s := style
 		s.Fill = run.color
-		b.Markers(g.cfg.marker, run.pts, s)
+		b.Markers(g.cfg.markerFor(f), run.pts, s)
 	}
 	return nil
 }
@@ -141,6 +141,6 @@ func (g *scatterGeom) Legend(f Frame) (LegendEntry, bool) {
 		Label:  g.cfg.labelFor(),
 		Color:  g.cfg.colorFor(f),
 		Kind:   SwatchMarker,
-		Marker: g.cfg.marker,
+		Marker: g.cfg.markerFor(f),
 	}, true
 }

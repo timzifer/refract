@@ -133,6 +133,13 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 		if typ == "utc" && d.Location == "" {
 			d.Location = "UTC"
 		}
+		if s.Origin != "" {
+			t, err := time.Parse(timeLayout, s.Origin)
+			if err != nil {
+				return scale.Desc{}, fmt.Errorf("scale origin %q is not a timestamp: %w", s.Origin, err)
+			}
+			d.Origin = t.UnixNano()
+		}
 	case "band", "point", "ordinal":
 		d.Kind = scale.KindOrdinal
 		d.Padding = 0.2
@@ -150,11 +157,11 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 	}
 
 	if len(s.Domain) == 2 {
-		lo, err := domainValue(s.Domain[0], d.Kind)
+		lo, err := domainValue(s.Domain[0], d.Origin)
 		if err != nil {
 			return scale.Desc{}, err
 		}
-		hi, err := domainValue(s.Domain[1], d.Kind)
+		hi, err := domainValue(s.Domain[1], d.Origin)
 		if err != nil {
 			return scale.Desc{}, err
 		}
@@ -165,7 +172,10 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 	return d, nil
 }
 
-func domainValue(v any, kind scale.Kind) (float64, error) {
+// domainValue reads one domain bound. A bound written as a timestamp is
+// measured from origin, which is what makes the numbers on a rebased time axis
+// mean the same thing after a round trip as before it — see [scale.Origin].
+func domainValue(v any, origin int64) (float64, error) {
 	switch x := v.(type) {
 	case float64:
 		return x, nil
@@ -174,7 +184,7 @@ func domainValue(v any, kind scale.Kind) (float64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("%q is not a number or a timestamp", x)
 		}
-		return scale.Nanos(t), nil
+		return float64(t.UnixNano() - origin), nil
 	}
 	return 0, fmt.Errorf("%v is not a domain bound", v)
 }
@@ -185,28 +195,29 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		return nil, err
 	}
 	d := geom.Desc{
-		Mark:     mark,
-		Label:    l.Name,
-		Size:     l.Mark.Size,
-		Width:    l.Mark.StrokeWidth,
-		Baseline: l.Mark.Origin,
-		BarWidth: 0.8,
-		Whisker:  l.Mark.Extent,
-		Outliers: true,
-		Missing:  missingPolicy(l.Mark.Missing),
-		Decimate: decimationMode(l.Mark.Decimate),
-		Budget:   l.Mark.Budget,
-		CellSize: l.Mark.DensityCells,
-		Text:     l.Mark.Text,
-		FontSize: l.Mark.FontSize,
-		Rotation: radians(l.Mark.Angle),
-		Extend:   true,
-		Opacity:  -1,
-		Tension:  l.Mark.Tension,
-		Marker:   markerShape(l.Mark.Shape),
-		Steps:    stepPos(l.Mark.Interpolate),
-		HAlign:   hAlignOf(l.Mark.Align),
-		VAlign:   vAlignOf(l.Mark.Baseline),
+		Mark:      mark,
+		Label:     l.Name,
+		Size:      l.Mark.Size,
+		Width:     l.Mark.StrokeWidth,
+		Baseline:  l.Mark.Origin,
+		BarWidth:  0.8,
+		Whisker:   l.Mark.Extent,
+		Outliers:  true,
+		Missing:   missingPolicy(l.Mark.Missing),
+		Decimate:  decimationMode(l.Mark.Decimate),
+		Budget:    l.Mark.Budget,
+		CellSize:  l.Mark.DensityCells,
+		Text:      l.Mark.Text,
+		FontSize:  l.Mark.FontSize,
+		Rotation:  radians(l.Mark.Angle),
+		Extend:    true,
+		Opacity:   -1,
+		Tension:   l.Mark.Tension,
+		Marker:    markerShape(l.Mark.Shape),
+		MarkerSet: l.Mark.Shape != "",
+		Steps:     stepPos(l.Mark.Interpolate),
+		HAlign:    hAlignOf(l.Mark.Align),
+		VAlign:    vAlignOf(l.Mark.Baseline),
 	}
 	if l.Mark.Extent == 0 {
 		d.Whisker = 1.5

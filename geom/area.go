@@ -60,7 +60,7 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
 		Cap:   ir.CapRound,
 		Join:  ir.JoinRound,
-		Dash:  g.cfg.dash,
+		Dash:  g.cfg.dashFor(f),
 	}
 	tension := float32(clamp01(g.cfg.tension))
 	base := baselinePos(f, g.cfg.baseline)

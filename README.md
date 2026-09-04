@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.5**, "web and interactivity".
+> **Status: pre-alpha.** This is milestone **v0.6**, "native interactive and polish".
 > The API is not
 > stable; every release below `v1.0.0` may contain breaking changes without a
 > deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
@@ -36,21 +36,26 @@ PDF. Add one module and the same specification renders to PNG and JPEG through
 | | Dependencies | Output |
 |---|---|---|
 | `github.com/timzifer/refract` | **stdlib only** | SVG, PDF, browser canvas |
-| `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG |
+| `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG, an in-memory surface |
+| `github.com/timzifer/refract/backend/window` | GoGPU (`gogpu`, `gg`) — zero CGO | a native window |
+| `github.com/timzifer/refract/backend/gg/gpu` | GoGPU (`gg/gpu`, `wgpu`) — zero CGO | — (switches the GPU tier on) |
 | `github.com/timzifer/refract/arrow` | `apache/arrow-go` — zero CGO | — (a data source) |
 
 The browser is in the core too, because it needs nothing to be: a canvas 2D
 context is reached through `syscall/js`, which is the standard library
-([ADR 0017](docs/adr/0017-browser-backend.md)). Raster, GPU and native-window
-rendering all live behind the same `ir.Backend` interface. The rest are
-milestones, not architecture changes.
+([ADR 0017](docs/adr/0017-browser-backend.md)). Everything else is behind the
+same `ir.Backend` interface, in a module of its own, so what a program links is
+what it asked for: a server that renders SVG links nothing but the standard
+library, and a desktop program that opens a window links a window layer.
 
 ## Install
 
 ```sh
-go get github.com/timzifer/refract               # core: SVG and PDF, stdlib only
-go get github.com/timzifer/refract/backend/gg    # raster: PNG and JPEG
-go get github.com/timzifer/refract/arrow         # optional: plot Arrow data
+go get github.com/timzifer/refract                  # core: SVG and PDF, stdlib only
+go get github.com/timzifer/refract/backend/gg       # raster: PNG and JPEG
+go get github.com/timzifer/refract/backend/window   # a native window
+go get github.com/timzifer/refract/backend/gg/gpu   # optional: the GPU tier
+go get github.com/timzifer/refract/arrow            # optional: plot Arrow data
 ```
 
 Go 1.25 or newer ([why](docs/adr/0005-go-version.md)).
@@ -126,6 +131,7 @@ picture here cannot drift away from the code that produced it.
 | ![Two growth curves on a log axis](docs/images/logscale.png) | ![A series read against thresholds and a shaded window](docs/images/annotations.png) |
 | ![Throughput faceted into one panel per region](docs/images/facets.png) | ![Four subplots on one dark canvas](docs/images/subplots.png) |
 | ![A quarter of a million samples drawn as a clean line](docs/images/decimation.png) | ![A million points drawn as a density raster](docs/images/density.png) |
+| ![Standard error curves labelled with typeset notation](docs/images/notation.png) | |
 
 ## What it does
 
@@ -176,21 +182,36 @@ picture here cannot drift away from the code that produced it.
   null-free `float64` column read straight out of an **Apache Arrow** record
   through the optional `refract/arrow` module.
 - **Interaction** — `Plot.On` registers handlers for hover, click, zoom and
-  pan; `Plot.Live` draws into a surface that can be redrawn; `Live.Bind` wires a
-  DOM element to it. Hit-testing runs over the marks a render emitted rather
-  than over a second copy of every geom's projection, and `Live.TrackRows`
-  makes a hit name the source row behind the mark
+  pan; `Plot.Live` draws into a surface that can be redrawn; `refract.Input` is
+  the state machine that turns raw pointer input into those, and `Live.Bind`
+  drives it from a DOM element. Hit-testing runs over the marks a render emitted
+  rather than over a second copy of every geom's projection, and
+  `Live.TrackRows` makes a hit name the source row behind the mark
   ([ADR 0015](docs/adr/0015-hit-testing.md)).
 - **Live data** — `data.Stream` is appended to from any goroutine and frozen
   between frames, and a redraw repaints only what changed
   ([ADR 0016](docs/adr/0016-streaming-and-damage.md)).
 - **A chart as JSON** — a `*Plot` marshals to a Vega-Lite-shaped document and
   reads back as the same chart ([ADR 0014](docs/adr/0014-json-spec.md)).
-- **Backends** — three built-in emitters — SVG, PDF and a browser canvas — and
-  the gg raster adapter.
+- **Accessibility** — a chart's title becomes an SVG `<title>` with
+  `role="img"`, a PDF document title and a canvas `aria-label`; `Plot.Describe`
+  writes the `<desc>` a screen reader announces after it; `Plot.DataTable`
+  writes the rows as an HTML table; and `theme.Redundant` tells layers apart by
+  dash and shape as well as by colour
+  ([ADR 0024](docs/adr/0024-accessibility.md)).
+- **Notation in labels** — optional and pluggable, with a TeX subset built in.
+  A label is measured as it will be drawn, in every place a chart writes one
+  ([ADR 0023](docs/adr/0023-math-typesetting.md)).
+- **Responsive charts** — `refract.Responsive` scales a theme with the size the
+  chart is drawn at, and `Live.Resize` is how a surface says its size changed
+  ([ADR 0025](docs/adr/0025-responsive-charts.md)).
+- **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
+  gg raster adapter, a native window, and an opt-in GPU tier.
 
-Deliberately **not** here yet: the GPU tier and a native interactive window.
-Both are v0.6 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones).
+Deliberately **not** here: geographic and polar coordinates, animation, and 3D.
+They are past v1.0 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), along
+with the stats — hexbin, contour, violin, KDE, regression — that would come with
+them.
 
 ## Categories, distributions and orders of magnitude
 
@@ -330,6 +351,181 @@ GOOS=js GOARCH=wasm go build -o examples/web/chart.wasm ./examples/web
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/web/
 ```
 
+## Interactive, in a window
+
+The same model again, on the desktop:
+
+```go
+import (
+	"github.com/timzifer/refract/backend/window"
+	"github.com/timzifer/refract/backend/window/show"
+)
+
+func main() {
+	p := refract.New(refract.Responsive(true), refract.Title("Signal"))
+	p.Add(geom.Line(src, geom.X("t"), geom.Y("y")))
+
+	// Hover, drag to pan, wheel to zoom about the pointer, double click to reset.
+	log.Fatal(show.Plot(p, window.Title("Signal"), window.Size(900, 560)))
+}
+```
+
+The window comes from [`gogpu/gogpu`](https://github.com/gogpu/gogpu) —
+Windows, macOS, X11 and Wayland, no cgo — and the chart is drawn by the same CPU
+rasterizer that writes your PNGs, presented as one texture per changed frame. So
+a window shows exactly what a file would; there is one implementation of every
+mark rather than two that disagree ([ADR 0021](docs/adr/0021-native-window.md)).
+
+It is also cheap when nothing is happening: the loop blocks on the operating
+system's event queue, refract paints nothing when a frame is identical to the
+last, and the window uploads no texture when the pixels have not changed.
+
+The steering — is this move a hover or a drag, was that release a click — is
+`refract.Input`, in the core, and it is the same state machine `Live.Bind` uses
+in a browser. Drive it yourself if you want different controls:
+
+```go
+in := live.Input()
+in.Down(x, y); in.Move(x, y); in.Up(x, y)   // press, pan, release
+in.Wheel(x, y, deltaY)                      // zoom about the pointer
+in.Resize(w, h)                             // lay out again at a new size
+```
+
+A runnable version is [`backend/window/cmd/demo`](backend/window/cmd/demo):
+
+```sh
+cd backend/window && go run ./cmd/demo
+```
+
+### The GPU tier, opt-in
+
+```go
+import _ "github.com/timzifer/refract/backend/gg/gpu"
+```
+
+That import registers gg's GPU accelerator, and every chart rasterized
+afterwards — in a window or into a file — uses it. It is a module of its own so
+that the import is the opt-in: `backend/gg` never links `wgpu`, and a program
+that wants a PNG on a server links no GPU stack at all
+([ADR 0022](docs/adr/0022-gpu-tier.md)). On a machine with no usable device the
+registration fails quietly and gg falls back to the CPU, so the chart still
+renders; `gpu.Enabled()` says which way it went.
+
+It stays **opt-in beta** past v1.0. For server-side stills the CPU rasterizer
+and the vector emitters are the supported path.
+
+## Labels that are notation
+
+```go
+p := refract.New(
+	refract.Math(mathtext.TeX()),
+	refract.YTitle(`flux $F_\nu$ ($\mathrm{W\,m^{-2}\,Hz^{-1}}$)`),
+	refract.Title(`decay of $N_0e^{-\lambda t}$`),
+)
+```
+
+![Standard error curves, with a fraction over a radical as the y title](docs/images/notation.png)
+
+`$…$` is set as notation and everything around it as text. The subset is the one
+a chart label actually needs — scripts, `\frac`, `\sqrt`, `\bar`, `\mathrm`,
+the spacing commands, and a table of symbols — and a single letter is set italic
+because it is a variable while a run of letters is a name. Operators and
+relations get TeX's own spacing, so `$\sigma = 1$` reads as an equation rather
+than as a filename.
+
+A typesetter is installed by wrapping the backend, so it reaches every label the
+chart has: the title, the axis titles, the ticks, the legend, a facet's strip, a
+geom's own note. That also means a label is *measured* as it will be drawn, so
+the margin left for a fraction is the height of the fraction rather than the
+width of its markup ([ADR 0023](docs/adr/0023-math-typesetting.md)). Notation it
+cannot parse is drawn exactly as written — a chart never fails to render because
+of a label.
+
+`mathtext.Typesetter` is the seam if you have a real engine to plug in.
+
+## Charts that can be read without being seen
+
+Three channels, because they fail for three different readers
+([ADR 0024](docs/adr/0024-accessibility.md)):
+
+```go
+p := refract.New(
+	refract.Title("Signal against model"),
+	refract.Theme(theme.Light.With(theme.Redundant(true))),  // dashes and shapes, not colour alone
+)
+p.Add(/* ... */)
+
+p.Describe()                      // read the data; write a description
+p.Render(refract.SVG("chart.svg"))
+p.DataTable(w)                    // the same data as an HTML table
+```
+
+The title alone costs nothing and is always written: an SVG gets `<title>`,
+`role="img"` and `aria-labelledby`, a PDF gets a document title, a canvas gets
+`role` and `aria-label`. `Describe` costs a pass over the data — it reports how
+many rows there are and over what range — so it is a call rather than something
+every render pays for, and it fills in the `<desc>` a screen reader announces
+next:
+
+```
+Signal against model. 3 layers with line marks. Axes: sample horizontally,
+σ/√n (mV) vertically. measured, a line of 24 rows, sample from 0 to 23,
+measured from 6.16 to 20.9. …
+```
+
+Notation in a title is read aloud rather than spelled out, because "dollar
+backslash frac" is not a description of anything.
+
+`theme.Redundant(true)` gives each layer a dash pattern and a marker shape
+alongside its palette colour — the chart survives a greyscale printout and the
+readers who cannot separate its first two colours — and it leaves a layer that
+named its own `geom.Dash` or `geom.Shape` alone.
+
+See [`examples/accessible`](examples/accessible), which writes the picture, the
+page and the description as three files.
+
+## Charts that follow their surface
+
+```go
+p := refract.New(refract.Size(800, 500), refract.Responsive(true))
+// ...
+live.Resize(400, 250)   // half the size: half the type, half the strokes
+```
+
+A plot is designed at one size and often drawn at another. `Responsive` scales
+the theme — type, strokes, spacings, markers, margins — by how much smaller or
+larger the drawing is, so a chart at a third of its design size is the chart
+rather than a photograph of it. At the design size the factor is exactly 1, so
+turning it on cannot change a still you already have
+([ADR 0025](docs/adr/0025-responsive-charts.md)).
+
+`Live.Resize` is what a window's resize event and a reflowed canvas call. The
+scales keep whatever they were zoomed to: a reader who dragged a view into place
+has not asked to leave it.
+
+For a still at another size — a thumbnail of a chart designed larger — name the
+design explicitly:
+
+```go
+refract.New(refract.Size(200, 125), refract.ResponsiveFrom(800, 500))
+```
+
+## Nanoseconds at any zoom
+
+A Unix nanosecond count in this century needs 61 bits, and a float64 has 53. Two
+instants a nanosecond apart are therefore the *same number*, and an axis zoomed
+to a microsecond window has nothing left to separate them with.
+
+```go
+p.X(scale.Time(scale.Origin(runStart)))   // the domain is nanoseconds since runStart
+```
+
+With an origin near the data, the subtraction happens in `int64` and the axis
+keeps whole nanoseconds for the hundred days either side of it that a float64
+counts exactly. A geom reading a time column goes through the axis's own space,
+so nothing needs converting by hand, and the JSON spec carries the origin so a
+document reads back as the same axis.
+
 ## Live data
 
 A `data.Stream` is appended to from one goroutine and frozen for the renderer on
@@ -379,7 +575,7 @@ is a test per mark and per scale that renders both and compares the primitives
 
 ```json
 {
-  "$schema": "https://github.com/timzifer/refract/spec/v0.5",
+  "$schema": "https://github.com/timzifer/refract/spec/v0.6",
   "width": 640,
   "height": 400,
   "title": "Throughput",
@@ -428,8 +624,8 @@ missing-data policy you already set covers it
    geoms          scales     ~8        backend/svg     SVG
    scales         layout     drawing   backend/pdf     PDF
    theme          ticks      ops       backend/canvas  browser canvas
-   facets         panels               backend/gg      PNG / JPEG
-                                       (future)        GPU, native window
+   facets         panels               backend/gg      PNG / JPEG / a surface
+                                       backend/window  a native window
 ```
 
 The `ir.Backend` interface is the seam. Geoms never touch a renderer; a renderer
@@ -437,13 +633,20 @@ never knows what a scale is. That is what lets refract stand on a young,
 fast-moving graphics stack without being welded to it — the whole gg adapter is
 about 300 lines ([why that matters](docs/adr/0006-gg-coupling-surface.md)).
 
-Two things ride on that seam without widening it. A render can be *watched*, so
-that a pointer can be told which layer drew what it is over
-([ADR 0015](docs/adr/0015-hit-testing.md)); and two frames can be *compared*, so
-that a surface repaints only what moved
-([ADR 0016](docs/adr/0016-streaming-and-damage.md)). Neither put an identity
-channel or a damage channel into the drawing interface every backend
-implements.
+Things ride on that seam without widening it. A render can be *watched*, so that
+a pointer can be told which layer drew what it is over
+([ADR 0015](docs/adr/0015-hit-testing.md)); two frames can be *compared*, so that
+a surface repaints only what moved
+([ADR 0016](docs/adr/0016-streaming-and-damage.md)); and a backend that can carry
+words, resize itself, or repaint part of a frame says so through an optional
+interface — `ir.Semantics`, `ir.Resizer`, `ir.Partial` — rather than through a
+method every backend would have to implement. No identity channel and no damage
+channel went into the drawing interface.
+
+The native window is the same argument once more: it is a surface that draws
+with the raster backend and presents the result, so there is one implementation
+of every mark and a window shows what a file would
+([ADR 0021](docs/adr/0021-native-window.md)).
 
 
 ## Documentation
@@ -451,7 +654,7 @@ implements.
 - [CONCEPT.md](CONCEPT.md) — the design document: motivation, positioning,
   architecture, roadmap.
 - [docs/adr](docs/adr) — why the open questions were answered the way they were.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — building a three-module repository, and
+- [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, and
   how to regenerate golden files and figures.
 
 ## License

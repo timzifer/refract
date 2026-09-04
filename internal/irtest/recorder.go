@@ -52,6 +52,11 @@ type Recorder struct {
 	Damaged [][]ir.Rect
 	Whole   []bool
 	Frames  int
+
+	// Resized is the size the surface was told to take, one entry per call to
+	// [Recorder.Resize], and Described is what it was told to say about itself.
+	Resized   [][2]int
+	Described []ir.Description
 }
 
 // New returns an empty Recorder.
@@ -287,6 +292,18 @@ func (r *Recorder) Damage(rects []ir.Rect) {
 	r.Whole = append(r.Whole, rects == nil)
 }
 
+// Resize implements [ir.Resizer]: it records the size a surface was told to
+// take rather than taking one, which is how a test checks that a chart being
+// resized tells its backend so.
+func (r *Recorder) Resize(widthPx, heightPx int, _ float64) error {
+	r.Resized = append(r.Resized, [2]int{widthPx, heightPx})
+	return nil
+}
+
+// Describe implements [ir.Semantics]: it records what the chart said about
+// itself, so a test can check that it reached the backend at all.
+func (r *Recorder) Describe(d ir.Description) { r.Described = append(r.Described, d) }
+
 // Flushes counts the frames completed on this Recorder.
 func (r *Recorder) Flush() error { r.Frames++; return nil }
 
@@ -301,9 +318,11 @@ func (t recorderTarget) Open(int, int, float64) (ir.Backend, error) { return t.r
 func (recorderTarget) Close() error                                 { return nil }
 
 var (
-	_ ir.Backend = (*Recorder)(nil)
-	_ ir.Partial = (*Recorder)(nil)
-	_ ir.Target  = recorderTarget{}
+	_ ir.Backend   = (*Recorder)(nil)
+	_ ir.Partial   = (*Recorder)(nil)
+	_ ir.Resizer   = (*Recorder)(nil)
+	_ ir.Semantics = (*Recorder)(nil)
+	_ ir.Target    = recorderTarget{}
 )
 
 // NullBackend returns an ir.Backend that draws nothing and remembers nothing,

@@ -40,7 +40,7 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
 		Cap:   ir.CapRound,
 		Join:  ir.JoinRound,
-		Dash:  g.cfg.dash,
+		Dash:  g.cfg.dashFor(f),
 	}
 	if !stroke.Visible() {
 		return nil
@@ -80,7 +80,7 @@ func (g *lineGeom) Legend(f Frame) (LegendEntry, bool) {
 		Label: g.cfg.labelFor(),
 		Color: g.cfg.colorFor(f),
 		Kind:  SwatchLine,
-		Dash:  g.cfg.dash,
+		Dash:  g.cfg.dashFor(f),
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
 	}, true
 }

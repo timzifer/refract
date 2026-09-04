@@ -86,7 +86,7 @@ func (t *target) Open(widthPx, heightPx int, dpr float64) (ir.Backend, error) {
 		return nil, errors.New("refract/backend/canvas: no 2D context")
 	}
 	t.b = &backend{
-		ctx: ctx, w: widthPx, h: heightPx, dpr: dpr,
+		el: t.el, ctx: ctx, w: widthPx, h: heightPx, dpr: dpr,
 		clear: t.opts.clear, path2d: js.Global().Get("Path2D"),
 	}
 	if !t.b.path2d.Truthy() {
@@ -101,6 +101,7 @@ func (t *target) Open(widthPx, heightPx int, dpr float64) (ir.Backend, error) {
 func (t *target) Close() error { return nil }
 
 type backend struct {
+	el     js.Value // the canvas element, undefined for a bare context
 	ctx    js.Value
 	path2d js.Value
 	w, h   int
@@ -112,6 +113,59 @@ type backend struct {
 	depth int      // Push/Pop nesting, so Flush can unwind a damage clip
 	dirty bool     // a damage clip is in force
 	tmp   js.Value // the scratch canvas an Image is scaled through
+}
+
+// Describe implements [ir.Semantics]: it names the canvas for a screen reader.
+//
+// A <canvas> is a hole in the accessibility tree — it has pixels and no
+// structure — so the only thing that can be said about it is said in its
+// attributes: role="img" makes it one graphic rather than an unlabelled
+// element, and aria-label is the text read out. The long reading is appended
+// to the title, because an element has one label and a canvas has no children
+// to hang a description on.
+//
+// A target built with [Context] has no element and nothing to label; the
+// caller owns that canvas and its attributes.
+func (b *backend) Describe(d ir.Description) {
+	if b.el.IsUndefined() || b.el.IsNull() || d.Empty() {
+		return
+	}
+	label := d.Title
+	if d.Detail != "" {
+		if label != "" {
+			label += ". "
+		}
+		label += d.Detail
+	}
+	b.el.Call("setAttribute", "role", "img")
+	b.el.Call("setAttribute", "aria-label", label)
+}
+
+// Resize implements [ir.Resizer]: it resizes the canvas the chart is drawn
+// into, so that a reflowed layout redraws at the size it now has rather than
+// being stretched by the browser.
+//
+// The backing store and the CSS size are set the way [Element] sets them. A
+// target built with [Context] leaves both alone — the caller owns that canvas
+// — and only records the new logical size.
+func (b *backend) Resize(widthPx, heightPx int, dpr float64) error {
+	if widthPx <= 0 || heightPx <= 0 {
+		return fmt.Errorf("refract/backend/canvas: size %dx%d is not positive", widthPx, heightPx)
+	}
+	if dpr > 0 {
+		b.dpr = dpr
+	}
+	b.w, b.h = widthPx, heightPx
+	if !b.el.IsUndefined() && !b.el.IsNull() {
+		b.el.Set("width", int(float64(widthPx)*b.dpr+0.5))
+		b.el.Set("height", int(float64(heightPx)*b.dpr+0.5))
+		if style := b.el.Get("style"); style.Truthy() {
+			style.Set("width", strconv.Itoa(widthPx)+"px")
+			style.Set("height", strconv.Itoa(heightPx)+"px")
+		}
+	}
+	b.begin()
+	return nil
 }
 
 // begin puts the context into the state every frame starts in: the identity

@@ -3,6 +3,8 @@ package refract
 import (
 	"errors"
 
+	"github.com/timzifer/refract/ir"
+	"github.com/timzifer/refract/mathtext"
 	"github.com/timzifer/refract/render"
 	themepkg "github.com/timzifer/refract/theme"
 )
@@ -37,6 +39,10 @@ type Grid struct {
 
 	legend    bool
 	legendSet bool
+
+	math    mathtext.Typesetter
+	desc    ir.Description
+	descSet bool
 
 	serial bool
 }
@@ -87,6 +93,27 @@ func GridAxisTitles(x, y string) GridOption {
 // panel would have shown one.
 func GridLegend(show bool) GridOption {
 	return func(g *Grid) { g.legend, g.legendSet = show, true }
+}
+
+// GridMath typesets the notation in the grid's labels — its title, its axis
+// titles, and the title of every panel in it. See [Math] and package mathtext.
+//
+// A member plot's own typesetter is not used, for the same reason its theme is
+// not: the canvas is the grid's, and two panels cannot disagree about how a
+// label is set.
+func GridMath(ts mathtext.Typesetter) GridOption { return func(g *Grid) { g.math = ts } }
+
+// GridDescription attaches an accessible description to the grid. See
+// [Description].
+//
+// There is no `Grid.Describe`: a grid is several charts, and the honest
+// description of one is written by whoever knows why they are on the same page.
+// The grid's title is carried into the output either way, as a chart's is.
+func GridDescription(title, detail string) GridOption {
+	return func(g *Grid) {
+		g.desc = ir.Description{Title: title, Detail: detail}
+		g.descSet = true
+	}
 }
 
 // GridParallel controls whether the panels are built concurrently. See
@@ -171,15 +198,17 @@ func (g *Grid) Render(t Target) (err error) {
 
 func (g *Grid) chart() (render.Chart, error) {
 	c := render.Chart{
-		Width:      g.width,
-		Height:     g.height,
-		DPR:        g.dpr,
-		Theme:      g.theme,
-		Title:      g.title,
-		XTitle:     g.xTitle,
-		YTitle:     g.yTitle,
-		ShowLegend: g.showLegend(),
-		Serial:     g.serial,
+		Width:       g.width,
+		Height:      g.height,
+		DPR:         g.dpr,
+		Theme:       g.theme,
+		Title:       g.title,
+		XTitle:      g.xTitle,
+		YTitle:      g.yTitle,
+		ShowLegend:  g.showLegend(),
+		Description: g.description(),
+		Math:        g.math,
+		Serial:      g.serial,
 	}
 	rows := 0
 	for _, cell := range g.cells {
@@ -207,6 +236,15 @@ func (g *Grid) chart() (render.Chart, error) {
 	}
 	c.Rows, c.Cols = rows, g.cols
 	return c, nil
+}
+
+// description reports what the grid says about itself: the one it was given,
+// or its title alone.
+func (g *Grid) description() ir.Description {
+	if g.descSet {
+		return g.desc
+	}
+	return ir.Description{Title: g.title}
 }
 
 func (g *Grid) showLegend() bool {

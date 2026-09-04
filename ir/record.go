@@ -33,6 +33,7 @@ type Measurer interface {
 // therefore must be safe to call from every goroutine using a Recorder.
 type Recorder struct {
 	m     Measurer
+	desc  Description
 	calls []recorded
 	pts   []Point
 	ops   []PathOp
@@ -78,6 +79,7 @@ type recorded struct {
 
 // Reset empties the recording, keeping the memory for the next one.
 func (r *Recorder) Reset() {
+	r.desc = Description{}
 	r.calls = r.calls[:0]
 	r.pts = r.pts[:0]
 	r.ops = r.ops[:0]
@@ -197,8 +199,26 @@ func (r *Recorder) Measure(run TextRun) TextMetrics {
 // The recording is finished by [Recorder.Replay].
 func (r *Recorder) Flush() error { return nil }
 
+// Describe implements [Semantics]: a recording carries what the chart says
+// about itself, so that a description survives being recorded and replayed.
+//
+// Without it a chart drawn through a Recorder — which is every panel of a
+// parallel render and every frame of a [Live] one — would lose its title and
+// its description on the way to the backend, and an interactive chart exported
+// to SVG would be the one with no accessible name.
+func (r *Recorder) Describe(d Description) { r.desc = d }
+
+// Description reports what was recorded by [Recorder.Describe].
+func (r *Recorder) Description() Description { return r.desc }
+
 // Replay makes the recorded calls on b, in the order they were made.
+//
+// A description recorded along the way is announced first, before any drawing,
+// which is the order [Semantics] promises a backend.
 func (r *Recorder) Replay(b Backend) {
+	if s, ok := b.(Semantics); ok && !r.desc.Empty() {
+		s.Describe(r.desc)
+	}
 	// One path header, re-pointed at each call's slice of the arenas: the
 	// arenas already hold the data, so replaying allocates nothing.
 	var p Path
@@ -230,6 +250,7 @@ func (r *Recorder) Replay(b Backend) {
 }
 
 var (
-	_ Backend  = (*Recorder)(nil)
-	_ Measurer = (*Recorder)(nil)
+	_ Backend   = (*Recorder)(nil)
+	_ Measurer  = (*Recorder)(nil)
+	_ Semantics = (*Recorder)(nil)
 )
