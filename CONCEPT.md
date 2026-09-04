@@ -2,10 +2,10 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **pre-alpha.** Milestones **v0.1 and v0.2 are implemented** — see
+> Status: **pre-alpha.** Milestones **v0.1 through v0.3 are implemented** — see
 > [§14](#14-roadmap--milestones) for what that covers and the
 > [README](README.md) to use it. This document remains the working concept for
-> everything past v0.2. The API is **not** stable: every release below `v1.0.0`
+> everything past v0.3. The API is **not** stable: every release below `v1.0.0`
 > may contain breaking changes without deprecation cycles (see
 > [Versioning](#15-versioning--stability)) — v0.2 added a method to
 > `data.Source`, which is exactly the kind of break that policy exists for.
@@ -139,7 +139,7 @@ responsibilities:
 |---|---|
 | Rasterization (CPU + GPU), AA, dashes, gradients, blend modes, clipping/masks | `gogpu/gg` |
 | Text: font parsing, shaping (GSUB/GPOS), layout, MSDF/glyph-mask rendering | `gogpu/gg` |
-| Vector export (SVG, PDF) via the recording API | `gogpu/gg` (+ `gg-svg`, `gg-pdf`) |
+| Vector export (SVG, PDF) | **refract** — two built-in emitters, no dependency. `gg-pdf` cannot draw geometry ([ADR 0009](docs/adr/0009-pdf-backend.md)) |
 | GPU device / backends (Vulkan, Metal, DX12, GLES, software, browser WebGPU) | `gogpu/wgpu` |
 | Native window + input | `gogpu/gogpu` |
 | Linear-space color, HiDPI/device scale, damage tracking | `gogpu/gg` |
@@ -359,8 +359,11 @@ full span, all `CGO_ENABLED=0`:
 
 - **Raster (PNG/JPEG/WebP)** via gg's CPU rasterizer (Skia-AAA analytic AA, smart
   per-path algorithm selection). This is the **stable, supported** rendering path.
-- **PDF and SVG** via gg's recording API + `gg-pdf` / `gg-svg`. (refract can use
-  gg's SVG here for parity with raster, or the built-in emitter for leanness.)
+- ~~**PDF and SVG** via gg's recording API + `gg-pdf` / `gg-svg`.~~ Both vector
+  formats are built-in emitters in the core module instead. `gg-pdf` was tried
+  and cannot draw geometry — its path operations reach a stub in `gxpdf` — so
+  routing PDF through the recording API would have produced pages containing
+  tick labels and nothing else ([ADR 0009](docs/adr/0009-pdf-backend.md)).
 - **Text** — gg's pure-Go font stack: GSUB/GPOS shaping, ligatures, kerning,
   variable fonts, OpenType features, CJK, bidi, color emoji. refract adds no text
   dependency of its own.
@@ -527,12 +530,30 @@ Colourbars are **not** in v0.2: a layer coloured from a continuous scale
 contributes no legend entry rather than a swatch that would misrepresent it.
 Guides are v0.3.
 
-### v0.3 — Layout, theming, PDF
+### v0.3 — Layout, theming, PDF — **shipped**
 
 - Constraint layout for subplots with axis alignment; faceting (wrap/grid).
-- Theme engine (dark/light, global tokens).
-- Annotations, colorbars, guides.
-- PDF output via gg recording + `gg-pdf`.
+  `layout.Panels` solves one grid: per-column left gutters and per-row bottom
+  gutters, with every panel the same size, so a position means the same thing
+  in every panel. `Compute` is that solver over a one-by-one grid, which is
+  what keeps a lone chart and a facet of one identical.
+- Theme engine: `theme.Tokens` holds the dozen choices a theme actually makes
+  and `theme.Build` derives the other forty, `Theme.With` edits a built theme,
+  and a registry resolves one by name for a config file or a flag.
+- Annotations (`HLine`, `VLine`, `HBand`, `VBand`, `Segment`, `Region`,
+  `Note`), colourbars, and a guide column that stacks them beside the plot.
+- PDF output. **Not** through gg recording and `gg-pdf`: that library cannot
+  draw geometry — its path operations reach a stub in `gxpdf` that has been a
+  `TODO` since v0.4.0 and still is at v0.9.4 — so refract emits PDF itself,
+  from the core module, with no dependency at all
+  ([ADR 0009](docs/adr/0009-pdf-backend.md)).
+- *DoD:* a chart can be split into small multiples with aligned axes, annotated
+  with things that are not data, given a guide for a continuous colour scale,
+  restyled by editing tokens rather than fifty fields, and written as a vector
+  PDF. ✔
+
+Colourbars close the gap v0.2 left open: a layer using `geom.ColorBy` now
+contributes a colour guide instead of nothing.
 
 ### v0.4 — Big data (CPU tier)
 
@@ -608,18 +629,21 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
   stat/                      # bin, density, smooth, aggregate
   coord/                     # cartesian (pluggable stage)
-  layout/                    # plot-area layout; constraint solver at v0.3 (v0.1)
+  layout/                    # panel-grid constraint solver               (v0.3)
   render/                    # model -> IR lowering                       (v0.1)
-  facet/                     # faceting
+  facet/                     # faceting (wrap/grid)                       (v0.3)
   theme/  palette/           # tokens, colourblind-safe palettes          (v0.1)
   ir/                        # IR primitives + Backend interface          (v0.1)
   backend/svg/               # built-in, zero-dependency SVG emitter      (v0.1)
-  internal/fontmetrics/      # stdlib hmtx/cmap reader + fallback table   (v0.1)
+  backend/pdf/               # built-in, zero-dependency PDF emitter      (v0.3)
+  internal/fontmetrics/      # stdlib hmtx/cmap reader + Helvetica table  (v0.1)
+  internal/markers/          # the marker outlines both emitters share    (v0.3)
   spec/                      # JSON (Vega-Lite-compatible) marshal/unmarshal
 
-  backend/gg/                # NESTED MODULE: raster now; PDF, GPU,       (v0.1)
-                             # browser and native window later. Depends on
-                             # gogpu/gg. Zero CGO.
+  backend/gg/                # NESTED MODULE: raster now; GPU, browser    (v0.1)
+                             # and native window later. Depends on
+                             # gogpu/gg. Zero CGO. PDF did not land here —
+                             # see ADR 0009.
     cmd/gallery/             # renders every documented figure            (v0.1)
 
 refract/arrow                # optional Arrow adapter (separate module)
@@ -645,9 +669,11 @@ Six of the seven were settled while building v0.1; each has a record in
    The whole adapter is about 300 lines.
    → [ADR 0006](docs/adr/0006-gg-coupling-surface.md)
 2. ~~**SVG source of truth**~~ — **settled:** the built-in emitter is the only
-   SVG path in v0.1; the gg backend produces raster only. Worth reopening when
-   PDF brings gg's recording API in at v0.3.
-   → [ADR 0004](docs/adr/0004-svg-source-of-truth.md)
+   SVG path, and since v0.3 PDF is a built-in emitter too. The reopening this
+   item anticipated happened and went the other way: `gg-pdf` cannot draw
+   geometry, so no gg vector path exists to unify with.
+   → [ADR 0004](docs/adr/0004-svg-source-of-truth.md),
+   [ADR 0009](docs/adr/0009-pdf-backend.md)
 3. **Spec fidelity to Vega-Lite** — strict round-trippable subset vs "inspired
    by". **Still open**; belongs to v0.5, and deciding it now would be guessing.
 4. ~~**Text ownership**~~ — **settled:** the backend shapes, refract places, and

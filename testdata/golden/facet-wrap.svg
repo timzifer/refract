@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420">
+<defs>
+<clipPath id="c1"><path d="M59.506,50.975 L350.067,50.975 L350.067,186.675 L59.506,186.675 Z"/></clipPath>
+<clipPath id="c2"><path d="M362.067,50.975 L652.628,50.975 L652.628,186.675 L362.067,186.675 Z"/></clipPath>
+<clipPath id="c3"><path d="M59.506,236.025 L350.067,236.025 L350.067,371.725 L59.506,371.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L760,0 L760,420 L0,420 Z" fill="#ffffff"/>
+<polyline fill="none" points="59.506,50.975 59.506,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="112.335,50.975 112.335,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="165.165,50.975 165.165,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="217.994,50.975 217.994,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="270.823,50.975 270.823,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="323.652,50.975 323.652,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,186.675 350.067,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,152.75 350.067,152.75" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,118.825 350.067,118.825" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,84.9 350.067,84.9" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,50.975 350.067,50.975" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,186.675 350.067,186.675" stroke="#333333"/>
+<polyline fill="none" points="59.506,50.975 59.506,186.675" stroke="#333333"/>
+<polyline fill="none" points="59.506,186.675 59.506,191.675" stroke="#333333"/>
+<polyline fill="none" points="112.335,186.675 112.335,191.675" stroke="#333333"/>
+<polyline fill="none" points="165.165,186.675 165.165,191.675" stroke="#333333"/>
+<polyline fill="none" points="217.994,186.675 217.994,191.675" stroke="#333333"/>
+<polyline fill="none" points="270.823,186.675 270.823,191.675" stroke="#333333"/>
+<polyline fill="none" points="323.652,186.675 323.652,191.675" stroke="#333333"/>
+<polyline fill="none" points="54.506,186.675 59.506,186.675" stroke="#333333"/>
+<text x="50.506" y="186.675" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0.0</text>
+<polyline fill="none" points="54.506,152.75 59.506,152.75" stroke="#333333"/>
+<text x="50.506" y="152.75" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">2.5</text>
+<polyline fill="none" points="54.506,118.825 59.506,118.825" stroke="#333333"/>
+<text x="50.506" y="118.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">5.0</text>
+<polyline fill="none" points="54.506,84.9 59.506,84.9" stroke="#333333"/>
+<text x="50.506" y="84.9" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">7.5</text>
+<polyline fill="none" points="54.506,50.975 59.506,50.975" stroke="#333333"/>
+<text x="50.506" y="50.975" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10.0</text>
+<path d="M59.506,32.8 L350.067,32.8 L350.067,50.975 L59.506,50.975 Z" fill="#eeeff1"/>
+<path fill="none" d="M59.506,32.8 L350.067,32.8 L350.067,50.975 L59.506,50.975 Z" stroke="#dddddd"/>
+<text x="204.787" y="41.887" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#333333">north</text>
+<polyline fill="none" points="362.067,50.975 362.067,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="414.896,50.975 414.896,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="467.726,50.975 467.726,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="520.555,50.975 520.555,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="573.384,50.975 573.384,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="626.213,50.975 626.213,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,186.675 652.628,186.675" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,152.75 652.628,152.75" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,118.825 652.628,118.825" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,84.9 652.628,84.9" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,50.975 652.628,50.975" stroke="#dddddd"/>
+<polyline fill="none" points="362.067,186.675 652.628,186.675" stroke="#333333"/>
+<polyline fill="none" points="362.067,50.975 362.067,186.675" stroke="#333333"/>
+<polyline fill="none" points="362.067,186.675 362.067,191.675" stroke="#333333"/>
+<text x="362.067" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="414.896,186.675 414.896,191.675" stroke="#333333"/>
+<text x="414.896" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="467.726,186.675 467.726,191.675" stroke="#333333"/>
+<text x="467.726" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="520.555,186.675 520.555,191.675" stroke="#333333"/>
+<text x="520.555" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">6</text>
+<polyline fill="none" points="573.384,186.675 573.384,191.675" stroke="#333333"/>
+<text x="573.384" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">8</text>
+<polyline fill="none" points="626.213,186.675 626.213,191.675" stroke="#333333"/>
+<text x="626.213" y="195.675" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">10</text>
+<polyline fill="none" points="357.067,186.675 362.067,186.675" stroke="#333333"/>
+<polyline fill="none" points="357.067,152.75 362.067,152.75" stroke="#333333"/>
+<polyline fill="none" points="357.067,118.825 362.067,118.825" stroke="#333333"/>
+<polyline fill="none" points="357.067,84.9 362.067,84.9" stroke="#333333"/>
+<polyline fill="none" points="357.067,50.975 362.067,50.975" stroke="#333333"/>
+<path d="M362.067,32.8 L652.628,32.8 L652.628,50.975 L362.067,50.975 Z" fill="#eeeff1"/>
+<path fill="none" d="M362.067,32.8 L652.628,32.8 L652.628,50.975 L362.067,50.975 Z" stroke="#dddddd"/>
+<text x="507.348" y="41.887" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#333333">south</text>
+<polyline fill="none" points="59.506,236.025 59.506,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="112.335,236.025 112.335,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="165.165,236.025 165.165,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="217.994,236.025 217.994,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="270.823,236.025 270.823,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="323.652,236.025 323.652,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,371.725 350.067,371.725" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,337.8 350.067,337.8" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,303.875 350.067,303.875" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,269.95 350.067,269.95" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,236.025 350.067,236.025" stroke="#dddddd"/>
+<polyline fill="none" points="59.506,371.725 350.067,371.725" stroke="#333333"/>
+<polyline fill="none" points="59.506,236.025 59.506,371.725" stroke="#333333"/>
+<polyline fill="none" points="59.506,371.725 59.506,376.725" stroke="#333333"/>
+<text x="59.506" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="112.335,371.725 112.335,376.725" stroke="#333333"/>
+<text x="112.335" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="165.165,371.725 165.165,376.725" stroke="#333333"/>
+<text x="165.165" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="217.994,371.725 217.994,376.725" stroke="#333333"/>
+<text x="217.994" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">6</text>
+<polyline fill="none" points="270.823,371.725 270.823,376.725" stroke="#333333"/>
+<text x="270.823" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">8</text>
+<polyline fill="none" points="323.652,371.725 323.652,376.725" stroke="#333333"/>
+<text x="323.652" y="380.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">10</text>
+<polyline fill="none" points="54.506,371.725 59.506,371.725" stroke="#333333"/>
+<text x="50.506" y="371.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0.0</text>
+<polyline fill="none" points="54.506,337.8 59.506,337.8" stroke="#333333"/>
+<text x="50.506" y="337.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">2.5</text>
+<polyline fill="none" points="54.506,303.875 59.506,303.875" stroke="#333333"/>
+<text x="50.506" y="303.875" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">5.0</text>
+<polyline fill="none" points="54.506,269.95 59.506,269.95" stroke="#333333"/>
+<text x="50.506" y="269.95" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">7.5</text>
+<polyline fill="none" points="54.506,236.025 59.506,236.025" stroke="#333333"/>
+<text x="50.506" y="236.025" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10.0</text>
+<path d="M59.506,217.85 L350.067,217.85 L350.067,236.025 L59.506,236.025 Z" fill="#eeeff1"/>
+<path fill="none" d="M59.506,217.85 L350.067,217.85 L350.067,236.025 L59.506,236.025 Z" stroke="#dddddd"/>
+<text x="204.787" y="226.938" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#333333">east</text>
+<text x="356.067" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Throughput by region</text>
+<text x="356.067" y="405.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">hour</text>
+<text x="20.616" y="211.35" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 211.35)">requests/s</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="59.506,132.395 85.921,118.825 112.335,105.255 138.75,91.685 165.165,78.115 191.579,132.395 217.994,118.825 244.408,105.255 270.823,91.685 297.238,78.115 323.652,132.395 350.067,118.825" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="59.506,91.685 350.067,91.685" stroke="#555555" stroke-dasharray="4 3"/>
+</g>
+<g clip-path="url(#c2)">
+<polyline fill="none" points="362.067,118.825 388.482,105.255 414.896,91.685 441.311,78.115 467.726,64.545 494.14,118.825 520.555,105.255 546.969,91.685 573.384,78.115 599.799,64.545 626.213,118.825 652.628,105.255" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="362.067,91.685 652.628,91.685" stroke="#555555" stroke-dasharray="4 3"/>
+</g>
+<g clip-path="url(#c3)">
+<polyline fill="none" points="59.506,290.305 85.921,276.735 112.335,263.165 138.75,249.595 165.165,236.025 191.579,290.305 217.994,276.735 244.408,263.165 270.823,249.595 297.238,236.025 323.652,290.305 350.067,276.735" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="59.506,276.735 350.067,276.735" stroke="#555555" stroke-dasharray="4 3"/>
+</g>
+<polyline fill="none" points="666.628,202.8 678.628,202.8" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round"/>
+<text x="684.628" y="202.8" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">throughput</text>
+<polyline fill="none" points="666.628,219.9 678.628,219.9" stroke="#555555" stroke-linecap="round" stroke-dasharray="4 3"/>
+<text x="684.628" y="219.9" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">target</text>
+</svg>

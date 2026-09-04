@@ -293,10 +293,11 @@ const kappa = 0.5522847498307936
 
 // markerPath builds a marker centred on the origin.
 //
-// It mirrors the SVG backend's markerPath exactly, because "the same chart
-// looks the same on every backend" has to hold for marker geometry too — a
-// diamond that is a different diamond in PNG than in SVG would break the
-// promise in a way nobody would notice until it mattered.
+// It is a copy of internal/markers.Path in the core module, kept in step by
+// hand because a nested module cannot import its parent's internal packages.
+// "The same chart looks the same on every backend" has to hold for marker
+// geometry too — a diamond that is a different diamond in PNG than in SVG
+// would break the promise in a way nobody would notice until it mattered.
 func markerPath(p *ir.Path, m ir.Marker, size float32) {
 	r := size / 2
 	switch m {

@@ -39,3 +39,11 @@ only: PNG and JPEG.
 PDF lands and brings the gg recording API into the backend anyway, or if the
 divergence in [0003](0003-text-and-fonts.md) turns out to matter to someone in
 practice.
+
+## Revisited at v0.3
+
+It was revisited, and the answer held for a reason this record did not expect.
+`gg-pdf` cannot draw geometry, so PDF became a second built-in emitter rather
+than a recording — see [ADR 0009](0009-pdf-backend.md). There is now no gg
+vector path for SVG to unify with, and the built-in emitters share their marker
+geometry through `internal/markers` instead.

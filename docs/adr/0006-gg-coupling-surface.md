@@ -25,7 +25,9 @@ and `github.com/gogpu/gg/text`. It does **not** import:
   device is ever created, the CPU rasterizer is what runs, and CI needs no
   graphics hardware. It also keeps `wgpu` and `goffi` out of the build entirely.
 - `gg/scene`, `gg/recording` — retained-mode and vector export. Neither is
-  needed until animation (post-1.0) and PDF (v0.3).
+  needed until animation (post-1.0) and PDF (v0.3). **Still excluded after
+  v0.3:** PDF did not come through the recording API after all, because
+  `gg-pdf` cannot draw geometry — see [ADR 0009](0009-pdf-backend.md).
 
 **Use the stable middle of gg's API.** The adapter touches the canvas surface
 that has an obvious analogue in every 2D library — `NewContextWithScale`, path
@@ -47,5 +49,7 @@ every consumer uses.
 
 ## Revisit if
 
-The GPU tier is enabled (v0.6), PDF lands (v0.3), or gg reaches a stability
-commitment that makes an exact pin more cost than benefit.
+The GPU tier is enabled (v0.6), or gg reaches a stability commitment that makes
+an exact pin more cost than benefit. PDF landing was the other trigger; it came
+and went without touching this record, which is the outcome this decision was
+hoping for.

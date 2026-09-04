@@ -1,15 +1,13 @@
-// Package layout decides where the plot area, titles and legend go.
+// Package layout decides where the plot area, titles and guides go.
 //
-// v0.1 implements exactly one arrangement: a single Cartesian panel with axes
-// on the left and bottom, an optional title above, and an optional legend to
-// the right. It sizes everything by measuring the real text with the real
-// backend, so an axis whose labels are wide gets a wide margin and nothing is
-// ever clipped by a guessed constant.
+// [Compute] lays out a single Cartesian panel: axes on the left and bottom, an
+// optional title above, and a column of guides — a legend, colourbars — to the
+// right. [Panels] lays out a grid of them with their axes aligned, which is
+// what subplots and faceting are made of.
 //
-// It is deliberately not a constraint solver. Faceting and multi-panel axis
-// alignment are the v0.3 milestone; the seam this package presents — measure,
-// then hand back rectangles — is what that solver will slot into, so callers
-// will not have to change.
+// Everything is sized by measuring the real text with the real backend, so an
+// axis whose labels are wide gets a wide margin and nothing is ever clipped by
+// a guessed constant.
 package layout
 
 import (
@@ -42,6 +40,19 @@ type Chart struct {
 
 	// LegendLabels are the series names. An empty slice suppresses the legend.
 	LegendLabels []string
+
+	// Colorbars are the continuous colour guides. Only the extents of their
+	// titles and tick labels matter here; where the ticks fall is the colour
+	// scale's business, and it needs the bar's rectangle to answer.
+	Colorbars []Colorbar
+}
+
+// Colorbar is what layout needs to know about one continuous colour guide.
+type Colorbar struct {
+	// Title names the quantity the ramp encodes, or "" for none.
+	Title string
+	// Ticks are the labels written beside the bar.
+	Ticks []string
 }
 
 // Result is where everything goes, in device space.
@@ -60,115 +71,134 @@ type Result struct {
 	YTitle ir.Point
 	// Legend is the rectangle reserved for the legend, empty if there is none.
 	Legend ir.Rect
+	// Colorbars are the rectangles reserved for the colour guides, one per
+	// entry in Chart.Colorbars and in the same order. Each covers the bar, its
+	// tick labels and its title.
+	Colorbars []ir.Rect
 	// TickLabelPad is the distance from the axis to the near edge of a tick
 	// label, copied from the theme so the renderer does not re-derive it.
 	TickLabelPad float32
 }
 
-// Compute lays out a chart.
+// Compute lays out a single-panel chart.
+//
+// It is [Panels] over a one-by-one grid, and it exists because that is the
+// shape almost every chart has: one panel, its axes, a guide column. Going
+// through the same solver is what keeps a lone chart and a facet of one from
+// coming out differently.
 func Compute(c Chart, m Measurer) Result {
-	th := c.Theme
-	var r Result
-	r.TickLabelPad = th.TickLabelPad
+	g := Panels(Grid{
+		Canvas:       c.Canvas,
+		Theme:        c.Theme,
+		Title:        c.Title,
+		XTitle:       c.XTitle,
+		YTitle:       c.YTitle,
+		Rows:         1,
+		Cols:         1,
+		Panels:       []Panel{{XLabels: c.XLabels, YLabels: c.YLabels}},
+		LegendLabels: c.LegendLabels,
+		Colorbars:    c.Colorbars,
+	}, m)
 
-	tickFont := th.Font(th.TickSize)
+	return Result{
+		Plot:         g.Areas[0],
+		Title:        g.Title,
+		XTitle:       g.XTitle,
+		YTitle:       g.YTitle,
+		Legend:       g.Legend,
+		Colorbars:    g.Colorbars,
+		TickLabelPad: g.TickLabelPad,
+	}
+}
+
+// guide is one entry of the column beside the plot: a legend, or a colourbar
+// with its title and labels.
+type guide struct {
+	w, h   float32
+	legend bool
+}
+
+// measureGuides sizes every guide a chart carries, in the order they will be
+// stacked. plotH is the height of the panel region, which is what a
+// colourbar's length is a fraction of.
+func measureGuides(th theme.Theme, legend []string, bars []Colorbar, m Measurer, plotH float32) []guide {
 	labelFont := th.Font(th.LabelSize)
-	titleFont := th.Font(th.TitleSize)
+	var out []guide
 
-	area := c.Canvas.Inset(th.Margin, th.Margin, th.Margin, th.Margin)
-
-	// Top: the chart title.
-	var titleH float32
-	if c.Title != "" {
-		mm := m.Measure(ir.TextRun{Text: c.Title, Font: titleFont})
-		titleH = mm.Height() + th.AxisTitlePad
-	}
-
-	// Bottom: tick labels, then the axis title.
-	xTickH := maxHeight(m, c.XLabels, tickFont)
-	bottom := float32(0)
-	if xTickH > 0 {
-		bottom += th.TickLength + th.TickLabelPad + xTickH
-	}
-	var xTitleH float32
-	if c.XTitle != "" {
-		xTitleH = m.Measure(ir.TextRun{Text: c.XTitle, Font: labelFont}).Height()
-		bottom += xTitleH + th.AxisTitlePad
-	}
-
-	// Left: tick labels, then the rotated axis title.
-	yTickW := maxAdvance(m, c.YLabels, tickFont)
-	left := float32(0)
-	if yTickW > 0 {
-		left += th.TickLength + th.TickLabelPad + yTickW
-	}
-	var yTitleH float32
-	if c.YTitle != "" {
-		yTitleH = m.Measure(ir.TextRun{Text: c.YTitle, Font: labelFont}).Height()
-		left += yTitleH + th.AxisTitlePad
-	}
-
-	// Right: the legend, or just enough room that the last X tick label — which
-	// is centred on the axis end — does not run off the canvas.
-	right := float32(0)
-	var legendW float32
-	if len(c.LegendLabels) > 0 {
-		legendW = th.LegendSwatch + th.LegendGap + maxAdvance(m, c.LegendLabels, labelFont) + 2*th.LegendPadding
-		right = legendW + th.LegendPad
-	} else if n := len(c.XLabels); n > 0 {
-		right = m.Measure(ir.TextRun{Text: c.XLabels[n-1], Font: tickFont}).Advance / 2
-	}
-
-	plot := ir.Rect{
-		Min: ir.Point{X: area.Min.X + left, Y: area.Min.Y + titleH},
-		Max: ir.Point{X: area.Max.X - right, Y: area.Max.Y - bottom},
-	}
-	// A canvas too small for its furniture would otherwise produce an inverted
-	// rectangle and geometry that maps to nonsense. Collapse to a degenerate
-	// but well-ordered plot area instead.
-	if plot.Max.X < plot.Min.X {
-		plot.Max.X = plot.Min.X
-	}
-	if plot.Max.Y < plot.Min.Y {
-		plot.Max.Y = plot.Min.Y
-	}
-	r.Plot = plot
-
-	if c.Title != "" {
-		mm := m.Measure(ir.TextRun{Text: c.Title, Font: titleFont})
-		r.Title = ir.Point{
-			X: (plot.Min.X + plot.Max.X) / 2,
-			Y: area.Min.Y + mm.Ascent,
-		}
-	}
-	if c.XTitle != "" {
-		r.XTitle = ir.Point{
-			X: (plot.Min.X + plot.Max.X) / 2,
-			Y: area.Max.Y - m.Measure(ir.TextRun{Text: c.XTitle, Font: labelFont}).Descent,
-		}
-	}
-	if c.YTitle != "" {
-		mm := m.Measure(ir.TextRun{Text: c.YTitle, Font: labelFont})
-		r.YTitle = ir.Point{
-			X: area.Min.X + mm.Ascent,
-			Y: (plot.Min.Y + plot.Max.Y) / 2,
-		}
-	}
-	if legendW > 0 {
+	if n := len(legend); n > 0 {
 		entryH := m.Measure(ir.TextRun{Text: "Hg", Font: labelFont}).Height()
-		h := float32(len(c.LegendLabels))*entryH +
-			float32(len(c.LegendLabels)-1)*th.LegendGap +
-			2*th.LegendPadding
-		top := (plot.Min.Y+plot.Max.Y)/2 - h/2
-		if top < plot.Min.Y {
-			top = plot.Min.Y
-		}
-		r.Legend = ir.Rect{
-			Min: ir.Point{X: plot.Max.X + th.LegendPad, Y: top},
-			Max: ir.Point{X: plot.Max.X + th.LegendPad + legendW, Y: top + h},
-		}
+		out = append(out, guide{
+			legend: true,
+			w:      th.LegendSwatch + th.LegendGap + maxAdvance(m, legend, labelFont) + 2*th.LegendPadding,
+			h:      float32(n)*entryH + float32(n-1)*th.LegendGap + 2*th.LegendPadding,
+		})
 	}
-	return r
+
+	for _, cb := range bars {
+		// The bar takes a fraction of the plot's height, but never less than
+		// enough to read a ramp across: a bar shorter than a few multiples of
+		// its own thickness is a swatch, which is the thing a colourbar exists
+		// not to be.
+		length := float32(th.ColorbarFraction) * plotH
+		if floor := 4 * th.ColorbarThickness; length < floor {
+			length = floor
+		}
+		if length > plotH {
+			length = plotH
+		}
+
+		g := guide{h: length}
+		g.w = th.ColorbarThickness + th.TickLength + th.TickLabelPad +
+			maxAdvance(m, cb.Ticks, th.Font(th.TickSize))
+		if cb.Title != "" {
+			mm := m.Measure(ir.TextRun{Text: cb.Title, Font: labelFont})
+			g.h += mm.Height() + th.TickLabelPad
+			g.w = maxOf(g.w, mm.Advance)
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+// placeGuides stacks the guides in the column to the right of the plot,
+// centred on it, and returns the legend's box and the colourbars' in order.
+func placeGuides(guides []guide, plot ir.Rect, th theme.Theme) (legend ir.Rect, bars []ir.Rect) {
+	if len(guides) == 0 {
+		return ir.Rect{}, nil
+	}
+	var total float32
+	for i, g := range guides {
+		if i > 0 {
+			total += th.GuideGap
+		}
+		total += g.h
+	}
+	top := (plot.Min.Y+plot.Max.Y)/2 - total/2
+	if top < plot.Min.Y {
+		top = plot.Min.Y
+	}
+	left := plot.Max.X + th.LegendPad
+
+	for _, g := range guides {
+		box := ir.Rect{
+			Min: ir.Point{X: left, Y: top},
+			Max: ir.Point{X: left + g.w, Y: top + g.h},
+		}
+		if g.legend {
+			legend = box
+		} else {
+			bars = append(bars, box)
+		}
+		top += g.h + th.GuideGap
+	}
+	return legend, bars
+}
+
+func maxOf(a, b float32) float32 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func maxAdvance(m Measurer, labels []string, font ir.FontRef) float32 {

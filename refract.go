@@ -1,12 +1,13 @@
 // Package refract turns one declarative chart specification into any output
-// you need — SVG today, raster, PDF, GPU and browser through additional
+// you need — SVG and PDF today, raster now, GPU and browser through additional
 // backends — from the same model, with the same geometry.
 //
 // The core module is pure Go and depends on nothing but the standard library.
-// The built-in SVG backend needs no rendering engine and no font stack, so a
-// server that only wants a chart as SVG links nothing native and nothing
-// young. Raster output lives in a separate module,
-// github.com/timzifer/refract/backend/gg, which is still CGO-free.
+// Both vector emitters are built in and need no rendering engine and no font
+// stack, so a server that wants a chart as SVG or a report generator that
+// wants one as PDF links nothing native and nothing young. Raster output lives
+// in a separate module, github.com/timzifer/refract/backend/gg, which is still
+// CGO-free.
 //
 // # Shape of the API
 //
@@ -28,7 +29,22 @@
 // Scales cover linear, time, log, symlog and ordinal/categorical axes; geoms
 // cover lines, scatters, bars, areas, steps and boxplots. A mark's colour can
 // come from the data through [scale.Sequential] or [scale.Diverging] and
-// [geom.ColorBy].
+// [geom.ColorBy], which contributes a colourbar beside the plot.
+//
+// # Annotations
+//
+// [geom.HLine], [geom.VLine], [geom.HBand], [geom.VBand], [geom.Segment],
+// [geom.Region] and [geom.Note] add the marks that are not data — a threshold,
+// a shaded window, a label pointing at what happened. They take values rather
+// than a data source.
+//
+// # Many panels
+//
+// [Plot.Facet] splits one plot into small multiples, one panel per value of a
+// column; [NewGrid] puts several different plots on one canvas. Both lay their
+// panels out with the same solver, so the axes line up either way.
+//
+//	p.Facet(facet.Wrap("region", facet.Columns(3)))
 //
 // # Status
 //
@@ -38,10 +54,13 @@ package refract
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
+	"github.com/timzifer/refract/backend/pdf"
 	"github.com/timzifer/refract/backend/svg"
 	"github.com/timzifer/refract/data"
+	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/render"
@@ -83,6 +102,8 @@ type Plot struct {
 
 	x, y   scale.Scale
 	layers []geom.Geom
+
+	facet *facet.Spec
 
 	legend    bool
 	legendSet bool
@@ -157,6 +178,14 @@ func (p *Plot) Y(s scale.Scale) *Plot { p.y = s; return p }
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
+// Facet splits the plot into small multiples, one panel per value of a
+// column. See [facet.Wrap] and [facet.Grid].
+//
+//	p.Facet(facet.Wrap("region", facet.Columns(3)))
+//
+// Passing nil turns faceting back off.
+func (p *Plot) Facet(s *facet.Spec) *Plot { p.facet = s; return p }
+
 // ErrNoLayers reports a render of a plot with nothing in it. Rendering empty
 // axes is a legitimate thing to want, so this is only returned when there is
 // also no scale configured — that combination is always a mistake.
@@ -175,18 +204,9 @@ func (p *Plot) Render(t Target) (err error) {
 		return ErrNoLayers
 	}
 
-	c := render.Chart{
-		Width:      p.width,
-		Height:     p.height,
-		DPR:        p.dpr,
-		Theme:      p.theme,
-		Title:      p.title,
-		XTitle:     p.xTitle,
-		YTitle:     p.yTitle,
-		X:          p.scaleX(),
-		Y:          p.scaleY(),
-		Layers:     p.layers,
-		ShowLegend: p.showLegend(),
+	c, err := p.chart()
+	if err != nil {
+		return err
 	}
 
 	b, err := t.Open(p.width, p.height, p.dpr)
@@ -203,6 +223,95 @@ func (p *Plot) Render(t Target) (err error) {
 		return err
 	}
 	return b.Flush()
+}
+
+// chart resolves the plot into what render draws: one panel, or the grid of
+// panels a facet spec cuts it into.
+func (p *Plot) chart() (render.Chart, error) {
+	c := render.Chart{
+		Width:      p.width,
+		Height:     p.height,
+		DPR:        p.dpr,
+		Theme:      p.theme,
+		Title:      p.title,
+		XTitle:     p.xTitle,
+		YTitle:     p.yTitle,
+		X:          p.scaleX(),
+		Y:          p.scaleY(),
+		Layers:     p.layers,
+		ShowLegend: p.showLegend(),
+	}
+	if p.facet == nil {
+		return c, nil
+	}
+
+	panels, rows, cols, err := p.facet.Split(p.layers)
+	if err != nil {
+		return render.Chart{}, err
+	}
+	freeX, freeY := p.facet.FreeScales()
+	c.Rows, c.Cols = rows, cols
+	c.Layers = nil
+	for _, fp := range panels {
+		rp := render.Panel{
+			Row:        fp.Row,
+			Col:        fp.Col,
+			Strip:      fp.Strip,
+			RightStrip: fp.RightStrip,
+			Layers:     fp.Layers,
+			X:          c.X,
+			Y:          c.Y,
+			// A shared axis is written once, at the edge of the grid — which
+			// is the last panel in the column, not the last row: a wrapped
+			// facet whose final row is short would otherwise leave the
+			// panels above the gap with no labels at all. A free axis is
+			// written on every panel, because it is a different axis each
+			// time and a reader who assumed otherwise would misread every
+			// panel but one.
+			ShowX: freeX || outermost(panels, fp, below),
+			ShowY: freeY || outermost(panels, fp, leftOf),
+		}
+		if freeX {
+			if rp.X, err = freeScale(c.X); err != nil {
+				return render.Chart{}, err
+			}
+		}
+		if freeY {
+			if rp.Y, err = freeScale(c.Y); err != nil {
+				return render.Chart{}, err
+			}
+		}
+		c.Panels = append(c.Panels, rp)
+	}
+	return c, nil
+}
+
+// outermost reports whether no other panel lies past p in the given direction.
+// Those are the panels that write a shared axis.
+func outermost(panels []facet.Panel, p facet.Panel, beyond func(a, b facet.Panel) bool) bool {
+	for _, q := range panels {
+		if beyond(p, q) {
+			return false
+		}
+	}
+	return true
+}
+
+// below and leftOf are the two directions that matter. A shared X axis is
+// written by the last panel in its column — not by the bottom row, because a
+// wrapped facet whose final row is short would leave the panels above the gap
+// unlabelled. A shared Y axis is written by the first panel in its row.
+func below(a, b facet.Panel) bool  { return a.Col == b.Col && b.Row > a.Row }
+func leftOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col < a.Col }
+
+// freeScale copies a scale so that one panel's data cannot move another
+// panel's axis.
+func freeScale(s scale.Scale) (scale.Scale, error) {
+	c, ok := s.(scale.Cloner)
+	if !ok {
+		return nil, fmt.Errorf("refract: %T cannot be given to a free facet axis: it does not implement scale.Cloner", s)
+	}
+	return c.Clone(), nil
 }
 
 func (p *Plot) scaleX() scale.Scale {
@@ -234,3 +343,13 @@ func SVG(path string, opts ...svg.Option) Target { return svg.File(path, opts...
 
 // SVGWriter returns a target writing an SVG document to w.
 func SVGWriter(w io.Writer, opts ...svg.Option) Target { return svg.Writer(w, opts...) }
+
+// PDF returns a target writing a PDF document to the named file.
+//
+// Like [SVG], this is a zero-dependency path: the emitter is in backend/pdf
+// and uses nothing but the standard library. The page is one PDF point per
+// device-independent pixel, so a chart sized 800x500 is an 800x500pt page.
+func PDF(path string, opts ...pdf.Option) Target { return pdf.File(path, opts...) }
+
+// PDFWriter returns a target writing a PDF document to w.
+func PDFWriter(w io.Writer, opts ...pdf.Option) Target { return pdf.Writer(w, opts...) }

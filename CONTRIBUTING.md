@@ -9,6 +9,10 @@ This is a two-module repository:
 | `.` | `github.com/timzifer/refract` | **nothing** — the standard library only |
 | `backend/gg` | `github.com/timzifer/refract/backend/gg` | `gogpu/gg`, `x/image` |
 
+Both vector backends — `backend/svg` and `backend/pdf` — are in the core
+module, so SVG and PDF cost no dependency at all
+([ADR 0009](docs/adr/0009-pdf-backend.md)).
+
 The split is not cosmetic. A nested module is excluded from its parent's module
 graph, which is what lets `import "github.com/timzifer/refract"` pull in zero
 dependencies while the raster backend links GoGPU. CI enforces it — see
@@ -114,7 +118,18 @@ coordinate out of a backend. If it positions categories in slots, implement
 **A backend** implements `ir.Backend` and `ir.Target`. If it needs a dependency
 the core must not have, it belongs in its own nested module. Keep its contact
 with that dependency as small as you can, and say what you touched — see
-[ADR 0006](docs/adr/0006-gg-coupling-surface.md).
+[ADR 0006](docs/adr/0006-gg-coupling-surface.md). Marker outlines come from
+`internal/markers` so that a diamond is the same diamond everywhere; the gg
+backend is a separate module and cannot import it, so it carries a copy and
+says so.
+
+**A theme** is `theme.Tokens` plus `theme.Build`, not fifty literal fields.
+Register it by name if it should be reachable from a config file. Reach for
+`Theme.With` before copying the struct.
+
+**An annotation** goes in `geom/annotate.go`, takes values rather than a
+`data.Source`, and must *not* implement `geom.Faceter` — a layer with no rows is
+furniture and belongs on every panel of a facet.
 
 Anything that changes the IR or the `Backend` interface needs an ADR. So does
 anything that answers one of the open questions in
