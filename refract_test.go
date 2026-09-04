@@ -149,6 +149,123 @@ func TestGoldenTimeAxisDarkTheme(t *testing.T) {
 	golden(t, "time-dark", p)
 }
 
+func TestGoldenAreaBand(t *testing.T) {
+	xs := ramp(0, 8, 40)
+	src := refract.Float64Columns(map[string][]float64{
+		"x":  xs,
+		"lo": apply(xs, func(v float64) float64 { return math.Sin(v) - 0.4 - 0.05*v }),
+		"hi": apply(xs, func(v float64) float64 { return math.Sin(v) + 0.4 + 0.05*v }),
+		"y":  apply(xs, func(v float64) float64 { return math.Sin(v) }),
+	})
+	p := refract.New(
+		refract.Size(640, 400),
+		refract.Title("Estimate and interval"),
+		refract.Legend(false),
+	)
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.Linear(scale.Nice()))
+	p.Add(
+		geom.Area(src, geom.X("x"), geom.Y("hi"), geom.Y2("lo"),
+			geom.Color(palette.SkyBlue), geom.Width(1)),
+		geom.Line(src, geom.X("x"), geom.Y("y"), geom.Color(palette.Blue)),
+	)
+	golden(t, "area", p)
+}
+
+func TestGoldenStepChart(t *testing.T) {
+	src := refract.Float64Columns(map[string][]float64{
+		"t": {0, 1, 2, 3, 4, 5, 6, 7},
+		"n": {2, 2, 5, 4, 4, 7, 3, 3},
+	})
+	p := refract.New(
+		refract.Size(560, 340),
+		refract.Title("Workers"),
+		refract.XTitle("hour"),
+	)
+	p.X(scale.Linear())
+	p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	p.Add(geom.Step(src, geom.X("t"), geom.Y("n"), geom.Color(palette.Vermilion)))
+	golden(t, "step", p)
+}
+
+func TestGoldenLogAxis(t *testing.T) {
+	xs := ramp(0, 12, 60)
+	src := refract.Float64Columns(map[string][]float64{
+		"x": xs,
+		"y": apply(xs, func(v float64) float64 { return math.Exp(v * 0.8) }),
+	})
+	p := refract.New(
+		refract.Size(600, 400),
+		refract.Theme(theme.Dark),
+		refract.Title("Growth"),
+		refract.YTitle("requests"),
+	)
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.Log(scale.LogNice()))
+	p.Add(geom.Line(src, geom.X("x"), geom.Y("y"), geom.Color(palette.Green)))
+	golden(t, "log", p)
+}
+
+func TestGoldenSymLogAxis(t *testing.T) {
+	xs := ramp(-6, 6, 49)
+	src := refract.Float64Columns(map[string][]float64{
+		"x": xs,
+		"y": apply(xs, func(v float64) float64 { return math.Copysign(math.Expm1(math.Abs(v)), v) }),
+	})
+	p := refract.New(
+		refract.Size(600, 400),
+		refract.Title("Signed residual"),
+	)
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.SymLog(scale.SymLogThreshold(1)))
+	p.Add(geom.Line(src, geom.X("x"), geom.Y("y"), geom.Color(palette.Purple)))
+	golden(t, "symlog", p)
+}
+
+func TestGoldenCategoricalBars(t *testing.T) {
+	src := refract.NewTable().
+		String("region", []string{"north", "south", "east", "west", "central"}).
+		Float64("sales", []float64{18, 42, 31, 25, 37})
+
+	p := refract.New(
+		refract.Size(560, 360),
+		refract.Title("Sales by region"),
+		refract.YTitle("k€"),
+	)
+	p.X(scale.Ordinal())
+	p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	p.Add(geom.Bar(src, geom.X("region"), geom.Y("sales"),
+		geom.ColorBy("sales", scale.Sequential(palette.Viridis))))
+	golden(t, "categories", p)
+}
+
+func TestGoldenBoxplot(t *testing.T) {
+	groups := []string{"alpha", "beta", "gamma"}
+	var keys []string
+	var vals []float64
+	for g, name := range groups {
+		for i := range 24 {
+			// A fixed recurrence rather than math/rand, so the golden file is
+			// stable across Go releases.
+			t := float64(i) / 24
+			v := 10 + float64(g)*4 + 6*math.Sin(9*t+float64(g)) + 2*math.Sin(37*t)
+			keys, vals = append(keys, name), append(vals, v)
+		}
+		keys, vals = append(keys, name), append(vals, 30+float64(g))
+	}
+	src := refract.NewTable().String("group", keys).Float64("latency", vals)
+
+	p := refract.New(
+		refract.Size(560, 380),
+		refract.Title("Latency by cohort"),
+		refract.YTitle("ms"),
+	)
+	p.X(scale.Ordinal())
+	p.Y(scale.Linear(scale.Nice()))
+	p.Add(geom.Boxplot(src, geom.X("group"), geom.Y("latency"), geom.Color(palette.Blue)))
+	golden(t, "boxplot", p)
+}
+
 // --- behaviour -----------------------------------------------------------
 
 func TestRenderIsRepeatable(t *testing.T) {

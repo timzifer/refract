@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="380" viewBox="0 0 560 380">
+<defs>
+<clipPath id="c1"><path d="M50.332,32.8 L529.663,32.8 L529.663,348.825 L50.332,348.825 Z"/></clipPath>
+<path id="m2" d="M2.1,0 C2.1,1.16 1.16,2.1 0,2.1 C-1.16,2.1 -2.1,1.16 -2.1,0 C-2.1,-1.16 -1.16,-2.1 0,-2.1 C1.16,-2.1 2.1,-1.16 2.1,0 Z" fill="#0072b2"/>
+</defs>
+<path d="M0,0 L560,0 L560,380 L0,380 Z" fill="#ffffff"/>
+<polyline fill="none" points="50.332,348.825 529.663,348.825" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,250.067 529.663,250.067" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,151.309 529.663,151.309" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,52.552 529.663,52.552" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,348.825 529.663,348.825" stroke="#333333"/>
+<polyline fill="none" points="50.332,32.8 50.332,348.825" stroke="#333333"/>
+<polyline fill="none" points="130.221,348.825 130.221,353.825" stroke="#333333"/>
+<text x="130.221" y="357.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">alpha</text>
+<polyline fill="none" points="289.997,348.825 289.997,353.825" stroke="#333333"/>
+<text x="289.997" y="357.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">beta</text>
+<polyline fill="none" points="449.775,348.825 449.775,353.825" stroke="#333333"/>
+<text x="449.775" y="357.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">gamma</text>
+<polyline fill="none" points="45.332,348.825 50.332,348.825" stroke="#333333"/>
+<text x="41.332" y="348.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="45.332,250.067 50.332,250.067" stroke="#333333"/>
+<text x="41.332" y="250.067" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10</text>
+<polyline fill="none" points="45.332,151.309 50.332,151.309" stroke="#333333"/>
+<text x="41.332" y="151.309" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">20</text>
+<polyline fill="none" points="45.332,52.552 50.332,52.552" stroke="#333333"/>
+<text x="41.332" y="52.552" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">30</text>
+<text x="289.997" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Latency by cohort</text>
+<text x="20.616" y="190.812" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 190.812)">ms</text>
+<g clip-path="url(#c1)">
+<path d="M66.31,205.353 L194.131,205.353 L194.131,275.5 L66.31,275.5 Z" fill="#0072b2" fill-opacity="0.3"/>
+<path fill="none" d="M66.31,205.353 L194.131,205.353 L194.131,275.5 L66.31,275.5 Z" stroke="#0072b2"/>
+<polyline fill="none" points="66.31,223.052 194.131,223.052" stroke="#0072b2" stroke-width="2"/>
+<polyline fill="none" points="130.221,275.5 130.221,318.136" stroke="#0072b2"/>
+<polyline fill="none" points="98.265,318.136 162.176,318.136" stroke="#0072b2"/>
+<polyline fill="none" points="130.221,205.353 130.221,173.991" stroke="#0072b2"/>
+<polyline fill="none" points="98.265,173.991 162.176,173.991" stroke="#0072b2"/>
+<use href="#m2" x="130.221" y="52.552"/>
+<path d="M226.087,163.434 L353.908,163.434 L353.908,237.831 L226.087,237.831 Z" fill="#0072b2" fill-opacity="0.3"/>
+<path fill="none" d="M226.087,163.434 L353.908,163.434 L353.908,237.831 L226.087,237.831 Z" stroke="#0072b2"/>
+<polyline fill="none" points="226.087,180.511 353.908,180.511" stroke="#0072b2" stroke-width="2"/>
+<polyline fill="none" points="289.997,237.831 289.997,283.592" stroke="#0072b2"/>
+<polyline fill="none" points="258.042,283.592 321.953,283.592" stroke="#0072b2"/>
+<polyline fill="none" points="289.997,163.434 289.997,132.698" stroke="#0072b2"/>
+<polyline fill="none" points="258.042,132.698 321.953,132.698" stroke="#0072b2"/>
+<use href="#m2" x="289.997" y="42.676"/>
+<path d="M385.864,121.313 L513.685,121.313 L513.685,198.7 L385.864,198.7 Z" fill="#0072b2" fill-opacity="0.3"/>
+<path fill="none" d="M385.864,121.313 L513.685,121.313 L513.685,198.7 L385.864,198.7 Z" stroke="#0072b2"/>
+<polyline fill="none" points="385.864,180.677 513.685,180.677" stroke="#0072b2" stroke-width="2"/>
+<polyline fill="none" points="449.775,198.7 449.775,249.432" stroke="#0072b2"/>
+<polyline fill="none" points="417.819,249.432 481.73,249.432" stroke="#0072b2"/>
+<polyline fill="none" points="449.775,121.313 449.775,32.8" stroke="#0072b2"/>
+<polyline fill="none" points="417.819,32.8 481.73,32.8" stroke="#0072b2"/>
+</g>
+</svg>

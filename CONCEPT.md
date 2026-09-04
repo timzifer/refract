@@ -2,12 +2,13 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **pre-alpha.** Milestone **v0.1 is implemented** — see
+> Status: **pre-alpha.** Milestones **v0.1 and v0.2 are implemented** — see
 > [§14](#14-roadmap--milestones) for what that covers and the
 > [README](README.md) to use it. This document remains the working concept for
-> everything past v0.1. The API is **not** stable: every release below `v1.0.0`
+> everything past v0.2. The API is **not** stable: every release below `v1.0.0`
 > may contain breaking changes without deprecation cycles (see
-> [Versioning](#15-versioning--stability)).
+> [Versioning](#15-versioning--stability)) — v0.2 added a method to
+> `data.Source`, which is exactly the kind of break that policy exists for.
 
 > **Implementation note.** Where this document and the code disagree, the code
 > wins and this document is wrong — please fix it. Decisions that were open in
@@ -239,6 +240,9 @@ type DataSource interface {
   Apache Arrow.
 - **Missing-data policy is explicit** — `NaN`/`Inf`: interpolate, gap, or error.
   (gg is already NaN-safe at the path level, so a gap never corrupts a render.)
+  Since v0.2 the same policy covers a value the *scale* cannot place — zero on a
+  log axis, a category outside a fixed set — because from the chart's point of
+  view those are the same failure ([ADR 0008](docs/adr/0008-categorical-axes.md)).
 - **Streaming** via a `StreamSource` with a snapshot model
   ([§11](#11-concurrency--allocation)): produce on one goroutine, render a
   consistent snapshot on another.
@@ -499,13 +503,29 @@ missing-data policy per geom (gap / interpolate / error), light and dark themes
 with a colourblind-safe palette, and a generated figure gallery that CI
 re-renders and checks against the committed images.
 
-### v0.2 — Data layer & scales
+### v0.2 — Data layer & scales — **shipped**
 
-- Columnar/batch `DataSource`; zero-copy for `[]float64`.
-- Log, symlog, ordinal/categorical scales.
-- `NaN`/`Inf` policies (interpolate / gap / error).
-- Geoms: area, step, boxplot.
-- Color scales mapped onto gg's linear-space pipeline; colorblind-safe palettes.
+- Columnar/batch `DataSource`; zero-copy for `[]float64`. `StringColumn` closes
+  the interface sketched in [§7](#7-data-layer), so a table can carry categories
+  alongside numbers and times.
+- Log, symlog, ordinal/categorical scales. Log and symlog emit minor ticks; the
+  ordinal scale is a band scale, so bars and boxplots take their width from it
+  ([ADR 0008](docs/adr/0008-categorical-axes.md)).
+- `NaN`/`Inf` policies (interpolate / gap / error), extended to cover values a
+  scale cannot place — zero on a log axis is the same failure as a `NaN`, and
+  one policy answers both.
+- Geoms: area (with `Y2` for bands), step (pre/mid/post), boxplot (Tukey
+  whiskers, type-7 quartiles, outliers).
+- Color scales mapped onto gg's linear-space pipeline — ramps interpolate in
+  linear light, not in sRGB bytes — with colorblind-safe sequential (Viridis,
+  Cividis, Magma) and diverging (blue/orange, purple/green) palettes.
+- *DoD:* a chart can be built over categories, over orders of magnitude, and
+  over signed data that crosses zero, and a mark's colour can come from the
+  data. ✔
+
+Colourbars are **not** in v0.2: a layer coloured from a continuous scale
+contributes no legend entry rather than a swatch that would misrepresent it.
+Guides are v0.3.
 
 ### v0.3 — Layout, theming, PDF
 

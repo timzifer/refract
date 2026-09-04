@@ -19,11 +19,11 @@ type lineGeom struct {
 }
 
 func (g *lineGeom) Train(x, y scale.Scale) error {
-	g.s, g.err = resolve(g.src, g.cfg)
+	g.s, g.err = resolve(g.src, g.cfg, x, y)
 	if g.err != nil {
 		return g.err
 	}
-	if err := g.s.checkMissing(g.cfg); err != nil {
+	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
 	trainFinite(x, g.s.x)
@@ -46,7 +46,7 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
-	for _, seg := range segments(g.s, g.cfg.missing) {
+	for _, seg := range segments(g.s, g.s.plottable(f.X, f.Y), g.cfg.missing) {
 		pts := project(seg, f)
 		if len(pts) < 2 {
 			continue
@@ -56,7 +56,7 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 			continue
 		}
 		var p ir.Path
-		catmullRom(&p, pts, float32(clamp01(g.cfg.tension)))
+		appendCurve(&p, pts, float32(clamp01(g.cfg.tension)), true)
 		b.StrokePath(&p, stroke)
 	}
 	return nil
@@ -79,24 +79,39 @@ func (g *lineGeom) Legend(f Frame) (LegendEntry, bool) {
 // yields one segment per run of plottable rows; Interpolate yields a single
 // segment with interior holes filled in; Error has already been rejected in
 // Train.
-func segments(s series, m Missing) []series {
+//
+// ok marks the rows that can be drawn — see [series.plottable]. It is passed
+// in rather than recomputed so that every traversal of one series agrees on
+// which rows are holes.
+func segments(s series, ok []bool, m Missing) []series {
 	if m == Interpolate {
-		return []series{interpolate(s)}
+		return []series{interpolate(s, ok)}
 	}
 	var out []series
 	start := -1
 	for i := range s.x {
-		ok := finite(s.x[i]) && finite(s.y[i])
 		switch {
-		case ok && start < 0:
+		case ok[i] && start < 0:
 			start = i
-		case !ok && start >= 0:
-			out = append(out, series{x: s.x[start:i], y: s.y[start:i]})
+		case !ok[i] && start >= 0:
+			out = append(out, s.slice(start, i))
 			start = -1
 		}
 	}
 	if start >= 0 {
-		out = append(out, series{x: s.x[start:], y: s.y[start:]})
+		out = append(out, s.slice(start, len(s.x)))
+	}
+	return out
+}
+
+// slice returns the rows [lo, hi) as a series, borrowing rather than copying.
+func (s series) slice(lo, hi int) series {
+	out := series{x: s.x[lo:hi], y: s.y[lo:hi]}
+	if s.y2 != nil {
+		out.y2 = s.y2[lo:hi]
+	}
+	if s.c != nil {
+		out.c = s.c[lo:hi]
 	}
 	return out
 }
@@ -104,11 +119,11 @@ func segments(s series, m Missing) []series {
 // interpolate fills interior holes by linear interpolation between the nearest
 // plottable neighbours. Leading and trailing holes are dropped: there is
 // nothing to interpolate between.
-func interpolate(s series) series {
+func interpolate(s series, ok []bool) series {
 	n := len(s.x)
 	first, last := -1, -1
 	for i := 0; i < n; i++ {
-		if finite(s.x[i]) && finite(s.y[i]) {
+		if ok[i] {
 			if first < 0 {
 				first = i
 			}
@@ -118,30 +133,48 @@ func interpolate(s series) series {
 	if first < 0 {
 		return series{}
 	}
-	xs := make([]float64, 0, last-first+1)
-	ys := make([]float64, 0, last-first+1)
+	out := series{
+		x: make([]float64, 0, last-first+1),
+		y: make([]float64, 0, last-first+1),
+	}
+	if s.y2 != nil {
+		out.y2 = make([]float64, 0, last-first+1)
+	}
 	prev := first
 	for i := first; i <= last; i++ {
-		if finite(s.x[i]) && finite(s.y[i]) {
-			xs = append(xs, s.x[i])
-			ys = append(ys, s.y[i])
+		if ok[i] {
+			out.append(s, i)
 			prev = i
 			continue
 		}
 		// Find the next plottable row and interpolate across the hole.
 		next := i + 1
-		for next <= last && !(finite(s.x[next]) && finite(s.y[next])) {
+		for next <= last && !ok[next] {
 			next++
 		}
 		if next > last {
 			break
 		}
 		t := float64(i-prev) / float64(next-prev)
-		xs = append(xs, s.x[prev]+t*(s.x[next]-s.x[prev]))
-		ys = append(ys, s.y[prev]+t*(s.y[next]-s.y[prev]))
+		out.x = append(out.x, lerp(s.x[prev], s.x[next], t))
+		out.y = append(out.y, lerp(s.y[prev], s.y[next], t))
+		if s.y2 != nil {
+			out.y2 = append(out.y2, lerp(s.y2[prev], s.y2[next], t))
+		}
 	}
-	return series{x: xs, y: ys}
+	return out
 }
+
+// append copies row i of src onto s.
+func (s *series) append(src series, i int) {
+	s.x = append(s.x, src.x[i])
+	s.y = append(s.y, src.y[i])
+	if s.y2 != nil {
+		s.y2 = append(s.y2, src.y2[i])
+	}
+}
+
+func lerp(a, b, t float64) float64 { return a + (b-a)*t }
 
 // project maps a segment into device space.
 func project(s series, f Frame) []ir.Point {
@@ -152,7 +185,41 @@ func project(s series, f Frame) []ir.Point {
 	return pts
 }
 
-// catmullRom appends a Catmull-Rom spline through pts as cubic Béziers.
+// projectY2 maps a segment's second bound into device space, in reverse order
+// so that appending it to the forward pass closes a band.
+func projectY2(s series, f Frame) []ir.Point {
+	pts := make([]ir.Point, 0, len(s.x))
+	for i := len(s.x) - 1; i >= 0; i-- {
+		pts = append(pts, ir.Point{X: f.X.Map(s.x[i]), Y: f.Y.Map(s.y2[i])})
+	}
+	return pts
+}
+
+// appendCurve appends pts to p, straight when tension is zero and
+// Catmull-Rom-smoothed otherwise, starting a new subpath when move is set.
+//
+// Continuing an existing subpath is what lets an area append its lower edge to
+// its upper one and get a single closed shape rather than two.
+func appendCurve(p *ir.Path, pts []ir.Point, tension float32, move bool) {
+	if len(pts) == 0 {
+		return
+	}
+	if move {
+		p.MoveTo(pts[0].X, pts[0].Y)
+	} else {
+		p.LineTo(pts[0].X, pts[0].Y)
+	}
+	if tension <= 0 {
+		for _, q := range pts[1:] {
+			p.LineTo(q.X, q.Y)
+		}
+		return
+	}
+	catmullRom(p, pts, tension)
+}
+
+// catmullRom appends a Catmull-Rom spline through pts as cubic Béziers,
+// continuing from p's current point — which must already be pts[0].
 //
 // tension in (0, 1] scales the tangents: 1 gives the classic uniform
 // Catmull-Rom curve, smaller values pull the curve back towards the polyline.
@@ -163,7 +230,6 @@ func catmullRom(p *ir.Path, pts []ir.Point, tension float32) {
 	if n < 2 {
 		return
 	}
-	p.MoveTo(pts[0].X, pts[0].Y)
 	if n == 2 {
 		p.LineTo(pts[1].X, pts[1].Y)
 		return

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<defs>
+<clipPath id="c1"><path d="M68.68,32.8 L577.297,32.8 L577.297,368.825 L68.68,368.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L600,0 L600,400 L0,400 Z" fill="#14161a"/>
+<polyline fill="none" points="68.68,32.8 68.68,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="174.642,32.8 174.642,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="280.604,32.8 280.604,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="386.566,32.8 386.566,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="492.527,32.8 492.527,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="68.68,368.825 577.297,368.825" stroke="#2a2e35"/>
+<polyline fill="none" points="68.68,234.415 577.297,234.415" stroke="#2a2e35"/>
+<polyline fill="none" points="68.68,100.005 577.297,100.005" stroke="#2a2e35"/>
+<polyline fill="none" points="68.68,368.825 577.297,368.825" stroke="#9a9ea6"/>
+<polyline fill="none" points="68.68,32.8 68.68,368.825" stroke="#9a9ea6"/>
+<polyline fill="none" points="68.68,368.825 68.68,373.825" stroke="#9a9ea6"/>
+<text x="68.68" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#a0a4ab">0.0</text>
+<polyline fill="none" points="174.642,368.825 174.642,373.825" stroke="#9a9ea6"/>
+<text x="174.642" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#a0a4ab">2.5</text>
+<polyline fill="none" points="280.604,368.825 280.604,373.825" stroke="#9a9ea6"/>
+<text x="280.604" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#a0a4ab">5.0</text>
+<polyline fill="none" points="386.566,368.825 386.566,373.825" stroke="#9a9ea6"/>
+<text x="386.566" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#a0a4ab">7.5</text>
+<polyline fill="none" points="492.527,368.825 492.527,373.825" stroke="#9a9ea6"/>
+<text x="492.527" y="377.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#a0a4ab">10.0</text>
+<polyline fill="none" points="63.68,368.825 68.68,368.825" stroke="#9a9ea6"/>
+<text x="59.68" y="368.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#a0a4ab">1</text>
+<polyline fill="none" points="65.93,301.62 68.68,301.62" stroke="#9a9ea6"/>
+<polyline fill="none" points="63.68,234.415 68.68,234.415" stroke="#9a9ea6"/>
+<text x="59.68" y="234.415" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#a0a4ab">100</text>
+<polyline fill="none" points="65.93,167.21 68.68,167.21" stroke="#9a9ea6"/>
+<polyline fill="none" points="63.68,100.005 68.68,100.005" stroke="#9a9ea6"/>
+<text x="59.68" y="100.005" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#a0a4ab">10000</text>
+<polyline fill="none" points="65.93,32.8 68.68,32.8" stroke="#9a9ea6"/>
+<text x="322.988" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#f2f3f5">Growth</text>
+<text x="20.616" y="200.812" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#c8cbd0" transform="rotate(-90 20.616 200.812)">requests</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="68.68,368.825 77.301,364.076 85.921,359.327 94.542,354.578 103.163,349.829 111.783,345.08 120.404,340.331 129.024,335.582 137.645,330.833 146.266,326.084 154.886,321.335 163.507,316.586 172.128,311.837 180.748,307.088 189.369,302.339 197.989,297.59 206.61,292.84 215.231,288.091 223.851,283.342 232.472,278.593 241.093,273.844 249.713,269.095 258.334,264.346 266.954,259.597 275.575,254.848 284.196,250.099 292.816,245.35 301.437,240.601 310.058,235.852 318.678,231.103 327.299,226.354 335.919,221.605 344.54,216.856 353.161,212.107 361.781,207.358 370.402,202.609 379.023,197.86 387.643,193.111 396.264,188.362 404.884,183.613 413.505,178.864 422.126,174.115 430.746,169.366 439.367,164.617 447.988,159.868 456.608,155.119 465.229,150.37 473.849,145.62 482.47,140.871 491.091,136.122 499.711,131.373 508.332,126.624 516.953,121.875 525.573,117.126 534.194,112.377 542.815,107.628 551.435,102.879 560.056,98.13 568.676,93.381 577.297,88.632" stroke="#009e73" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

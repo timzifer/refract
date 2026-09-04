@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="340" viewBox="0 0 560 340">
+<defs>
+<clipPath id="c1"><path d="M27.116,32.8 L544.942,32.8 L544.942,291.725 L27.116,291.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L560,0 L560,340 L0,340 Z" fill="#ffffff"/>
+<polyline fill="none" points="27.116,32.8 27.116,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="101.091,32.8 101.091,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="175.066,32.8 175.066,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="249.041,32.8 249.041,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="323.017,32.8 323.017,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="396.992,32.8 396.992,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="470.967,32.8 470.967,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="544.942,32.8 544.942,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,291.725 544.942,291.725" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,226.994 544.942,226.994" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,162.262 544.942,162.262" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,97.531 544.942,97.531" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,32.8 544.942,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="27.116,291.725 544.942,291.725" stroke="#333333"/>
+<polyline fill="none" points="27.116,32.8 27.116,291.725" stroke="#333333"/>
+<polyline fill="none" points="27.116,291.725 27.116,296.725" stroke="#333333"/>
+<text x="27.116" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="101.091,291.725 101.091,296.725" stroke="#333333"/>
+<text x="101.091" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1</text>
+<polyline fill="none" points="175.066,291.725 175.066,296.725" stroke="#333333"/>
+<text x="175.066" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="249.041,291.725 249.041,296.725" stroke="#333333"/>
+<text x="249.041" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">3</text>
+<polyline fill="none" points="323.017,291.725 323.017,296.725" stroke="#333333"/>
+<text x="323.017" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="396.992,291.725 396.992,296.725" stroke="#333333"/>
+<text x="396.992" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">5</text>
+<polyline fill="none" points="470.967,291.725 470.967,296.725" stroke="#333333"/>
+<text x="470.967" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">6</text>
+<polyline fill="none" points="544.942,291.725 544.942,296.725" stroke="#333333"/>
+<text x="544.942" y="300.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">7</text>
+<polyline fill="none" points="22.116,291.725 27.116,291.725" stroke="#333333"/>
+<text x="18.116" y="291.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="22.116,226.994 27.116,226.994" stroke="#333333"/>
+<text x="18.116" y="226.994" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">2</text>
+<polyline fill="none" points="22.116,162.262 27.116,162.262" stroke="#333333"/>
+<text x="18.116" y="162.262" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">4</text>
+<polyline fill="none" points="22.116,97.531 27.116,97.531" stroke="#333333"/>
+<text x="18.116" y="97.531" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">6</text>
+<polyline fill="none" points="22.116,32.8 27.116,32.8" stroke="#333333"/>
+<text x="18.116" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">8</text>
+<text x="286.029" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Workers</text>
+<text x="286.029" y="325.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">hour</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="27.116,226.994 101.091,226.994 101.091,226.994 175.066,226.994 175.066,129.897 249.041,129.897 249.041,162.262 323.017,162.262 323.017,162.262 396.992,162.262 396.992,65.166 470.967,65.166 470.967,194.628 544.942,194.628 544.942,194.628" stroke="#d55e00" stroke-width="1.75"/>
+</g>
+</svg>

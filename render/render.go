@@ -77,7 +77,7 @@ func Draw(b ir.Backend, c Chart) error {
 
 	// 4. Paint.
 	drawBackground(b, canvas, lay.Plot, th)
-	drawGrid(b, lay.Plot, th, xTicks, yTicks)
+	drawGrid(b, lay.Plot, th, c, xTicks, yTicks)
 	drawAxes(b, lay, th, xTicks, yTicks)
 	drawTitles(b, lay, th, c)
 
@@ -145,7 +145,7 @@ func drawBackground(b ir.Backend, canvas, plot ir.Rect, th theme.Theme) {
 	}
 }
 
-func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, xTicks, yTicks []scale.Tick) {
+func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, c Chart, xTicks, yTicks []scale.Tick) {
 	if plot.Empty() {
 		return
 	}
@@ -153,23 +153,49 @@ func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, xTicks, yTicks []scale
 	if !stroke.Visible() {
 		return
 	}
-	if th.ShowGridX {
+	// Minor ticks get a tick mark but no grid line. A log axis emits eight of
+	// them per decade; drawing a grid line for each would turn the plot area
+	// into a hatch and bury the data it is there to support.
+	if th.ShowGridX && !banded(c.X) {
 		for _, t := range xTicks {
-			if !inRange(t.Pos, plot.Min.X, plot.Max.X) {
+			if t.Minor || !inRange(t.Pos, plot.Min.X, plot.Max.X) {
 				continue
 			}
 			b.Polyline([]ir.Point{{X: t.Pos, Y: plot.Min.Y}, {X: t.Pos, Y: plot.Max.Y}}, stroke)
 		}
 	}
-	if th.ShowGridY {
+	if th.ShowGridY && !banded(c.Y) {
 		for _, t := range yTicks {
-			if !inRange(t.Pos, plot.Min.Y, plot.Max.Y) {
+			if t.Minor || !inRange(t.Pos, plot.Min.Y, plot.Max.Y) {
 				continue
 			}
 			b.Polyline([]ir.Point{{X: plot.Min.X, Y: t.Pos}, {X: plot.Max.X, Y: t.Pos}}, stroke)
 		}
 	}
 }
+
+// banded reports whether an axis positions categories in slots.
+//
+// A band scale's ticks sit at the centre of each slot, which is where the mark
+// is — so a grid line there is drawn straight through the bar or box it is
+// supposed to help read. The grid is a reference for a continuous quantity;
+// a categorical axis has no continuous quantity to reference.
+func banded(s scale.Scale) bool {
+	_, ok := s.(scale.Band)
+	return ok
+}
+
+// tickLength is how far a tick mark reaches out of the axis. A minor tick is
+// drawn shorter so that the labelled ticks stay the ones the eye lands on.
+func tickLength(th theme.Theme, t scale.Tick) float32 {
+	if t.Minor {
+		return th.TickLength * minorTickScale
+	}
+	return th.TickLength
+}
+
+// minorTickScale is how long a minor tick is relative to a major one.
+const minorTickScale = 0.55
 
 func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []scale.Tick) {
 	plot := lay.Plot
@@ -193,10 +219,10 @@ func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []
 		if !inRange(t.Pos, plot.Min.X, plot.Max.X) {
 			continue
 		}
-		if axis.Visible() && th.TickLength > 0 {
+		if l := tickLength(th, t); axis.Visible() && l > 0 {
 			b.Polyline([]ir.Point{
 				{X: t.Pos, Y: plot.Max.Y},
-				{X: t.Pos, Y: plot.Max.Y + th.TickLength},
+				{X: t.Pos, Y: plot.Max.Y + l},
 			}, axis)
 		}
 		if t.Label == "" || !keep[i] {
@@ -218,9 +244,9 @@ func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []
 		if !inRange(t.Pos, plot.Min.Y, plot.Max.Y) {
 			continue
 		}
-		if axis.Visible() && th.TickLength > 0 {
+		if l := tickLength(th, t); axis.Visible() && l > 0 {
 			b.Polyline([]ir.Point{
-				{X: plot.Min.X - th.TickLength, Y: t.Pos},
+				{X: plot.Min.X - l, Y: t.Pos},
 				{X: plot.Min.X, Y: t.Pos},
 			}, axis)
 		}

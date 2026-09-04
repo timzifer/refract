@@ -52,7 +52,7 @@ they match the code.
 
 **`backend/gg` must not import `gg/gpu`.** Importing it activates the GPU tier,
 pulls `wgpu` and `goffi` into the build, and makes CI need graphics hardware.
-The CPU rasterizer is the supported path in v0.1 —
+The CPU rasterizer is the supported path —
 [ADR 0006](docs/adr/0006-gg-coupling-surface.md).
 
 **gg is pinned exactly.** Upgrading it is a deliberate change with its own
@@ -60,7 +60,26 @@ commit, not a side effect of `go get -u`.
 
 **Scales snap their endpoints.** `Map` returns the exact range bounds for the
 exact domain bounds. Without that, a tick on the plot edge lands a float32 ulp
-outside it and gets culled. There is a test; do not "simplify" it away.
+outside it and gets culled. There is a test; do not "simplify" it away. Every
+scale does this, including the ones added in v0.2.
+
+**Colour ramps interpolate in linear light.** `palette.Lerp` decodes sRGB,
+blends, and re-encodes. Averaging the encoded bytes instead is about 20% too
+dark at the midpoint, which shows up as a band across a gradient. gg composites
+in linear space for the same reason. There is a test that pins the midpoint of
+black-to-white at 188, not 128.
+
+**A geom must not assume a scale accepts every finite value.** A log scale has
+no position for zero and returns NaN from `Map`. Geoms ask `scale.Definite`
+through `geom.defined` and treat such a row as missing, so a NaN coordinate
+never reaches a backend — [ADR 0008](docs/adr/0008-categorical-axes.md). Adding
+a geom means computing `series.plottable` once and using it, not re-testing
+`finite` per traversal: the traversals have to agree about where the holes are.
+
+**Per-mark colour batches; it does not widen the IR.** `geom.groupByColor`
+emits one drawing call per distinct colour. Adding a per-vertex colour channel
+to `ir.Backend` is the thing that record exists to refuse —
+[ADR 0007](docs/adr/0007-per-mark-colour.md).
 
 ## Open questions
 
@@ -73,7 +92,12 @@ Do not settle them in passing; they need their own ADR.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. v0.1 deliberately omits faceting, PDF, log
-and ordinal scales, decimation, the JSON spec, interactivity and GPU. Adding a
-stub for one of them is not progress towards it — the seams exist, that is
-enough.
+project is doing and in what order. Through v0.2 the project deliberately omits
+faceting, constraint layout, PDF, colourbars and other guides, decimation,
+Arrow, the JSON spec, interactivity and GPU. Adding a stub for one of them is
+not progress towards it — the seams exist, that is enough.
+
+The colourbar is the one worth naming, because its absence is visible: a layer
+using `geom.ColorBy` contributes **no** legend entry. That is deliberate. A
+single swatch cannot represent a continuous ramp, and saying nothing is better
+than saying something false. Guides are v0.3.

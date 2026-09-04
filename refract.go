@@ -25,6 +25,11 @@
 //
 //	err := p.Render(refract.SVG("signal.svg"))
 //
+// Scales cover linear, time, log, symlog and ordinal/categorical axes; geoms
+// cover lines, scatters, bars, areas, steps and boxplots. A mark's colour can
+// come from the data through [scale.Sequential] or [scale.Diverging] and
+// [geom.ColorBy].
+//
 // # Status
 //
 // Pre-alpha. Every release below v1.0.0 may contain breaking changes without

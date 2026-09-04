@@ -16,6 +16,8 @@ depends on.
 | [0004](0004-svg-source-of-truth.md) | The built-in emitter is the only SVG path in v0.1 | Accepted | §17.2 |
 | [0005](0005-go-version.md) | Go 1.25 is the minimum | Accepted | §17.6 |
 | [0006](0006-gg-coupling-surface.md) | How much of gg the adapter is allowed to touch | Accepted | §17.1 |
+| [0007](0007-per-mark-colour.md) | Colour varies per mark without changing the IR | Accepted | — |
+| [0008](0008-categorical-axes.md) | Categorical axes ride the numeric `Scale` interface | Accepted | — |
 
 Still open, deliberately: **§17.3** (how faithful the JSON spec is to Vega-Lite)
 and **§17.7** (the third-party geom and backend extension API). Both belong to

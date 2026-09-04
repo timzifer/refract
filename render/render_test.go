@@ -231,3 +231,94 @@ func TestScalesEndUpMappedToThePlotArea(t *testing.T) {
 		t.Errorf("Y domain maximum maps to %v, want the plot top %v", got, plot.Min.Y)
 	}
 }
+
+// --- v0.2 axis behaviour -------------------------------------------------
+
+// gridLines counts the polylines drawn in the grid's own style. The grid and
+// the axis are different colours in both shipped themes, which is what lets a
+// test tell a grid line from a tick mark without measuring either.
+func gridLines(rec *irtest.Recorder, th theme.Theme, horizontal bool) int {
+	n := 0
+	for _, c := range rec.Filter("Polyline") {
+		if c.Stroke.Color != th.GridColor || len(c.Points) != 2 {
+			continue
+		}
+		if (c.Points[0].Y == c.Points[1].Y) == horizontal {
+			n++
+		}
+	}
+	return n
+}
+
+func TestMinorTicksGetAMarkButNoGridLine(t *testing.T) {
+	src := data.Float64Columns(map[string][]float64{"x": {1, 2, 3}, "y": {1, 100, 10000}})
+	c := chart(geom.Line(src, geom.X("x"), geom.Y("y")))
+	c.Y = scale.Log(scale.LogNice())
+	rec := draw(t, c)
+
+	minors := 0
+	for _, tk := range c.Y.Ticks(theme.Light.TickCountHintY) {
+		if tk.Minor {
+			minors++
+		}
+	}
+	if minors == 0 {
+		t.Fatal("the log axis produced no minor ticks, so this test proves nothing")
+	}
+	// Five decades, so every labelled Y tick contributes one horizontal grid
+	// line; the subdivisions must contribute none.
+	majors := len(c.Y.Ticks(theme.Light.TickCountHintY)) - minors
+	horizontal := gridLines(rec, theme.Light, true)
+	if horizontal != majors {
+		t.Errorf("got %d horizontal grid lines for %d labelled ticks and %d subdivisions; "+
+			"a subdivision must not draw one", horizontal, majors, minors)
+	}
+}
+
+func TestMinorTickMarksAreShorterThanMajorOnes(t *testing.T) {
+	src := data.Float64Columns(map[string][]float64{"x": {1, 2, 3}, "y": {1, 5, 30}})
+	c := chart(geom.Line(src, geom.X("x"), geom.Y("y")))
+	c.Y = scale.Log(scale.LogNice())
+	rec := draw(t, c)
+
+	var lengths []float64
+	for _, call := range rec.Filter("Polyline") {
+		if call.Stroke.Color != theme.Light.AxisColor || len(call.Points) != 2 {
+			continue
+		}
+		if call.Points[0].Y != call.Points[1].Y {
+			continue
+		}
+		if d := math.Abs(float64(call.Points[1].X - call.Points[0].X)); d > 0 && d <= float64(theme.Light.TickLength) {
+			lengths = append(lengths, d)
+		}
+	}
+	if len(lengths) < 2 {
+		t.Fatalf("expected both major and minor tick marks, got %v", lengths)
+	}
+	if slices.Max(lengths) == slices.Min(lengths) {
+		t.Error("minor ticks are drawn the same length as major ones; the labelled ticks must stand out")
+	}
+}
+
+func TestABandAxisDrawsNoGridLinesThroughItsMarks(t *testing.T) {
+	tbl := data.NewTable().
+		String("k", []string{"a", "b", "c"}).
+		Float64("v", []float64{1, 2, 3})
+
+	c := chart(geom.Bar(tbl, geom.X("k"), geom.Y("v")))
+	c.X = scale.Ordinal()
+	rec := draw(t, c)
+
+	if n := gridLines(rec, theme.Light, false); n != 0 {
+		t.Errorf("a categorical axis drew %d vertical grid lines; each one runs through a bar", n)
+	}
+	// The Y axis is still continuous, so its grid must survive — the rule is
+	// about band scales, not about charts that happen to have categories.
+	if n := gridLines(rec, theme.Light, true); n == 0 {
+		t.Error("the continuous Y grid was suppressed too")
+	}
+	if n := gridLines(draw(t, chart(line())), theme.Light, false); n == 0 {
+		t.Fatal("a continuous X axis drew no grid either, so this test proves nothing")
+	}
+}

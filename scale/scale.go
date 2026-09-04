@@ -54,6 +54,44 @@ type Scale interface {
 	Ticks(want int) []Tick
 }
 
+// Definite is implemented by scales whose domain excludes some finite values.
+// A log scale cannot place zero or a negative number anywhere on an axis, and
+// [Scale.Map] returns NaN for one.
+//
+// Geoms consult it so that such a value is treated as missing — subject to the
+// layer's own missing-data policy — rather than being handed to a backend as a
+// NaN coordinate. A scale that does not implement Definite accepts every finite
+// value.
+type Definite interface {
+	// Defined reports whether v has a position on this scale.
+	Defined(v float64) bool
+}
+
+// Categorical is implemented by scales that position named categories rather
+// than numbers, so that a geom can map a string column onto an axis.
+//
+// The numeric domain of such a scale is the category index: Encode turns a
+// label into the index that [Scale.Map] positions, which is what lets one
+// Scale interface serve both continuous and categorical axes.
+type Categorical interface {
+	// Encode returns the domain value for a category label, registering the
+	// label if the scale has not seen it before.
+	Encode(label string) float64
+
+	// Labels returns the categories in axis order.
+	Labels() []string
+}
+
+// Band is implemented by scales that give each category a slot of finite
+// width, which is what a bar or a boxplot needs in order to size itself.
+//
+// A geom that finds a Band on its axis takes the width from the scale instead
+// of guessing one from the spacing of the data.
+type Band interface {
+	// Bandwidth returns the width of one slot in device units, after padding.
+	Bandwidth() float32
+}
+
 // domainRange is the state every scale in this package shares.
 type domainRange struct {
 	dmin, dmax float64

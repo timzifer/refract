@@ -90,3 +90,51 @@ func TestTableRejectsDuplicateAndRaggedColumns(t *testing.T) {
 		data.NewTable().Float64("a", []float64{1, 2}).Float64("b", []float64{1})
 	})
 }
+
+func TestTableCarriesStringColumns(t *testing.T) {
+	tbl := data.NewTable().
+		String("region", []string{"north", "south", "north"}).
+		Float64("sales", []float64{3, 4, 5})
+
+	got, ok := tbl.StringColumn("region")
+	if !ok {
+		t.Fatal("StringColumn(region) reported the column missing")
+	}
+	if len(got) != 3 || got[1] != "south" {
+		t.Errorf("StringColumn(region) = %v", got)
+	}
+	if _, ok := tbl.Float64Column("region"); ok {
+		t.Error("a string column must not answer to Float64Column")
+	}
+	if _, ok := tbl.StringColumn("sales"); ok {
+		t.Error("a numeric column must not answer to StringColumn")
+	}
+	if tbl.Len() != 3 {
+		t.Errorf("Len() = %d, want 3", tbl.Len())
+	}
+}
+
+func TestTableStringColumnIsBorrowed(t *testing.T) {
+	src := []string{"a", "b"}
+	tbl := data.NewTable().String("k", src)
+	src[0] = "z"
+	if got, _ := tbl.StringColumn("k"); got[0] != "z" {
+		t.Error("the slice was copied; the data layer borrows")
+	}
+}
+
+func TestTableRejectsARaggedStringColumn(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("want a panic: a ragged table is a programming error")
+		}
+	}()
+	data.NewTable().Float64("a", []float64{1, 2}).String("b", []string{"x"})
+}
+
+func TestFloat64SourceHasNoStringColumns(t *testing.T) {
+	s := data.Float64Columns(map[string][]float64{"x": {1}})
+	if _, ok := s.StringColumn("x"); ok {
+		t.Error("a numeric source must report no string columns")
+	}
+}
