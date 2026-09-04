@@ -148,6 +148,16 @@ coordinate out of a backend. If it positions categories in slots, implement
 `scale.Categorical` and `scale.Band`; see
 [ADR 0008](docs/adr/0008-categorical-axes.md).
 
+**A coordinate system** goes in `coord/` and implements `coord.Coord`. It maps a
+pair of scaled positions into device space and reports the geometry of the
+furniture that belongs to it — it does not draw: `render` is still the only
+package that knows drawing order, so a coord hands back paths and label anchors
+and `render` strokes them. `Cartesian` is the identity and the default, so a geom
+that goes through the stage draws exactly what it drew before, and the golden
+files are what proves it. Give every per-point method a batch form and use it on
+the hot path; a per-row interface call is how `scale.Scale.Train` once allocated a
+million times. See [ADR 0018](docs/adr/0018-coordinate-systems.md).
+
 **A backend** implements `ir.Backend` and `ir.Target`. Whatever a drawing call
 hands it — a point slice, a path, an image — is lent for that call only: refract
 draws from pooled buffers, so a backend that keeps one will render the next

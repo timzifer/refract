@@ -262,8 +262,13 @@ The part refract actually builds. Building blocks:
 - **Scales** — `Linear`, `Log`, `SymLog`, `Time`, `Ordinal`/categorical, plus
   color scales (sequential, diverging, qualitative). Scales own data→visual
   mapping and tick generation.
-- **Coordinate systems** — Cartesian for v1; the transform is a **pluggable stage**
-  so polar/geographic slot in later without touching geoms.
+- **Coordinate systems** — Cartesian and polar, behind a genuinely pluggable
+  stage: a scale keeps mapping a value into an interval, and the coord decides
+  what the interval means and turns a pair of them into a device point.
+  `Cartesian` is the identity, so the stage costs an existing geom nothing and
+  the golden files prove it ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
+  Geographic projections are a wider seam — they transform every point with no
+  linear interval underneath — and stay beyond v1.0.
 - **Geoms** — `Line`, `Scatter`, `Bar`, `Area`, `Step`, `Boxplot`, … Geoms know
   *what* their shape is, never *how* it's rendered.
 - **Stats / transforms** — `Bin` (histogram), `Density` (KDE), `Smooth`
@@ -697,6 +702,79 @@ and the margins, which is most of the canvas.
 - Accessibility: redundant encoding (patterns/dashes), SVG `title`/`desc`/ARIA,
   data-table fallback.
 
+### v0.7 — Marks, groups and adjustments
+
+The plumbing half the catalogue is waiting on. Nothing here is a coordinate
+system and nothing here is a stat; it is the four pieces that most missing
+chart types share. See [docs/chart-types.md](docs/chart-types.md) for the full
+list and what each form costs.
+
+- A data-driven rectangle mark. `Bar` grows from a baseline and `Region` takes
+  four literals, so no mark occupies an arbitrary box per row. `geom.Rect`, a
+  `geom.X2` beside the existing `geom.Y2`, and a per-row baseline turn heatmap,
+  gantt, candlestick, waterfall, bullet, waffle and calendar into recipes rather
+  than into seven geoms.
+- Groups within one layer, and a discrete colour scale to paint them. A long
+  table with a series column is one layer, not N — which is what streamgraph and
+  marimekko need anyway, and what stacking is defined over
+  ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
+- A layer may contribute many legend entries, through an optional interface
+  rather than a wider `Geom`. §17.7 freezes that interface at v1.0, and a pie
+  with N slices in one layer must not be the reason it freezes badly.
+- Position adjustments: stack, dodge, fill, and the silhouette and wiggle
+  offsets a streamgraph is made of. Derived in `Train`, because the axis has to
+  describe the totals; drawn in `Build`, because that is where geometry lives
+  ([ADR 0019](docs/adr/0019-position-adjustments.md)).
+- *DoD:* one layer over a long table draws N coloured series and the legend
+  names all N; a stacked bar's axis reaches the stacked total and each segment
+  is separately hittable and separately attributable to its row; a heatmap and
+  a gantt chart render from the public API; every new mark and option survives
+  the JSON round trip, including the `("rect", "")` collision between a
+  data-driven rect and the region annotation; the allocation gates are
+  unchanged.
+
+### v0.8 — Coordinates
+
+- `coord/`, at last: the stage [§8](#8-model-layer-gog-lite) has promised since
+  v0.1. A scale still maps into an interval; a coord decides what the interval
+  means. `Cartesian` is the identity and the default, so every existing geom
+  draws what it always drew and the golden files are the proof
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
+- `Polar`, and with it pie, donut, radar/spider, rose/coxcomb, wind rose and
+  gauge. A pie is a stacked bar with θ from the Y axis; a radar is a line over
+  an ordinal angular axis. Neither is a new geom, which is the point of having
+  built v0.7 first.
+- Arcs are cubics. The IR gains nothing: ADR 0002 froze the primitive set on the
+  claim that every curve a chart needs is expressible as cubics, and a
+  coordinate system is the first serious test of it.
+- Polar furniture — concentric rings instead of horizontal grid lines, tick
+  labels around the ring instead of along an edge. The coord reports the
+  geometry; `render` still strokes it, because `render` is the only package that
+  knows drawing order.
+- *DoD:* the same `geom.Bar` layer draws a bar chart in `coord.Cartesian` and a
+  pie in `coord.Polar`; **every existing golden file is unchanged**; a pointer
+  over a slice names its category and its row rather than a pixel; a donut's
+  hole is an explicit annulus; the spec round-trips the coord; the allocation
+  gates are unchanged and the per-point call has a batch form so that they stay
+  that way.
+
+### v0.9 — Distributions, density and size
+
+- The stats [§8](#8-model-layer-gog-lite) has promised since v0.1 and `stat/`
+  has never carried: a 1-D `Bin`, KDE with a bandwidth rule, hexbin, ECDF and
+  loess smoothing. Each a pure function with an `Append` form, each with a
+  determinism test — a reduction that reached for `math/rand` would make a
+  parallel render stop being byte-identical to a serial one.
+- The charts they carry: histogram, violin, hexbin, ridgeline, beeswarm, trend
+  lines.
+- A size channel, and the bubble chart. Mapped by **area**, not radius, and
+  guided by a third guide kind — which is the moment the guide column in
+  `layout` is generalised once rather than extended twice.
+- *DoD:* every stat is a pure function of its input under test; violin and
+  ridgeline compose with v0.7's groups; a bubble chart's size key sits beside a
+  legend and a colourbar without overlap, and doubling a value multiplies the
+  diameter by the square root of two, under test.
+
 ### v1.0 — Stable & complete enough
 
 - API freeze; semver; stable registration/extension model for third-party geoms
@@ -708,8 +786,18 @@ and the margins, which is most of the canvas.
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
-- More coordinate systems: polar, geographic/maps.
-- More stats: hexbin, contour, violin, KDE, regression smoothing.
+- More coordinate systems: geographic and map projections. Polar arrives in v0.8
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam
+  — it transforms every point with no linear interval underneath it — and is
+  argued on its own evidence rather than smuggled in as a third `Coord`.
+- Relational and hierarchical layouts: sankey/alluvial, chord, arc diagrams,
+  treemap, sunburst. The one family in
+  [docs/chart-types.md](docs/chart-types.md) that shares no machinery with the
+  rest — its own data shape, its own solver, its own legend, its own
+  hit-testing — and therefore the only one that moves without cost. The data
+  layer does not change to accommodate it: an edge list is two string columns
+  and a value column, which `data.Source` already returns.
+- More stats: contour, and whatever v0.9 left.
 - Animations / transitions (gg retained-scene + damage tracking make this cheap).
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.
@@ -737,9 +825,10 @@ and the margins, which is most of the canvas.
 Dependency boundaries enforce the "lean by default" promise: the core depends on
 nothing at all, and GoGPU enters only through the nested `backend/gg` module.
 
-Every package below exists except `coord/`, which is still the pluggable stage
-the Cartesian mapping is hard-coded into; the milestone each arrived in is
-marked.
+Every package below exists; the milestone each arrived in is marked. `coord/`
+was the last one outstanding — the pluggable stage the Cartesian mapping used to
+be hard-coded into — and [ADR 0018](docs/adr/0018-coordinate-systems.md) settles
+what it is.
 
 ```
 refract/                     # core module — pure Go, STDLIB ONLY (no requires)
@@ -749,7 +838,7 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
   stat/                      # LTTB, min/max, density binning              (v0.4)
                              # (smooth and aggregate are still to come)
-  coord/                     # cartesian (pluggable stage)
+  coord/                     # cartesian + polar (the pluggable stage)   (v0.8)
   layout/                    # panel-grid constraint solver               (v0.3)
   render/                    # model -> IR lowering, + Observer           (v0.1)
   facet/                     # faceting (wrap/grid)                       (v0.3)
@@ -823,7 +912,16 @@ remains genuinely open, and is marked so.
    → [ADR 0005](docs/adr/0005-go-version.md)
 7. **Geom/backend extension API** — the interfaces third parties implement.
    **Still open**; it freezes at v1.0, and freezing it well is what makes the
-   "last plotting library" claim survivable.
+   "last plotting library" claim survivable. What that costs in scheduling is
+   now explicit: `geom.Frame` and the `Geom` interface are part of what freezes,
+   so anything that has to widen them has to land first. The coordinate stage is
+   one such thing — a `Frame` frozen as a rectangle with an X scale and a Y
+   scale is a library that is Cartesian forever
+   ([ADR 0018](docs/adr/0018-coordinate-systems.md)) — and a multi-entry legend
+   is deliberately *not*, because an optional interface widens nothing
+   ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)). That
+   is the test to apply to anything else queued behind this item: does it change
+   an interface a third party implements, or ride beside it?
 
 ---
 

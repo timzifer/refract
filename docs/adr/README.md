@@ -27,8 +27,14 @@ depends on.
 | [0015](0015-hit-testing.md) | Hit-testing indexes what a render emitted, told apart by an observer | Accepted | — |
 | [0016](0016-streaming-and-damage.md) | Streaming is a snapshot and a swap; damage is a diff of two recordings | Accepted | — |
 | [0017](0017-browser-backend.md) | The browser backend is canvas 2D, in the core, and not gg | Accepted | — |
+| [0018](0018-coordinate-systems.md) | Coordinates are a stage between the scales and the IR | Accepted | — |
+| [0019](0019-position-adjustments.md) | Stacking is a position adjustment within a layer, derived in `Train` | Accepted | — |
+| [0020](0020-discrete-colour-and-multi-entry-legends.md) | Discrete colour is a scale; a layer may contribute many legend entries | Accepted | — |
 
 Still open, deliberately: **§17.7** (the third-party geom and backend extension
 API). It freezes at v1.0, and freezing it well is what makes the "last plotting
 library" claim survivable — so it stays open until the milestone that has to
-answer it.
+answer it. 0018 and 0020 are both shaped by that deadline: the first widens
+`geom.Frame` because it must be widened before the freeze, the second declines to
+widen `Geom` because an optional interface does the same work without spending
+the freeze.
