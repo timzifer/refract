@@ -175,6 +175,59 @@ jobs:
         run: go build ./arrow/...
 
   # ---------------------------------------------------------------------------
+  # Benchmarks, and the gate they exist for. CONCEPT.md §11 promises that a
+  # frame's cost in allocations does not grow with the data it draws; this is
+  # where that is checked on every commit, from real benchmark output rather
+  # than from a claim.
+  #
+  # Running every benchmark also keeps them from rotting: a benchmark nobody
+  # runs is a benchmark that stops compiling.
+  # ---------------------------------------------------------------------------
+  bench:
+    name: Benchmarks and the allocation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+            arrow/go.sum
+
+      # The gate's own tests. They live behind //go:build !race because the
+      # race detector allocates on refract's behalf, so they are invisible to
+      # the race job and need running here.
+      - name: The allocation gate as a test
+        run: go test -count=1 -run 'AllocatePerPoint|AllocationBudget' -v .
+
+      # -benchtime=10x, because this job gates allocation counts — which are
+      # deterministic — and not times, which a shared runner cannot measure.
+      - name: Run every benchmark
+        run: |
+          set -euo pipefail
+          {
+            go test -run='^$' -bench=. -benchtime=10x -count=1 ./...
+            (cd backend/gg && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+            (cd arrow && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+          } | tee bench.txt
+
+      - name: The allocation gate as a benchmark
+        run: awk -f .github/scripts/allocgate.awk bench.txt
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Benchmarks"
+            echo
+            echo '```'
+            grep -E '^Benchmark' bench.txt || echo "no benchmark output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
   # Coverage across both modules, published as a shields.io endpoint so the
   # README badge needs no third-party service.
   # ---------------------------------------------------------------------------

@@ -406,8 +406,11 @@ GPU path, which is a compatibility fallback, not a throughput path.
   and leans on gg's zero-alloc fill/stroke/text paths. A benchmark gate asserts no
   per-frame allocations on the hot path. Shipped in v0.4: everything sized by the
   data comes from a pool, so a steady-state frame costs the same handful of
-  allocations over a thousand rows and over a million. `TestARenderDoesNotAllocatePerPoint`
-  is the gate.
+  allocations over a thousand rows and over a million.
+  `TestARenderDoesNotAllocatePerPoint` is the gate as a test, and CI's
+  `Benchmarks and the allocation gate` job is the gate as a benchmark —
+  `.github/scripts/allocgate.awk` reads `go test -bench` output and enforces the
+  same property from the numbers, over all three modules.
 
 ---
 
@@ -577,10 +580,11 @@ contributes a colour guide instead of nothing.
   by mark and by size unless told otherwise
   ([ADR 0011](docs/adr/0011-decimation.md)). `Train` still sees every row, so a
   reduced chart's axes are the data's, not the subset's.
-- Allocation pass; a benchmark gate on per-frame allocations. Everything sized
-  by the data comes from a pool, and `TestARenderDoesNotAllocatePerPoint`
-  asserts that a frame over a million rows allocates what a frame over a
-  thousand does. Along the way, feeding a column into a scale row by row
+- Allocation pass; a benchmark gate on per-frame allocations, running in CI over
+  all three modules. Everything sized by the data comes from a pool, and both
+  `TestARenderDoesNotAllocatePerPoint` and `.github/scripts/allocgate.awk`
+  assert that a frame over a million rows allocates what a frame over a thousand
+  does — 76 either way. Along the way, feeding a column into a scale row by row
   through a variadic interface method turned out to cost one allocation per
   row; it is now one call per column.
 - Arrow adapter as a separate module, `refract/arrow`. A null-free `float64`

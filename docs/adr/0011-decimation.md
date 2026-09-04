@@ -78,6 +78,10 @@ question.
   wants the marks anyway.
 - `stat` is a new core package and, like everything else in the core, depends
   on nothing.
+- `stat`'s `Append` forms are allocation-free, and CI keeps them that way:
+  `BenchmarkLTTB` and `BenchmarkMinMax` are pinned at zero allocations per
+  operation by `.github/scripts/allocgate.awk`. That is not a performance
+  target, it is the reason those functions have that shape.
 - The allocation pass that came with this milestone tightened the `ir.Backend`
   contract: a point slice, a path or an image handed to a drawing call is
   **lent for that call**, because it comes from a pool and the next call may

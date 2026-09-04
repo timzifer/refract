@@ -43,6 +43,9 @@ gofmt -l .                                   # must print nothing
 go vet ./... && (cd backend/gg && go vet ./...) && (cd arrow && go vet ./...)
 CGO_ENABLED=0 go build ./...
 
+# the benchmarks, and the gate on what they measure
+go test -run='^$' -bench=. -benchtime=10x ./... | awk -f .github/scripts/allocgate.awk
+
 # the core must stay dependency-free
 go list -deps ./... | grep -v '^github.com/timzifer/refract' | grep '\.'
 # must print nothing
@@ -164,19 +167,34 @@ Write the test that would have caught the bug.
 2.5 once rounded its labels to whole numbers, producing an evenly spaced axis
 that read 0, 2, 5, 8, 10.
 
-### The allocation gate
+### Benchmarks and the allocation gate
 
-`TestARenderDoesNotAllocatePerPoint` renders the same chart over a thousand rows
-and over a million and fails if the second allocates more than a handful of
-times more than the first. It is not a performance test — it is the assertion
-that nothing on the data path allocates *per row*, which is what makes a chart
-redrawn every frame affordable.
+There is one claim in this repository that is a number rather than a picture:
+what a frame costs in allocations does not grow with the data it draws. It is
+checked twice, because the two ways of measuring it catch different mistakes.
 
-It is built out under `-race`, which allocates on refract's behalf; the race
-job and the ordinary test job are separate, so the gate still runs on every
-commit.
+**As a test.** `TestARenderDoesNotAllocatePerPoint` renders the same chart over
+a thousand rows and over a million and fails if the second allocates more than
+a handful of times more than the first. Its siblings cover a faceted chart, a
+layer coloured from a column, and an absolute per-frame budget. They are built
+out under `-race`, which allocates on refract's behalf — the race job and the
+ordinary test job are separate, so the gate still runs on every commit.
 
-When it fails, find the culprit rather than raising the bar:
+**As a benchmark.** `.github/scripts/allocgate.awk` reads `go test -bench`
+output and enforces the same property from the numbers a benchmark actually
+reports, plus `BenchmarkLTTB` and `BenchmarkMinMax` being allocation-free —
+which is the whole reason `stat`'s `Append` forms have that shape:
+
+```sh
+go test -run='^$' -bench=. -benchtime=10x ./... | awk -f .github/scripts/allocgate.awk
+```
+
+That is exactly what the `Benchmarks and the allocation gate` CI job runs, over
+all three modules. It gates allocation counts and never times: a shared runner
+has nothing reliable to say about times, and a gate that flakes is a gate people
+learn to ignore.
+
+When either fails, find the culprit rather than raising the bar:
 
 ```sh
 go test -run=XXX -bench=Frame -memprofile=mem.out .
@@ -185,6 +203,10 @@ go tool pprof -sample_index=alloc_objects -top mem.out
 
 The usual causes are a new buffer that should have come from `geom.scratch`, and
 a variadic interface method being called once per row.
+
+A new benchmark goes wherever the thing it measures lives, and needs no
+registration — the CI job runs `-bench=.` across every package, which also means
+a benchmark that stops compiling fails the build rather than quietly rotting.
 
 ## Style
 

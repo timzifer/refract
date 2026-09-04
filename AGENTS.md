@@ -130,7 +130,14 @@ the data path will fail `TestARenderDoesNotAllocatePerPoint` rather than merely
 slow things down. Find it with `-memprofile` and
 `pprof -sample_index=alloc_objects`, do not widen the gate. The gate is behind
 `//go:build !race` because the race detector allocates on refract's behalf, so
-run it without `-race` when you are checking it.
+run it without `-race` when you are checking it — and it is checked a second
+way, from real benchmark output, by `.github/scripts/allocgate.awk` in the
+`Benchmarks and the allocation gate` CI job.
+
+**The benchmark gate pins allocations, never times.** A shared CI runner cannot
+measure a nanosecond usefully, and a gate that flakes is a gate people learn to
+ignore. If you add a timing assertion there it will go red on an unlucky
+Tuesday and be deleted, taking the allocation checks with it.
 
 **A variadic interface method called per row allocates per row.** `Train(v)` on
 a `scale.Scale` cannot be proved non-escaping by the compiler, so the argument

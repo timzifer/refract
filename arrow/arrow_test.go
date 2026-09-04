@@ -332,3 +332,46 @@ func TestAChartRendersStraightFromARecord(t *testing.T) {
 		t.Error("the chart came out with no title")
 	}
 }
+
+// The two paths the adapter is about: a float64 column, which is Arrow's own
+// buffer, and an int64 one, which has to be widened. The first must not scale
+// with the row count at all.
+func benchmarkColumn(b *testing.B, field aw.Field, fill func(*array.RecordBuilder, int)) {
+	const n = 1_000_000
+	bld := array.NewRecordBuilder(memory.DefaultAllocator, schemaOf(field))
+	defer bld.Release()
+	fill(bld, n)
+	rec := bld.NewRecord()
+	defer rec.Release()
+
+	b.ReportAllocs()
+	for b.Loop() {
+		src := arrow.Source(rec)
+		got, ok := src.Float64Column(field.Name)
+		if !ok || len(got) != n {
+			b.Fatalf("read %d rows, ok=%v", len(got), ok)
+		}
+	}
+}
+
+func BenchmarkBorrowedFloat64Column(b *testing.B) {
+	benchmarkColumn(b, aw.Field{Name: "y", Type: aw.PrimitiveTypes.Float64},
+		func(bld *array.RecordBuilder, n int) {
+			vs := make([]float64, n)
+			for i := range vs {
+				vs[i] = float64(i)
+			}
+			bld.Field(0).(*array.Float64Builder).AppendValues(vs, nil)
+		})
+}
+
+func BenchmarkWidenedInt64Column(b *testing.B) {
+	benchmarkColumn(b, aw.Field{Name: "y", Type: aw.PrimitiveTypes.Int64},
+		func(bld *array.RecordBuilder, n int) {
+			vs := make([]int64, n)
+			for i := range vs {
+				vs[i] = int64(i)
+			}
+			bld.Field(0).(*array.Int64Builder).AppendValues(vs, nil)
+		})
+}
