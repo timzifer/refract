@@ -23,11 +23,18 @@ import (
 // parallel render emits exactly the calls a serial one does, in exactly the
 // same sequence, so the golden files cover both paths at once and neither can
 // drift from the other.
+//
+// A chart with an [Observer] takes the serial path. The observer is told which
+// layer is drawing so that a caller can attribute the calls that follow; two
+// panels drawing at once would interleave those announcements into nonsense.
 func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.Theme) error {
 	if !concurrent(c, panels) {
 		for i, p := range panels {
 			p.setRange(areas[i])
-			if err := drawLayers(b, p, areas[i], th); err != nil {
+			if c.Observer != nil {
+				c.Observer.Panel(i, areas[i], p.X, p.Y)
+			}
+			if err := drawLayers(b, p, areas[i], th, c.Observer, c.RowSink); err != nil {
 				return err
 			}
 		}
@@ -49,7 +56,7 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 			p.setRange(areas[i])
 			rec := acquireRecorder(m)
 			recs[i] = rec
-			errs[i] = drawLayers(rec, p, areas[i], th)
+			errs[i] = drawLayers(rec, p, areas[i], th, nil, nil)
 		}()
 	}
 	wg.Wait()
@@ -87,7 +94,7 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 // [scale.Snapshotter]. Any of those, and the serial path is not a fallback but
 // the right answer.
 func concurrent(c Chart, panels []Panel) bool {
-	if c.Serial || len(panels) < 2 || runtime.GOMAXPROCS(0) < 2 {
+	if c.Serial || c.Observer != nil || c.RowSink != nil || len(panels) < 2 || runtime.GOMAXPROCS(0) < 2 {
 		return false
 	}
 	for _, p := range panels {

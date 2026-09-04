@@ -33,6 +33,13 @@ go.work.sum
 
 # Charts written by the examples when they are run by hand.
 bigdata-*.svg
+live.svg
+
+# The browser example's build output. The wasm binary is compiled from the
+# source next to it, and wasm_exec.js is copied out of GOROOT — neither is
+# something to commit. See examples/web/README.md.
+*.wasm
+examples/web/wasm_exec.js
 
 # Editor/IDE
 .idea/

@@ -10,9 +10,14 @@ This is a three-module repository:
 | `backend/gg` | `github.com/timzifer/refract/backend/gg` | `gogpu/gg`, `x/image` |
 | `arrow` | `github.com/timzifer/refract/arrow` | `apache/arrow-go` |
 
-Both vector backends — `backend/svg` and `backend/pdf` — are in the core
-module, so SVG and PDF cost no dependency at all
-([ADR 0009](docs/adr/0009-pdf-backend.md)).
+Three backends are in the core module — `backend/svg`, `backend/pdf` and
+`backend/canvas` — so SVG, PDF and a browser canvas cost no dependency at all
+([ADR 0009](docs/adr/0009-pdf-backend.md),
+[ADR 0017](docs/adr/0017-browser-backend.md)). `backend/canvas` reaches a 2D
+context through `syscall/js`, which is the standard library; every file in it
+is behind `//go:build js && wasm`, and `doc.go` is what keeps
+`go build ./...` on a server from failing on a package with no buildable
+files.
 
 The split is not cosmetic. A nested module is excluded from its parent's module
 graph, which is what lets `import "github.com/timzifer/refract"` pull in zero
@@ -53,7 +58,16 @@ go list -deps ./... | grep -v '^github.com/timzifer/refract' | grep '\.'
 # cross-compilation, which is half the point of being cgo-free
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
 CGO_ENABLED=0 GOOS=js    GOARCH=wasm  go build ./...
+
+# the browser backend, run rather than merely compiled: node is the JS side and
+# the tests supply a recording 2D context
+PATH="$PATH:$(go env GOROOT)/lib/wasm" GOOS=js GOARCH=wasm go test ./backend/canvas/...
 ```
+
+> The wasm test runner passes the environment into the sandbox and refuses a
+> very large one — if it reports "total length of command line and environment
+> variables exceeds limit", run it under `env -i` with just `PATH`, `HOME`,
+> `GOOS` and `GOARCH` set.
 
 ## Golden files
 
@@ -156,6 +170,21 @@ what a chart redrawn every frame calls.
 Wiring one into a geom means adding a case to `geom.config.reduction`, not a new
 option namespace — `geom.Decimate` and `geom.Budget` are shared like every other
 option. Reduce in `Build`, never in `Train`.
+
+**An option** on a geom goes in the shared `geom.Option` set, and then in three
+more places or the JSON spec silently drops it: a field on `geom.Desc`, a line
+in `config.describe`, and a case in `spec.writeMarkProps` for the marks that
+use it. `geom`'s `TestDescribeAndRebuildAgree` and `spec`'s round-trip test are
+what catch forgetting.
+
+**A scale option** is the same shape: a field on `scale.Desc`, a line in that
+scale's `Describe`, and a case in `scale.FromDesc`. If the option changes the
+domain rather than the framing, it probably also belongs in `SetDomain`'s
+notion of a pin — see `scale.Zoomer`.
+
+**A backend** that draws into a surface rather than a document should also
+implement `ir.Partial`, so that a live chart repaints only what changed. One
+that writes a document should not.
 
 **A theme** is `theme.Tokens` plus `theme.Build`, not fifty literal fields.
 Register it by name if it should be reachable from a config file. Reach for

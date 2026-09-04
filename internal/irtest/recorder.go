@@ -45,6 +45,13 @@ type Recorder struct {
 	// MaxDepth is the deepest the Push/Pop stack ever got, which is how a test
 	// checks that clipping was actually applied around the data layers.
 	MaxDepth int
+
+	// Damaged is what each frame was told to repaint, one entry per call to
+	// [Recorder.Damage], and Whole says which of those meant the whole frame.
+	// Frames counts the frames flushed.
+	Damaged [][]ir.Rect
+	Whole   []bool
+	Frames  int
 }
 
 // New returns an empty Recorder.
@@ -120,8 +127,6 @@ func (r *Recorder) Measure(run ir.TextRun) ir.TextMetrics {
 	return ir.TextMetrics{Advance: adv, Ascent: asc, Descent: desc, Ink: ir.R(0, -asc, adv, desc)}
 }
 
-func (r *Recorder) Flush() error { return nil }
-
 // Ops returns the recorded operation names, for a quick order assertion.
 func (r *Recorder) Ops() []string {
 	out := make([]string, len(r.Calls))
@@ -182,6 +187,79 @@ func (r *Recorder) String() string {
 	return b.String()
 }
 
+// Trace renders the recording one line per call, with the geometry and the
+// style spelled out.
+//
+// It is [Recorder.String] at the detail a comparison needs: two charts that
+// produce the same trace are the same chart, which is how a spec round trip is
+// checked without a golden file. Coordinates are printed to three decimals,
+// the same precision the SVG emitter writes.
+func (r *Recorder) Trace() []string {
+	out := make([]string, 0, len(r.Calls))
+	for _, c := range r.Calls {
+		var b strings.Builder
+		b.WriteString(c.Op)
+		switch c.Op {
+		case "Text":
+			fmt.Fprintf(&b, " %q at %s font=%v/%.3f h=%d v=%d rot=%.4f %s",
+				c.Text.Text, pointStr(c.Text.At), c.Text.Font.Family, c.Text.Font.Size,
+				c.Text.H, c.Text.V, c.Text.Rotation, colorStr(c.Text.Color))
+		case "Polyline":
+			fmt.Fprintf(&b, " %s %s", pointsStr(c.Points), strokeStr(c.Stroke))
+		case "Markers":
+			fmt.Fprintf(&b, " shape=%d %s size=%.3f fill=%s %s",
+				c.Marker, pointsStr(c.Points), c.Style.Size, colorStr(c.Style.Fill), strokeStr(c.Style.Stroke))
+		case "StrokePath":
+			fmt.Fprintf(&b, " %s %s", pathStr(c.Path), strokeStr(c.Stroke))
+		case "FillPath":
+			fmt.Fprintf(&b, " %s rule=%d %s", pathStr(c.Path), c.Rule, fillStr(c.Fill))
+		case "Image":
+			fmt.Fprintf(&b, " %s", rectStr(c.Rect))
+		case "Push":
+			fmt.Fprintf(&b, " %v clip=%v", c.Affine, c.HasClip)
+		}
+		out = append(out, b.String())
+	}
+	return out
+}
+
+func pointStr(p ir.Point) string { return fmt.Sprintf("(%.3f,%.3f)", p.X, p.Y) }
+
+func rectStr(r ir.Rect) string { return pointStr(r.Min) + "-" + pointStr(r.Max) }
+
+func pointsStr(pts []ir.Point) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[%d]", len(pts))
+	for _, p := range pts {
+		b.WriteString(pointStr(p))
+	}
+	return b.String()
+}
+
+func pathStr(p *ir.Path) string {
+	if p == nil {
+		return "<nil>"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "ops=%v", p.Ops)
+	b.WriteString(pointsStr(p.Pts))
+	return b.String()
+}
+
+func colorStr(c ir.Color) string {
+	return fmt.Sprintf("#%02x%02x%02x%02x", c.R, c.G, c.B, c.A)
+}
+
+func strokeStr(s ir.Stroke) string {
+	return fmt.Sprintf("stroke=%s w=%.3f cap=%d join=%d dash=%v/%0.3f",
+		colorStr(s.Color), s.Width, s.Cap, s.Join, s.Dash, s.DashOffset)
+}
+
+func fillStr(f ir.Fill) string {
+	return fmt.Sprintf("fill=%s stops=%v %s%s", colorStr(f.Color), f.Stops,
+		pointStr(f.Start), pointStr(f.End))
+}
+
 func clone(p *ir.Path) *ir.Path {
 	if p == nil {
 		return nil
@@ -192,7 +270,41 @@ func clone(p *ir.Path) *ir.Path {
 	}
 }
 
-var _ ir.Backend = (*Recorder)(nil)
+// Reset clears the recording, keeping the memory. A test driving several
+// frames through one Recorder calls it between them.
+func (r *Recorder) Reset() {
+	r.Calls = r.Calls[:0]
+	r.Depth, r.MaxDepth = 0, 0
+}
+
+// Damage implements [ir.Partial]: it records what a frame was told to repaint
+// rather than repainting anything.
+//
+// It is how a test checks damage tracking end to end — that a chart whose data
+// moved repaints where it moved and not the whole canvas.
+func (r *Recorder) Damage(rects []ir.Rect) {
+	r.Damaged = append(r.Damaged, append([]ir.Rect(nil), rects...))
+	r.Whole = append(r.Whole, rects == nil)
+}
+
+// Flushes counts the frames completed on this Recorder.
+func (r *Recorder) Flush() error { r.Frames++; return nil }
+
+// Target returns an [ir.Target] handing out r, so that a test can drive
+// [github.com/timzifer/refract.Plot.Render] or Plot.Live through a recorder.
+// Closing it does nothing: a recorder has nothing to finalise.
+func (r *Recorder) Target() ir.Target { return recorderTarget{r} }
+
+type recorderTarget struct{ r *Recorder }
+
+func (t recorderTarget) Open(int, int, float64) (ir.Backend, error) { return t.r, nil }
+func (recorderTarget) Close() error                                 { return nil }
+
+var (
+	_ ir.Backend = (*Recorder)(nil)
+	_ ir.Partial = (*Recorder)(nil)
+	_ ir.Target  = recorderTarget{}
+)
 
 // NullBackend returns an ir.Backend that draws nothing and remembers nothing,
 // measuring with the same built-in table [Recorder] uses.

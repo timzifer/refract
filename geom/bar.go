@@ -81,7 +81,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
-	sc := acquire()
+	sc := acquire(f)
 	defer sc.release()
 
 	base := baselinePos(f, g.cfg.baseline)
@@ -110,6 +110,16 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	if len(rects) == 0 {
 		return nil
 	}
+	// A bar's row is at the middle of the end it grew to, which is where a
+	// reader points when they mean "this bar" — not at a corner, and not at
+	// the middle of a shape whose height is the value.
+	if f.tracking() {
+		sc.pts = grow(sc.pts, len(rects))
+		for i, r := range rects {
+			sc.pts[i] = ir.Point{X: (r.Min.X + r.Max.X) / 2, Y: barTop(r, base)}
+		}
+		f.Marks(sc.pts, sc.sourceRows(g.s, rows))
+	}
 
 	if cols := sc.colorsFor(g.cfg, g.s, rows); cols != nil {
 		for i, r := range rects {
@@ -133,6 +143,15 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		b.StrokePath(&sc.fill, ir.Stroke{Color: *g.cfg.color, Width: pick(g.cfg.width, 1)})
 	}
 	return nil
+}
+
+// barTop is the end of a bar that is not the baseline. A bar below the
+// baseline grew downwards, so its value is at the bottom of the rectangle.
+func barTop(r ir.Rect, base float32) float32 {
+	if r.Min.Y >= base {
+		return r.Max.Y
+	}
+	return r.Min.Y
 }
 
 func (g *barGeom) ColorGuide() (ColorGuide, bool) {

@@ -23,7 +23,12 @@ depends on.
 | [0011](0011-decimation.md) | Decimation at draw time, in device space, by default | Accepted | — |
 | [0012](0012-parallel-panels.md) | Panels build in parallel by recording, replayed in order | Accepted | — |
 | [0013](0013-arrow-adapter.md) | The Arrow adapter is its own module, and borrows only where it can | Accepted | — |
+| [0014](0014-json-spec.md) | The JSON spec is Vega-Lite-shaped, not a Vega-Lite subset | Accepted | §17.3 |
+| [0015](0015-hit-testing.md) | Hit-testing indexes what a render emitted, told apart by an observer | Accepted | — |
+| [0016](0016-streaming-and-damage.md) | Streaming is a snapshot and a swap; damage is a diff of two recordings | Accepted | — |
+| [0017](0017-browser-backend.md) | The browser backend is canvas 2D, in the core, and not gg | Accepted | — |
 
-Still open, deliberately: **§17.3** (how faithful the JSON spec is to Vega-Lite)
-and **§17.7** (the third-party geom and backend extension API). Both belong to
-milestones that have not started, and deciding them now would be guessing.
+Still open, deliberately: **§17.7** (the third-party geom and backend extension
+API). It freezes at v1.0, and freezing it well is what makes the "last plotting
+library" claim survivable — so it stays open until the milestone that has to
+answer it.

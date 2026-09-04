@@ -53,7 +53,11 @@ func (s *symlogScale) Clone() Scale {
 
 func (s *timeScale) Clone() Scale {
 	c := *s
-	c.domainRange = domainRange{}
+	if !c.fixed {
+		c.domainRange = domainRange{}
+	} else {
+		c.rlo, c.rhi, c.rset = 0, 0, false
+	}
 	return &c
 }
 

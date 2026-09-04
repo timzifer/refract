@@ -48,7 +48,17 @@ func FromNanos(v float64) time.Time { return time.Unix(0, int64(v)) }
 type timeScale struct {
 	domainRange
 	loc    *time.Location
+	fixed  bool
 	format func(time.Time, time.Duration) string
+}
+
+// Train ignores a pinned domain, so that a view set by [Zoomer.SetDomain]
+// survives the next render's training pass.
+func (s *timeScale) Train(vs ...float64) {
+	if s.fixed {
+		return
+	}
+	s.domainRange.Train(vs...)
 }
 
 func (s *timeScale) Domain() (float64, float64) { return s.span() }

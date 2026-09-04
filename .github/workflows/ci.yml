@@ -175,6 +175,45 @@ jobs:
         run: go build ./arrow/...
 
   # ---------------------------------------------------------------------------
+  # The browser backend. Cross-compiling it is not enough: backend/canvas talks
+  # to a canvas 2D context through syscall/js, and the only way to know it asks
+  # for the right things is to run it. Node provides the JS side, and the tests
+  # supply a recording context — see backend/canvas/canvas_js_test.go.
+  # ---------------------------------------------------------------------------
+  wasm:
+    name: Browser backend (js/wasm)
+    runs-on: ubuntu-latest
+    env:
+      GOOS: js
+      GOARCH: wasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            backend/gg/go.sum
+            arrow/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # go test finds the wasm exec wrapper on PATH, which is how it knows how
+      # to run a js/wasm test binary under node.
+      - name: Put the wasm exec wrapper on PATH
+        run: echo "$(go env GOROOT)/lib/wasm" >> "$GITHUB_PATH"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./backend/canvas/...
+
+      - name: Build the browser example
+        run: go build -o /tmp/chart.wasm ./examples/web
+
+  # ---------------------------------------------------------------------------
   # Benchmarks, and the gate they exist for. CONCEPT.md §11 promises that a
   # frame's cost in allocations does not grow with the data it draws; this is
   # where that is checked on every commit, from real benchmark output rather

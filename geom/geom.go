@@ -41,6 +41,11 @@ type Frame struct {
 	// Index is the geom's position among the chart's layers, used to pick a
 	// default colour from the palette.
 	Index int
+
+	// Rows, when non-nil, collects which source row is behind each mark the
+	// geom draws. It is nil for an ordinary render and a geom must check it
+	// before doing the bookkeeping — see [Rows] and [Frame.Marks].
+	Rows Rows
 }
 
 // SwatchKind is how a legend entry draws its sample.
@@ -258,9 +263,21 @@ func (c config) labelFor() string {
 //
 // y2 and c are optional: y2 carries the second bound of a band, c the values a
 // colour scale is read from. Both are nil when the geom was not given one.
+//
+// off and rows say where the elements came from, for the caller that asked to
+// know — see [Rows]. A segment cut out of the source is contiguous, so off
+// alone answers it; an interpolated one is not, and carries a row per element.
 type series struct {
 	x, y  []float64
 	y2, c []float64
+	off   int
+	rows  []int
+
+	// origin maps this series' rows onto the rows of the table its source was
+	// cut from, when its source is a cut. Faceting makes one per panel, so
+	// without this a faceted chart would report row numbers relative to a
+	// table the caller never sees. See [data.Subset].
+	origin []int
 }
 
 // ErrNoColumn reports a column named by an option that the source does not
@@ -293,7 +310,7 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 	if len(xs) != len(ys) {
 		return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.ycol, len(xs), len(ys))
 	}
-	s := series{x: xs, y: ys}
+	s := series{x: xs, y: ys, origin: data.Origins(src)}
 	if c.y2col != "" {
 		v, err := column(src, c.y2col, y)
 		if err != nil {

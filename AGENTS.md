@@ -9,7 +9,9 @@ constraints that are easy to break without noticing.
 **The core module must never gain a dependency.** `go.mod` at the repository
 root has no `require` block, and it stays that way. Anything that needs
 `gogpu/gg`, `x/image`, Arrow, or anything else belongs in a nested module —
-`backend/gg` and `arrow` are the two that exist.
+`backend/gg` and `arrow` are the two that exist. `syscall/js` is the standard
+library, which is why the browser backend is in the core rather than beside
+them.
 
 CI checks it:
 
@@ -23,18 +25,29 @@ positioning rests on — see [ADR 0001](docs/adr/0001-module-layout.md).
 ## Layer discipline
 
 ```
-data, stat                           →  rows in, rows out
-geom, scale, facet, layout, render   →  produce IR
-ir                                   →  the interface
-backend/svg, backend/pdf, backend/gg →  consume IR
+data, stat                                    →  rows in, rows out
+geom, scale, facet, layout, render            →  produce IR
+ir                                            →  the interface
+interact                                      →  reads IR back
+spec                                          →  writes the model down
+backend/svg, backend/pdf, backend/canvas,     →  consume IR
+backend/gg
 ```
 
 - A geom must not import a backend, know about SVG, or measure text except
   through `ir.Backend.Measure`.
 - `stat` knows about numbers and nothing else — no scales, no theme, no geoms.
   A reduction that needed one of those would be a geom in the wrong package.
-- A backend must not import `geom`, `scale`, `theme` or `render`.
+- A backend must not import `geom`, `scale`, `theme` or `render`. That is why
+  `Live.Bind` — which turns a wheel event into a zoom — is in the root package
+  under a js build tag and not in `backend/canvas`: wiring input is not drawing.
 - `render` is the only package that knows the drawing order of a chart.
+- `spec` may read every model package and must never be read by one. A geom
+  that knew about JSON would be a geom in the wrong package; `geom.Desc`,
+  `scale.Desc` and `facet.Desc` are how a model type says what it is without
+  knowing what will be done with the answer.
+- `interact` consumes IR and scales and produces neither. It wraps a backend
+  rather than replacing one.
 
 If a change needs to cross one of these lines, that is a signal the seam is in
 the wrong place — say so rather than routing around it.
@@ -202,18 +215,132 @@ do not, which is why an `HLine` appears on every panel. Adding `Source`/`Subset`
 to an annotation would make a threshold vanish from every panel but the one its
 value happens to fall in.
 
+**A watched render must draw exactly what an unwatched one draws.**
+`interact.Index.Watch` wraps a backend and indexes what it sees; every method
+forwards first and indexes second. There is a test comparing the two traces
+call for call, and `TestAWatchedRenderDrawsWhatAnUnwatchedOneDoes` compares the
+SVG bytes. A probe that changed anything would silently halve the coverage of
+every golden file, the same way a scheduling-dependent panel order would.
+
+**A watched render is serial, on purpose.** `render.Chart.Observer` forces the
+serial path in `concurrent`. The observer is told which layer is drawing so a
+caller can attribute the calls that follow; two panels drawing at once have no
+order to be told in. Do not "optimise" this by giving each panel its own
+observer — the index would then depend on scheduling, and so would every
+tooltip.
+
+**Hit-testing indexes one mark per subpath, not one per call.** A layer draws
+all its bars in a single path, because `geom.groupByColor` batches by colour. A
+mark per call would make the row of bars one shape, so pointing at the fourth
+bar would report whichever corner of whichever bar happened to be nearest.
+There is a test.
+
+**A geom reports its rows separately from what it draws, and that is the
+whole point.** `geom.Rows` takes the positions a row landed at, not the points
+of a drawing call — a smoothed line is a Bézier path whose control points are
+not measurements, a staircase draws two points per row, a bar is four corners
+around one value. Attributing rows to a call's points would attribute them to
+whichever encoding the geom happened to use, and would be wrong for three of
+the six geoms that have rows. There is a test per geom.
+
+**Row reporting is gated on `Frame.Rows != nil` at every step.** `acquire(f)`
+records it on the scratch as `wantRows`, and `rowsOf`, `sourceRows` and the
+interpolated series' row list all check it. An ordinary render must keep
+costing exactly what it did — `BenchmarkFrame1k` is still 76 allocations, and
+`BenchmarkWatchedFrame` against `BenchmarkWatchedFrameRows` is pinned flat.
+
+**A row is reported in the caller's table, not in the cut refract made.**
+Faceting cuts each layer with `data.Rows`, and a row number relative to that
+cut is a row number in a table nobody holds. `series.origin` comes from
+`data.Origins` and `series.rowAt` resolves through it. A geom that collects its
+own element list — a scatter, a bar, both for per-mark colour — must report
+through `scratch.sourceRows` rather than handing over the element numbers: the
+two lists look identical and mean different things, and a faceted chart is
+where that shows.
+
+**A pinned scale domain skips nicing, and that is not an oversight.**
+`scale.Zoomer.SetDomain` sets `pinned` as well as `fixed`, and `effective()`
+returns the pinned domain before nicing or zero-forcing get a chance. An axis
+that snapped to round numbers after every wheel notch would not follow the
+pointer, and on a log axis nicing rounds the view out to whole decades. `fixed`
+alone stops *training*; `pinned` also stops *framing*.
+
+**`data.Stream` is deliberately not a `data.Source`.** A Source is read column
+by column over several calls, and a table appended to between two of them
+disagrees with itself. `Snapshot` freezes and swaps; `Source()` reads whatever
+the last snapshot froze. Making Stream implement Source would compile, and
+would produce a chart with more timestamps than values under load. The two
+buffers are reused, so a snapshot is valid only until the next one — that is
+the price of the frame costing no allocations, and it is why Snapshot belongs
+between frames rather than during one.
+
+**Unwrap a ring buffer before rewriting it, not while.** `Stream.compact`
+resolves every slot number first and rewrites the columns afterwards, and takes
+the *old* window as a parameter. `at` answers from the ring's current length,
+so rewriting the first column changes the answer for the second — a bug that
+only appears on the second column, and only after the ring has wrapped. There
+is a test.
+
+**Damage is per drawing call, and reports `ok == false` rather than guessing.**
+`ir.Damage` compares two recordings call for call; a different call count, a
+different kind, or a moved transform means the chart's *structure* changed and
+the answer is a full repaint. Do not make it clever about realigning: a list of
+rectangles that describes half a frame is worse than repainting the frame.
+
+**`ir.Partial.Damage(nil)` means the whole frame, and an empty list never
+arrives.** A frame identical to the last one is not painted at all rather than
+painted with no damage, which is why the nil case is unambiguous.
+
+**A Stroke cannot be compared with `==`.** It holds a dash slice. `ir` carries
+`Stroke.same`, `Fill.same` and `MarkerStyle.same` for this; reach for those
+rather than adding a comparison that compiles today because the field you would
+have missed happens not to be there yet.
+
+**The JSON spec writes what a mark uses, not what it was given.** A geom
+accepts every option and ignores the ones it has no use for, which is what
+keeps the option set one namespace; a *document* listing a line's whisker
+extent would read as though that meant something. `spec.writeMarkProps` decides
+per mark. Adding an option means adding it there too, and the round-trip test
+in `spec/` is what catches forgetting.
+
+**`geom.Desc` and `scale.Desc` are complete, not partial.** Every field with a
+non-zero default — `BarWidth`, `Whisker`, `Outliers`, `Extend`, `Opacity` —
+carries the value the layer is actually using, so nothing downstream has to
+know what the defaults are. `Opacity` is `-1` when unset, matching `config`.
+
+**The canvas backend builds one path string per drawing call.** Crossing the
+WebAssembly boundary is what costs in a browser: a five-hundred-point line is
+one `Path2D` and one `stroke`, not five hundred `lineTo` calls. There is a test
+that fails if a chart over five hundred rows starts making more than a hundred
+context calls, and one that fails if `beginPath` reappears.
+
+**`backend/canvas` is empty except on js/wasm, and that is what the doc.go is
+for.** Every implementation file carries `//go:build js && wasm`; `doc.go`
+carries no constraint, so `go build ./...` on a server has a package to build
+rather than an error. Its tests run under node in CI, against a recording
+context — node has no canvas, and a test that needed one would be a test nobody
+could run.
+
 ## Open questions
 
 [CONCEPT.md §17](CONCEPT.md#17-open-decisions) lists the design decisions that
-were genuinely open. Six are closed and recorded in [docs/adr](docs/adr). Two
-remain open on purpose — Vega-Lite spec fidelity (§17.3) and the third-party
-extension API (§17.7) — because they belong to milestones that have not started.
-Do not settle them in passing; they need their own ADR.
+were genuinely open. Seven are closed and recorded in [docs/adr](docs/adr) —
+§17.3, Vega-Lite spec fidelity, was settled in v0.5 by
+[ADR 0014](docs/adr/0014-json-spec.md). One remains open on purpose: the
+third-party extension API (§17.7), which belongs to v1.0. Do not settle it in
+passing; it needs its own ADR.
 
 Optional interfaces are how this codebase extends a type without breaking
 everyone who implements it: `scale.Definite`, `scale.Categorical`,
-`scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `geom.Faceter`,
-`geom.Guided`. Reach for one before adding a method to `Scale` or `Geom`.
+`scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
+`scale.Describer`, `scale.ColorDescriber`, `geom.Faceter`, `geom.Guided`,
+`geom.Describer`, `ir.Partial`. Reach for one before adding a method to
+`Scale`, `Geom` or `Backend`.
+
+`Cloner`, `Snapshotter` and `Zoomer` are three different things and none
+substitutes for another: Clone hands back an *untrained* copy for a free facet
+axis, Snapshot an *exact* copy for another goroutine, and SetDomain changes the
+scale in place for a pan or a zoom.
 
 ## Scope
 
@@ -221,6 +348,15 @@ The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
 project is doing and in what order. Through v0.4 the project deliberately omits
 the JSON spec, interactivity, streaming, GPU and the browser. Adding a stub for
 one of them is not progress towards it — the seams exist, that is enough.
+
+Things v0.5 deliberately did not do. There is no native window and no GPU tier;
+both are v0.6 and both need GoGPU packages this milestone does not touch. A hit
+reports data values rather than a row number, because carrying row identity
+through decimation is bookkeeping the design avoids. Damage is per drawing
+call, so moving one point of a line repaints the line's box. And the browser
+path is canvas 2D, not WebGPU — gg has no `syscall/js` in it at the pinned
+version, so there was no WebGPU path to take
+([ADR 0017](docs/adr/0017-browser-backend.md)).
 
 Things v0.4 deliberately did not do, in case they look like oversights.
 `stat` carries the decimation family and nothing else: smoothing, regression and

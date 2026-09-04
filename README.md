@@ -12,7 +12,8 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.4**, "big data". The API is not
+> **Status: pre-alpha.** This is milestone **v0.5**, "web and interactivity".
+> The API is not
 > stable; every release below `v1.0.0` may contain breaking changes without a
 > deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
 > ahead.
@@ -34,12 +35,15 @@ PDF. Add one module and the same specification renders to PNG and JPEG through
 
 | | Dependencies | Output |
 |---|---|---|
-| `github.com/timzifer/refract` | **stdlib only** | SVG, PDF |
+| `github.com/timzifer/refract` | **stdlib only** | SVG, PDF, browser canvas |
 | `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG |
 | `github.com/timzifer/refract/arrow` | `apache/arrow-go` — zero CGO | — (a data source) |
 
-Raster, GPU, browser and interactive rendering all live behind the same
-`ir.Backend` interface. The rest are milestones, not architecture changes.
+The browser is in the core too, because it needs nothing to be: a canvas 2D
+context is reached through `syscall/js`, which is the standard library
+([ADR 0017](docs/adr/0017-browser-backend.md)). Raster, GPU and native-window
+rendering all live behind the same `ir.Backend` interface. The rest are
+milestones, not architecture changes.
 
 ## Install
 
@@ -171,11 +175,22 @@ picture here cannot drift away from the code that produced it.
   columns. A `[]float64`-backed source is borrowed, never copied, and so is a
   null-free `float64` column read straight out of an **Apache Arrow** record
   through the optional `refract/arrow` module.
-- **Backends** — two built-in emitters, SVG and PDF, and the gg raster adapter.
+- **Interaction** — `Plot.On` registers handlers for hover, click, zoom and
+  pan; `Plot.Live` draws into a surface that can be redrawn; `Live.Bind` wires a
+  DOM element to it. Hit-testing runs over the marks a render emitted rather
+  than over a second copy of every geom's projection, and `Live.TrackRows`
+  makes a hit name the source row behind the mark
+  ([ADR 0015](docs/adr/0015-hit-testing.md)).
+- **Live data** — `data.Stream` is appended to from any goroutine and frozen
+  between frames, and a redraw repaints only what changed
+  ([ADR 0016](docs/adr/0016-streaming-and-damage.md)).
+- **A chart as JSON** — a `*Plot` marshals to a Vega-Lite-shaped document and
+  reads back as the same chart ([ADR 0014](docs/adr/0014-json-spec.md)).
+- **Backends** — three built-in emitters — SVG, PDF and a browser canvas — and
+  the gg raster adapter.
 
-Deliberately **not** here yet: the JSON spec, interactivity, GPU, browser. Each
-is a later milestone in
-[CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones).
+Deliberately **not** here yet: the GPU tier and a native interactive window.
+Both are v0.6 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones).
 
 ## Categories, distributions and orders of magnitude
 
@@ -262,6 +277,133 @@ being true.
 A runnable version — two million samples with a spike and a dropout in them, and
 a million-point cloud — is in [`examples/bigdata`](examples/bigdata).
 
+## Interactive, in a browser
+
+The same model that renders SVG on a server draws on a `<canvas>`, with the
+pointer reporting what it is over:
+
+```go
+//go:build js && wasm
+
+p.On(refract.Hover, func(ev refract.Event) {
+	if ev.Found {
+		readout.Set("textContent", fmt.Sprintf("%s: %.2f, %.2f", ev.Series(), ev.Hit.X, ev.Hit.Y))
+	}
+})
+
+live, err := p.Live(canvas.Element(el))   // a surface, redrawn
+defer live.Close()
+live.Draw()
+defer live.Bind(el)()                     // pointer, wheel zoom, drag pan, double-click reset
+```
+
+Hit-testing works over the marks the render actually emitted, so it is right for
+every geom — including a decimated one, where the rows you can point at are
+exactly the rows on screen ([ADR 0015](docs/adr/0015-hit-testing.md)). Zoom and
+pan are arithmetic on the scales, so the value under the pointer stays under the
+pointer on a log or a time axis as much as on a linear one.
+
+Turn on row identity when a hit has to name a row rather than describe a point —
+highlighting the matching row of a table beside the chart is the case:
+
+```go
+live.TrackRows(true)
+
+p.On(refract.Hover, func(ev refract.Event) {
+	if ev.Found && ev.Hit.Row >= 0 {
+		highlightTableRow(ev.Hit.Row)   // a row of the table you handed in
+	}
+})
+```
+
+It is off by default and costs a position and a row number per mark; it does not
+cost per-frame allocations, and CI pins that. Decimation is not in the way —
+LTTB and min/max keep *real* rows — and neither is faceting, whose per-panel
+cuts are resolved back to the table you passed. A mark that no single row is
+behind — a boxplot's box, a density raster, an interpolated point across a
+gap — reports `-1` rather than a plausible neighbour.
+
+A runnable version is in [`examples/web`](examples/web):
+
+```sh
+GOOS=js GOARCH=wasm go build -o examples/web/chart.wasm ./examples/web
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/web/
+```
+
+## Live data
+
+A `data.Stream` is appended to from one goroutine and frozen for the renderer on
+another. It is deliberately not a `Source`: a table being appended to between
+two column reads is a table that disagrees with itself.
+
+```go
+st := data.NewStream("t", "y").Window(2000)
+p.Add(geom.Line(st.Source(), geom.X("t"), geom.Y("y")))
+
+go func() {
+	for s := range samples {
+		st.Append(scale.Nanos(s.At), s.Value)   // any goroutine, any time
+	}
+}()
+
+for range ticker.C {
+	st.Snapshot()   // freeze what has arrived
+	live.Draw()     // draw the frozen view
+}
+```
+
+Each `Draw` compares the frame with the last one and repaints only where they
+differ; a frame identical to the last is not painted at all. A backend says it
+can do that by implementing `ir.Partial`, and one that cannot gets the whole
+frame as before ([ADR 0016](docs/adr/0016-streaming-and-damage.md)). Appending a
+row and freezing a view both allocate nothing in the steady state, and the
+benchmark gate keeps it that way.
+
+See [`examples/stream`](examples/stream).
+
+## A chart as JSON
+
+```go
+doc, err := p.MarshalJSON()      // indented; json.Marshal(p) compacts it
+q, err := refract.ParseJSON(doc) // and reads back as the same chart
+```
+
+The document is Vega-Lite-*shaped*: `data.values`, `mark.type`,
+`encoding.x.field`, `scale.type`, `facet` and `resolve` mean what they mean in
+Vega-Lite, so anyone who knows that vocabulary can read one. It is not a
+Vega-Lite subset and does not claim to be — refract has marks and options
+Vega-Lite has no name for, and naming them plainly beats smuggling them through
+a borrowed name. What is guaranteed is the round trip through refract, and there
+is a test per mark and per scale that renders both and compares the primitives
+([ADR 0014](docs/adr/0014-json-spec.md)).
+
+```json
+{
+  "$schema": "https://github.com/timzifer/refract/spec/v0.5",
+  "width": 640,
+  "height": 400,
+  "title": "Throughput",
+  "data": {
+    "values": [{"x": 0, "y": 2}],
+    "format": {"parse": {"x": "number", "y": "number"}}
+  },
+  "encoding": {
+    "x": {"type": "quantitative", "scale": {"type": "linear", "nice": true}},
+    "y": {"type": "quantitative", "scale": {"type": "linear", "nice": true}}
+  },
+  "layer": [
+    {
+      "mark": {"type": "line", "color": "#0072b2"},
+      "encoding": {"x": {"field": "x"}, "y": {"field": "y"}}
+    }
+  ],
+  "config": {"theme": "light"}
+}
+```
+
+(shown with the objects folded up; the real output puts every field on its own
+line)
+
 ## Plotting Arrow data
 
 ```go
@@ -283,10 +425,11 @@ missing-data policy you already set covers it
 ```
    Your spec  ──►  Model  ──►  IR  ──►  Backend  ──►  output
    ─────────      ─────      ────      ───────       ──────
-   geoms          scales     ~8        backend/svg    SVG
-   scales         layout     drawing   backend/pdf    PDF
-   theme          ticks      ops       backend/gg     PNG / JPEG
-   facets         panels               (future)       GPU, browser
+   geoms          scales     ~8        backend/svg     SVG
+   scales         layout     drawing   backend/pdf     PDF
+   theme          ticks      ops       backend/canvas  browser canvas
+   facets         panels               backend/gg      PNG / JPEG
+                                       (future)        GPU, native window
 ```
 
 The `ir.Backend` interface is the seam. Geoms never touch a renderer; a renderer
@@ -294,13 +437,22 @@ never knows what a scale is. That is what lets refract stand on a young,
 fast-moving graphics stack without being welded to it — the whole gg adapter is
 about 300 lines ([why that matters](docs/adr/0006-gg-coupling-surface.md)).
 
+Two things ride on that seam without widening it. A render can be *watched*, so
+that a pointer can be told which layer drew what it is over
+([ADR 0015](docs/adr/0015-hit-testing.md)); and two frames can be *compared*, so
+that a surface repaints only what moved
+([ADR 0016](docs/adr/0016-streaming-and-damage.md)). Neither put an identity
+channel or a damage channel into the drawing interface every backend
+implements.
+
+
 ## Documentation
 
 - [CONCEPT.md](CONCEPT.md) — the design document: motivation, positioning,
   architecture, roadmap.
 - [docs/adr](docs/adr) — why the open questions were answered the way they were.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — building a two-module repository, and how
-  to regenerate golden files and figures.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — building a three-module repository, and
+  how to regenerate golden files and figures.
 
 ## License
 

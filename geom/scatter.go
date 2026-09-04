@@ -47,7 +47,7 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 		style.Stroke = ir.Stroke{Color: col, Width: pick(g.cfg.width, 1)}
 	}
 
-	sc := acquire()
+	sc := acquire(f)
 	defer sc.release()
 
 	// Missing rows are simply not drawn. Unlike a line, a scatter has no
@@ -73,6 +73,8 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 	if len(pts) == 0 {
 		return nil
 	}
+	// A scatter is the easy case: one mark per row, at the row's own position.
+	f.Marks(pts, sc.sourceRows(g.s, rows))
 	cols := sc.colorsFor(g.cfg, g.s, rows)
 	if cols == nil {
 		b.Markers(g.cfg.marker, pts, style)

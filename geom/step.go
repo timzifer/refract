@@ -51,7 +51,7 @@ func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 	if !stroke.Visible() {
 		return nil
 	}
-	sc := acquire()
+	sc := acquire(f)
 	defer sc.release()
 
 	// A staircase is its transitions, so the reduction that keeps its extremes
@@ -59,7 +59,12 @@ func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 	mode, budget := g.cfg.reduction(shapeStair, g.s, f)
 	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
-		pts := sc.stepPoints(sc.marks(x, y, sc.reduce(mode, budget, x, y, nil)), g.cfg.steps)
+		keep := sc.reduce(mode, budget, x, y, nil)
+		marks := sc.marks(x, y, keep)
+		// Reported before the staircase is expanded: a step draws two points
+		// per row, and only one of them is where the row is.
+		f.Marks(marks, sc.rowsOf(seg, keep, len(x)))
+		pts := sc.stepPoints(marks, g.cfg.steps)
 		if len(pts) < 2 {
 			continue
 		}
