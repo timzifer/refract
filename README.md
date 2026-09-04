@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/gopher.jpg" alt="A Go gopher holding a prism that splits a white beam into a spectrum of charts" width="640">
+</p>
+
 # refract
 
 [![CI](https://github.com/timzifer/refract/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/refract/actions/workflows/ci.yml)
@@ -13,6 +17,9 @@ everywhere — built on the GoGPU stack.**
 > stable; every release below `v1.0.0` may contain breaking changes without a
 > deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
 > ahead.
+
+The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
+specification enters refract, a spectrum of output formats comes out.
 
 ![A damped sine over a time axis, dark theme](docs/images/signal.png)
 
