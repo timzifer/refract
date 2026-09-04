@@ -1,7 +1,8 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws seven data-bearing marks today — `Line`, `Scatter`, `Bar`, `Area`,
-`Step`, `Boxplot`, and the annotations in `geom/annotate.go`. This document is
+refract draws eight data-bearing marks today — `Line`, `Scatter`, `Bar`, `Area`,
+`Step`, `Boxplot`, `Rect`, and the annotations in `geom/annotate.go`. This
+document is
 the catalogue of what it does not draw yet, sorted **by the machinery each form
 needs** rather than by how popular it is. Sorted that way the list stops being a
 wish list and becomes a schedule: half of these charts share four pieces of
@@ -15,53 +16,57 @@ mark that does not exist yet, and the catalogue says which.
 
 | Piece | Status | Unlocks |
 |---|---|---|
-| A data-driven rectangle mark (`geom.Rect`) | missing | heatmap, gantt, candlestick, waterfall, bullet, waffle, calendar |
-| Groups in one layer (`geom.GroupBy`) + discrete colour | missing — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | every multi-series form; prerequisite for stacking |
-| Multi-entry legends (`geom.Legender`) | missing — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | pie, stacks, treemap, waffle, sankey |
-| Position adjustments (stack / dodge / fill) | missing — [ADR 0019](adr/0019-position-adjustments.md) | stacked and grouped bars, stacked area, streamgraph, funnel, marimekko, ridgeline, **and pie** |
+| A data-driven rectangle mark (`geom.Rect`) | **shipped in v0.7** | heatmap, gantt, candlestick, waterfall, bullet, waffle, calendar |
+| Groups in one layer (`geom.GroupBy`) + discrete colour (`scale.Qualitative`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | every multi-series form; prerequisite for stacking |
+| Multi-entry legends (`geom.Legender`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | pie, stacks, treemap, waffle, sankey |
+| Position adjustments (stack / dodge / fill / wiggle) | **shipped in v0.7** — [ADR 0019](adr/0019-position-adjustments.md) | stacked and grouped bars, stacked area, streamgraph, funnel, marimekko, ridgeline, **and pie** |
 | Coordinate systems (`coord.Polar`) | missing — [ADR 0018](adr/0018-coordinate-systems.md) | pie, donut, radar, rose, wind rose, gauge |
 | A size channel (`geom.SizeBy` + a size scale) | missing | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | missing | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
 
-## A — needs a rectangle mark, and nothing else
+## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
 
-There is no mark that occupies an arbitrary `[x0,x1] × [y0,y1]` per row. `Bar`
-grows from a baseline to a value (`geom/bar.go:102`), and `Region` is an
-annotation taking four literals rather than four columns
-(`geom/annotate.go:193`). One new mark — `geom.Rect`, with a `geom.X2(col)`
-option beside the `geom.Y2(col)` that already exists, and a per-row baseline —
-turns eight charts into recipes.
+`geom.Rect` occupies an arbitrary `[x0,x1] × [y0,y1]` per row: `geom.X2(col)`
+gives the far horizontal edge and `geom.Y2(col)` the far vertical one, and an
+edge no column names is the slot the axis implies — a band's own width, or the
+closest spacing in the data. `Bar` still grows from a baseline to a value and
+`Region` is still an annotation taking four literals; this is the third shape,
+and it turns eight charts into recipes.
 
 | Chart | Recipe |
 |---|---|
-| Heatmap | `Rect` + `ColorBy` — both halves exist the day `Rect` does |
+| Heatmap | `Rect` + `ColorBy` over two band scales — see `examples/groups` |
 | Calendar heatmap | `Rect` + a date→(week, weekday) helper |
 | Gantt / timeline | `Rect` on a time X against an ordinal Y |
 | Candlestick / OHLC | `Rect` for open..close, a rule for low..high, colour by sign |
-| Waterfall | `Rect` with per-row `y0`/`y1` from a running total |
+| Waterfall | `Rect` with per-row `y0`/`y1` from a running total, through `Y` and `Y2` |
 | Bullet | `Rect` bands, a measure bar and a target rule |
 | Waffle | a `Rect` grid from counts |
 | Lollipop / Cleveland dot | a rule per row plus markers — its own small geom, reusing `markSpan` |
 
-**One trap, worth naming before it is built.** `spec/vocab.go:45,86` already maps
-`geom.MarkRegion` to `("rect", "")` and back. A data-driven rect collides with
-that, and `geomMark` sees only the mark object, never the encoding, so it cannot
-tell the two apart. Passing the layer's encoding into `geomMark` — a rect with
-fields is data, a rect with datums is an annotation — is how Vega-Lite resolves
-the same ambiguity, and `spec`'s round-trip test is what catches getting it
-wrong.
+**The trap, and how it was resolved.** `spec/vocab.go` maps `geom.MarkRegion` to
+`("rect", "")` and back, and a data-driven rect collides with that. `geomMark`
+is therefore passed the layer's encoding as well as the mark: a rect with a
+*field* is data and a rect with a *datum* is an annotation, which is how
+Vega-Lite resolves the same ambiguity. `spec`'s round-trip test draws both in
+one chart, which is what would catch getting it wrong.
 
-## B — needs a position adjustment
+## B — needs a position adjustment — **shipped in v0.7**
 
 See [ADR 0019](adr/0019-position-adjustments.md). Stacked bars, grouped bars,
-stacked area, 100 % stacked, streamgraph/ThemeRiver, funnel, pyramid,
-marimekko/mosaic, ridgeline. All of them are one layer over a long table with a
-group column, which is why `GroupBy` comes first and stacking second.
+stacked area, 100 % stacked and streamgraph/ThemeRiver are `geom.GroupBy` plus
+`geom.Stack` or `geom.Dodge` over a long table; the streamgraph's baseline is
+`stat.StackOffsets` (Byron–Wattenberg), which is numbers in and numbers out.
 
-A streamgraph is the interesting one: it is a stacked area whose baseline is a
-silhouette rather than zero, so it needs `stat.StackOffsets` (Byron–Wattenberg)
-and nothing else.
+Three of the family are recipes rather than options, and are worth spelling out.
+A **funnel** and a **pyramid** are a silhouette stack over one row per stage —
+`geom.Stack(geom.StackSilhouette)` centres each slot, which is the shape both
+are. A **marimekko** is `geom.WidthBy` over X positions the caller has already
+accumulated: the width option gives a bar its width in the axis's own units and
+deliberately does not move the slots, because unequal slots that label
+themselves are an axis question rather than an adjustment one. A **ridgeline**
+still waits on the KDE in F.
 
 ## C — needs polar coordinates
 
@@ -77,9 +82,9 @@ layer cannot name them.
 
 ## D — needs a new aesthetic channel
 
-**Bubble** needs a size scale. `geom.Size` is a scalar today
-(`geom/geom.go:161`) and `spec.Encoding` carries `x, y, x2, y2, color` and
-nothing else (`spec/spec.go:146`). The scale must map by **area**, not radius —
+**Bubble** needs a size scale. `geom.Size` is a scalar today and
+`spec.Encoding` carries `x, y, x2, y2, color, detail` and `width` and nothing
+else. The scale must map by **area**, not radius —
 doubling a value multiplies the diameter by √2 — because a reader compares
 bubbles by how much ink they occupy. It also needs a third guide kind beside the
 legend and the colourbar, which is the moment `layout`'s guide column should be
@@ -146,11 +151,13 @@ line over two ordinal positions. What these lack is gallery figures, not code.
 
 The dependency order is not a preference:
 
-1. **`geom.Rect`** — independent of everything, unlocks eight charts (A).
-2. **`GroupBy` + discrete colour + `Legender`** — the keystone; nothing after
-   this works without it ([ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md)).
-3. **Position adjustments** ([ADR 0019](adr/0019-position-adjustments.md)) — B,
-   and the second half of what a pie needs.
+1. ~~**`geom.Rect`**~~ — shipped in v0.7; unlocked eight charts (A).
+2. ~~**`GroupBy` + discrete colour + `Legender`**~~ — shipped in v0.7; the
+   keystone nothing after it works without
+   ([ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md)).
+3. ~~**Position adjustments**~~ — shipped in v0.7
+   ([ADR 0019](adr/0019-position-adjustments.md)): B, and the second half of
+   what a pie needs.
 4. **`coord/`** ([ADR 0018](adr/0018-coordinate-systems.md)) — C, and the reason
    the whole sequence has to finish before the v1.0 API freeze.
 5. **The size channel** — D.

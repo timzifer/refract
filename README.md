@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.6**, "native interactive and polish".
+> **Status: pre-alpha.** This is milestone **v0.7**, "marks, groups and adjustments".
 > The API is not
 > stable; every release below `v1.0.0` may contain breaking changes without a
 > deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
@@ -131,7 +131,8 @@ picture here cannot drift away from the code that produced it.
 | ![Two growth curves on a log axis](docs/images/logscale.png) | ![A series read against thresholds and a shaded window](docs/images/annotations.png) |
 | ![Throughput faceted into one panel per region](docs/images/facets.png) | ![Four subplots on one dark canvas](docs/images/subplots.png) |
 | ![A quarter of a million samples drawn as a clean line](docs/images/decimation.png) | ![A million points drawn as a density raster](docs/images/density.png) |
-| ![Standard error curves labelled with typeset notation](docs/images/notation.png) | |
+| ![Standard error curves labelled with typeset notation](docs/images/notation.png) | ![Revenue stacked by product, one layer over a long table](docs/images/stacked.png) |
+| ![Traffic by channel as a streamgraph](docs/images/stream.png) | ![Calls per hour as a heatmap of coloured cells](docs/images/heatmap.png) |
 
 ## What it does
 
@@ -145,9 +146,22 @@ picture here cannot drift away from the code that produced it.
 - **Geoms** — `Line` (optionally tension-smoothed), `Scatter` (six marker
   shapes), `Bar`, **`Area`** (to a baseline, or a band between two series),
   **`Step`** (pre/mid/post), **`Boxplot`** (Tukey whiskers, type-7 quartiles,
-  outliers).
-- **Colour** — a qualitative palette per chart, plus **continuous colour
-  scales**: `geom.ColorBy` maps a column through a sequential or diverging ramp.
+  outliers), and **`Rect`** — one box per row, bounded by the row rather than by
+  a baseline, which is what a heatmap, a gantt bar, a candle and a waterfall
+  step all are.
+- **Series in one layer** — `geom.GroupBy` splits a long table into N series
+  drawn by one layer, each with its own colour and its own legend entry.
+- **Position adjustments** — `geom.Stack` (from zero, to 100 %, about a
+  silhouette, or with the streamgraph's wiggle) and `geom.Dodge` (side by side).
+  The offsets are derived while the scales are trained, so a stacked axis
+  reaches the total rather than the tallest single value
+  ([ADR 0019](docs/adr/0019-position-adjustments.md)).
+- **Colour** — a qualitative palette per chart, plus **colour scales** bound to
+  a column by `geom.ColorBy`: a sequential or diverging ramp for a quantity, or
+  `scale.Qualitative` for categories. Which guide the layer contributes follows
+  from which it was handed — a ramp gets a colourbar, a palette gets one legend
+  entry per category
+  ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
   Ramps interpolate in linear light, so a gradient has no dark band through its
   middle.
 - **Missing data** — one explicit policy per layer (gap, interpolate, error),
@@ -208,7 +222,8 @@ picture here cannot drift away from the code that produced it.
 - **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
   gg raster adapter, a native window, and an opt-in GPU tier.
 
-Deliberately **not** here: geographic and polar coordinates, animation, and 3D.
+Deliberately **not** here: coordinate systems — polar, and therefore the pie
+and the radar — geographic projections, animation, and 3D.
 They are past v1.0 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), along
 with the stats — hexbin, contour, violin, KDE, regression — that would come with
 them.
@@ -236,6 +251,60 @@ the bar guessing from the spacing of the data. The same applies to
 
 A runnable version, together with a boxplot over the same kind of data, is in
 [`examples/categories`](examples/categories).
+
+## Series in one layer, stacked or side by side
+
+A table with a series column is *one* layer, not N. `geom.GroupBy` splits it,
+and the position adjustments are defined over the groups it makes:
+
+```go
+// quarter, product, revenue — twelve rows, one per (quarter, product) pair
+p.X(scale.Ordinal())
+p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+p.Add(geom.Bar(src,
+    geom.X("quarter"), geom.Y("revenue"),
+    geom.GroupBy("product"),
+    geom.ColorBy("product", scale.Qualitative(palette.OkabeIto)),
+))
+```
+
+A grouped bar stacks from the baseline up, because that is what a bar chart
+with a series column means. `geom.Dodge(0.1)` puts the products side by side
+instead, `geom.Stack(geom.StackFill)` makes it a 100 % chart, and
+`geom.Stack(geom.StackWiggle)` over `geom.Area` is a streamgraph. The axis is
+trained on what will be drawn rather than on the column, so a stacked axis
+reaches the total; each segment is its own shape, so a pointer lands on the
+segment and `Live.TrackRows` names the row behind it.
+
+The legend names every series. One swatch per layer could not, which is why a
+layer contributes as many entries as it has to
+([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
+
+## Boxes bounded by their own row
+
+`geom.Rect` occupies an arbitrary `[x0,x1] × [y0,y1]` per row — the mark a bar
+is not, because a bar always touches the baseline. An edge no column names is
+the slot the axis implies, so a heatmap is a rect and a ramp:
+
+```go
+p.X(scale.Ordinal(scale.OrdinalPadding(0)))
+p.Y(scale.Ordinal(scale.OrdinalPadding(0)))
+p.Add(geom.Rect(src, geom.X("day"), geom.Y("hour"),
+    geom.ColorBy("calls", scale.Sequential(palette.Viridis))))
+```
+
+and a gantt bar, which knows where it starts and stops, names both:
+
+```go
+p.X(scale.Time())
+p.Y(scale.Ordinal())
+p.Add(geom.Rect(src, geom.X("from"), geom.X2("to"), geom.Y("task")))
+```
+
+Candlestick, waterfall, waffle and calendar are the same mark with different
+columns — see [docs/chart-types.md](docs/chart-types.md).
+
+A runnable version of all four charts is in [`examples/groups`](examples/groups).
 
 ## Small multiples
 
@@ -575,7 +644,7 @@ is a test per mark and per scale that renders both and compares the primitives
 
 ```json
 {
-  "$schema": "https://github.com/timzifer/refract/spec/v0.6",
+  "$schema": "https://github.com/timzifer/refract/spec/v0.7",
   "width": 640,
   "height": 400,
   "title": "Throughput",

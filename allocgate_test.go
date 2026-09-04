@@ -84,6 +84,21 @@ func TestAFacetedRenderDoesNotAllocatePerPoint(t *testing.T) {
 	}
 }
 
+// A stacked layer is the third data path, and the one with the most
+// bookkeeping: the groups are indexed and the adjustment is derived on every
+// Train, because the axis has to describe the totals. All of it works out of
+// buffers the layer keeps, so a long table costs the same handful of
+// allocations as a short one.
+func TestAStackedLayerDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, stackedSeries(1_000))
+	large := allocsPerFrame(t, stackedSeries(200_000))
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("200k stacked rows allocate %.0f times per frame against %.0f for 1k: "+
+			"the adjustment is allocating per row", large, small)
+	}
+}
+
 // A layer coloured from a column is the other data path: one colour per mark,
 // batched into one drawing call per distinct colour. Its buffers are pooled
 // too, and this is the assertion that they stay that way.

@@ -487,11 +487,27 @@ func (p *Plot) scaleY() scale.Scale {
 	return p.y
 }
 
+// showLegend is the default rule: a legend appears once there is more than one
+// thing to tell apart.
+//
+// That is more than one layer, or one layer that draws more than one series —
+// a long table split by [geom.GroupBy] is N series inside one layer, and a
+// chart of five unlabelled stacked bands is exactly the chart that needs the
+// legend most. The question is asked of the configuration rather than of the
+// trained layer, because it decides the layout and layout runs first.
 func (p *Plot) showLegend() bool {
 	if p.legendSet {
 		return p.legend
 	}
-	return len(p.layers) > 1
+	if len(p.layers) > 1 {
+		return true
+	}
+	for _, g := range p.layers {
+		if d, ok := geom.Describe(g); ok && d.Group != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // SVG returns a target writing an SVG document to the named file.

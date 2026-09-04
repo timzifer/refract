@@ -7,6 +7,10 @@ import (
 )
 
 // Line connects consecutive rows with a stroked path.
+//
+// Given [GroupBy] it draws one path per series over a long table, each in its
+// own colour and named in the legend — which is what a table of measurements
+// with a series column plots as, and is one layer rather than N.
 func Line(src data.Source, opts ...Option) Geom {
 	return &lineGeom{src: src, cfg: newConfig(opts)}
 }
@@ -15,6 +19,7 @@ type lineGeom struct {
 	src data.Source
 	cfg config
 	s   series
+	gs  groups
 	err error
 }
 
@@ -28,19 +33,31 @@ func (g *lineGeom) Train(x, y scale.Scale) error {
 	}
 	trainColumn(x, g.s.x)
 	trainColumn(y, g.s.y)
-	return nil
+	// A line does not stack: two series drawn on top of each other are two
+	// readings, and adding them would invent a third nobody measured.
+	g.err = g.gs.train(g.src, g.s, g.cfg, x, y, NoStack)
+	return g.err
 }
 
 func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
+	if g.gs.grouped() {
+		return eachGroup(f, &g.gs, g.s, func(seg series, grp int) error {
+			return g.build(b, f, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupDash(f, grp))
+		})
+	}
+	return g.build(b, f, g.s, g.cfg.colorFor(f), g.cfg.dashFor(f))
+}
+
+func (g *lineGeom) build(b ir.Backend, f Frame, s series, col ir.Color, dash []float32) error {
 	stroke := ir.Stroke{
-		Color: g.cfg.colorFor(f),
+		Color: col,
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
 		Cap:   ir.CapRound,
 		Join:  ir.JoinRound,
-		Dash:  g.cfg.dashFor(f),
+		Dash:  dash,
 	}
 	if !stroke.Visible() {
 		return nil
@@ -49,8 +66,8 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 	sc := acquire(f)
 	defer sc.release()
 
-	mode, budget := g.cfg.reduction(shapePath, g.s, f)
-	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
+	mode, budget := g.cfg.reduction(shapePath, s, f)
+	for _, seg := range sc.segments(s, sc.plottable(s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
 		keep := sc.reduce(mode, budget, x, y, nil)
 		pts := sc.marks(x, y, keep)
@@ -70,6 +87,13 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 		b.StrokePath(&sc.line, stroke)
 	}
 	return nil
+}
+
+func (g *lineGeom) Legends(f Frame) []LegendEntry {
+	if g.err != nil {
+		return nil
+	}
+	return LegendsOr(g, f, g.cfg.legends(f, &g.gs, g.s, SwatchLine))
 }
 
 func (g *lineGeom) Legend(f Frame) (LegendEntry, bool) {

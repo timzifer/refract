@@ -22,6 +22,7 @@ const (
 	MarkArea    Mark = "area"
 	MarkStep    Mark = "step"
 	MarkBoxplot Mark = "boxplot"
+	MarkRect    Mark = "rect"
 
 	MarkHLine   Mark = "hline"
 	MarkVLine   Mark = "vline"
@@ -59,11 +60,30 @@ type Desc struct {
 	// values rather than columns.
 	Source data.Source
 
-	// X, Y and Y2 name the columns mapped to the axes. ColorCol and
+	// X, Y, X2 and Y2 name the columns mapped to the axes. ColorCol and
 	// ColorScale are [ColorBy]'s two halves.
-	X, Y, Y2   string
-	ColorCol   string
-	ColorScale scale.ColorScale
+	X, Y, X2, Y2 string
+	ColorCol     string
+	ColorScale   scale.ColorScale
+
+	// Group names the series column, and Stack, Dodge, DodgePad, Order and
+	// WidthCol are the position adjustment defined over it.
+	//
+	// Stack carries the adjustment the layer is actually using rather than the
+	// one it was given — a grouped bar that was told nothing stacks, and a
+	// Desc that said NoStack for one would describe a different chart — and
+	// StackSet reports whether the layer chose it. The pair is [Dash] and
+	// DashSet again, and for the same reason: NoStack is both the zero value
+	// and an adjustment somebody may have asked for, and without the flag a
+	// round trip through the spec would turn a grouped bar's default into a
+	// pinned "do not stack".
+	Group    string
+	Stack    Stacking
+	StackSet bool
+	Dodge    bool
+	DodgePad float64
+	Order    Ordering
+	WidthCol string
 
 	// Label names the layer in the legend.
 	Label string
@@ -170,6 +190,8 @@ func FromDesc(d Desc) (Geom, error) {
 		return Step(d.Source, opts...), nil
 	case MarkBoxplot:
 		return Boxplot(d.Source, opts...), nil
+	case MarkRect:
+		return Rect(d.Source, opts...), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownMark, d.Mark)
 }
@@ -198,6 +220,13 @@ func (d Desc) options() []Option {
 		Align(d.HAlign, d.VAlign),
 		Rotate(d.Rotation),
 		Extend(d.Extend),
+		Order(d.Order),
+	}
+	if d.StackSet {
+		opts = append(opts, Stack(d.Stack))
+	}
+	if d.Dodge {
+		opts = append(opts, Dodge(d.DodgePad))
 	}
 	if d.X != "" {
 		opts = append(opts, X(d.X))
@@ -205,8 +234,17 @@ func (d Desc) options() []Option {
 	if d.Y != "" {
 		opts = append(opts, Y(d.Y))
 	}
+	if d.X2 != "" {
+		opts = append(opts, X2(d.X2))
+	}
 	if d.Y2 != "" {
 		opts = append(opts, Y2(d.Y2))
+	}
+	if d.Group != "" {
+		opts = append(opts, GroupBy(d.Group))
+	}
+	if d.WidthCol != "" {
+		opts = append(opts, WidthBy(d.WidthCol))
 	}
 	if d.Label != "" {
 		opts = append(opts, Label(d.Label))
@@ -231,14 +269,31 @@ func (d Desc) options() []Option {
 
 // describe fills in everything a Desc takes from the shared option set. Each
 // layer adds its mark, its source and — for an annotation — its values.
+//
+// The stack is the mark's own default rather than the option's zero value,
+// which is why this takes the default: [Bar] and [Area] stack a grouped layer
+// that was told nothing, and a description that reported NoStack for one would
+// read back as a chart that draws its series on top of each other.
 func (c config) describe(mark Mark) Desc {
+	return c.describeStacking(mark, NoStack)
+}
+
+func (c config) describeStacking(mark Mark, def Stacking) Desc {
 	return Desc{
 		Mark:       mark,
 		X:          c.xcol,
 		Y:          c.ycol,
+		X2:         c.x2col,
 		Y2:         c.y2col,
 		ColorCol:   c.colorCol,
 		ColorScale: c.colorScale,
+		Group:      c.groupCol,
+		Stack:      c.stackFor(def),
+		StackSet:   c.stackSet,
+		Dodge:      c.dodge,
+		DodgePad:   c.dodgePad,
+		Order:      c.order,
+		WidthCol:   c.widthCol,
 		Label:      c.label,
 		Color:      c.color,
 		Fill:       c.fill,
@@ -280,13 +335,13 @@ func (g *scatterGeom) Describe() Desc {
 }
 
 func (g *barGeom) Describe() Desc {
-	d := g.cfg.describe(MarkBar)
+	d := g.cfg.describeStacking(MarkBar, StackZero)
 	d.Source = g.src
 	return d
 }
 
 func (g *areaGeom) Describe() Desc {
-	d := g.cfg.describe(MarkArea)
+	d := g.cfg.describeStacking(MarkArea, StackZero)
 	d.Source = g.src
 	return d
 }

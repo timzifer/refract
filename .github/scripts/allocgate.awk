@@ -73,6 +73,12 @@ END {
 	atMost("BenchmarkLTTB", 0)
 	atMost("BenchmarkMinMax", 0)
 
+	# Groups and the position adjustments, added in v0.7. A grouped layer
+	# indexes its rows and derives its stack on every Train, out of buffers it
+	# keeps between frames — so a long table costs what a short one costs. See
+	# docs/adr/0019-position-adjustments.md.
+	flat("BenchmarkStacked1k", "BenchmarkStacked100k", 8)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

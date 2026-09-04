@@ -310,7 +310,13 @@ func labelsOfEntries(es []geom.LegendEntry) []string {
 //
 // Faceted panels carry the same layers over different rows, so every panel
 // offers the same entries; a legend that repeated them once per panel would
-// grow with the facet rather than with the data.
+// grow with the facet rather than with the data. That is also why a grouped
+// layer costs nothing extra here: a facet whose panels hold different groups
+// contributes the union of them, in the order they were first seen.
+//
+// A layer contributes as many entries as it has to say — a grouped layer names
+// its series, a layer painted from a qualitative palette names its categories —
+// through [geom.Legends], which prefers a layer's own list where it has one.
 func legendEntries(c Chart, panels []Panel, area ir.Rect) []geom.LegendEntry {
 	if !c.ShowLegend {
 		return nil
@@ -319,12 +325,14 @@ func legendEntries(c Chart, panels []Panel, area ir.Rect) []geom.LegendEntry {
 	seen := map[string]bool{}
 	for _, p := range panels {
 		for i, g := range p.Layers {
-			e, ok := g.Legend(geom.Frame{Area: area, X: p.X, Y: p.Y, Theme: c.Theme, Index: i})
-			if !ok || e.Label == "" || seen[e.Label] {
-				continue
+			f := geom.Frame{Area: area, X: p.X, Y: p.Y, Theme: c.Theme, Index: i}
+			for _, e := range geom.Legends(g, f) {
+				if e.Label == "" || seen[e.Label] {
+					continue
+				}
+				seen[e.Label] = true
+				out = append(out, e)
 			}
-			seen[e.Label] = true
-			out = append(out, e)
 		}
 	}
 	return out

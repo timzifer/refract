@@ -169,7 +169,10 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 	for _, c := range d.Colors {
 		out.Range = append(out.Range, colorHex(c))
 	}
-	if d.Fixed {
+	if d.Fixed && d.Kind != scale.KindQualitative {
+		// A discrete scale's domain is the labels it has been shown, and those
+		// are the data rather than the scale — the same line an ordinal axis
+		// draws between a fixed category set and a discovered one.
 		out.Domain = []any{d.Min, d.Max}
 	}
 	if d.Kind == scale.KindDiverging {
@@ -179,6 +182,16 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 		out.Undefined = colorHex(d.Undefined)
 	}
 	return out, nil
+}
+
+// colorChannelType is the measurement type of a colour encoding: a category
+// for a discrete scale, a quantity for a ramp. Vega-Lite draws the same
+// distinction with the same two words.
+func colorChannelType(s *Scale) string {
+	if s != nil && s.Type == string(scale.KindQualitative) {
+		return "nominal"
+	}
+	return "quantitative"
 }
 
 // commonSource reports the source every layer with data draws from, and
@@ -274,22 +287,41 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		}
 		m.Budget = d.Budget
 	}
+	// The adjustment is written by the marks that have one. The stack itself
+	// goes on the positional channel, where Vega-Lite puts it and where this
+	// function cannot reach; what is left here is the pair of choices that are
+	// about the marks rather than about the axis.
+	adjust := func() {
+		if !d.Dodge {
+			return
+		}
+		m.Dodge = float64Ptr(d.DodgePad)
+	}
+	group := func() {
+		adjust()
+		if d.Group != "" && d.Order != geom.OrderAppearance {
+			m.Order = orderName(d.Order)
+		}
+	}
 
 	switch d.Mark {
 	case geom.MarkLine:
 		stroke()
 		rows()
+		group()
 		if d.Tension > 0 {
 			m.Interpolate, m.Tension = "cardinal", d.Tension
 		}
 	case geom.MarkStep:
 		stroke()
 		rows()
+		group()
 		m.Interpolate = stepName(d.Steps)
 	case geom.MarkScatter:
 		stroke()
 		fill()
 		rows()
+		group()
 		m.Size = d.Size
 		// The shape is written when the layer chose one. Left out, the mark is
 		// a circle unless the theme's redundant encoding has an opinion — and
@@ -302,11 +334,17 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		stroke()
 		fill()
 		rows()
+		group()
 		m.BarWidth, m.Origin = float64Ptr(d.BarWidth), d.Baseline
+	case geom.MarkRect:
+		stroke()
+		fill()
+		m.BarWidth = float64Ptr(d.BarWidth)
 	case geom.MarkArea:
 		stroke()
 		fill()
 		rows()
+		group()
 		m.Origin = d.Baseline
 		if d.Tension > 0 {
 			m.Interpolate, m.Tension = "cardinal", d.Tension
@@ -340,6 +378,9 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		if d.Y != "" {
 			enc.Y = &Channel{Field: d.Y}
 		}
+		if d.X2 != "" {
+			enc.X2 = &Channel{Field: d.X2}
+		}
 		if d.Y2 != "" {
 			enc.Y2 = &Channel{Field: d.Y2}
 		}
@@ -348,7 +389,19 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 			if err != nil {
 				return nil, err
 			}
-			enc.Color = &Channel{Field: d.ColorCol, Type: "quantitative", Scale: cs}
+			enc.Color = &Channel{Field: d.ColorCol, Type: colorChannelType(cs), Scale: cs}
+		}
+		if d.Group != "" {
+			enc.Detail = &Channel{Field: d.Group, Type: "nominal"}
+		}
+		if d.WidthCol != "" {
+			enc.Width = &Channel{Field: d.WidthCol}
+		}
+		// The stack is a property of the axis the groups are stacked along,
+		// which is the Y axis for every mark that has one — so it goes on the
+		// Y channel, where Vega-Lite puts it and where a reader will look.
+		if d.StackSet && enc.Y != nil {
+			enc.Y.Stack = stackName(d.Stack)
 		}
 		if *enc == (Encoding{}) {
 			return nil, nil

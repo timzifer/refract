@@ -47,9 +47,17 @@ type Guided interface {
 }
 
 // colorGuide is the shared implementation: a layer has a guide exactly when it
-// resolved a colour column through a colour scale.
+// resolved a colour column through a *continuous* colour scale.
+//
+// A discrete scale gets legend entries instead — see [Legender]. Which guide a
+// layer contributes follows from the kind of scale it was handed, which is
+// exactly the seam ADR 0020 draws: a colourbar over eight categories would be
+// a ramp through colours nothing is painted with.
 func (c config) colorGuide(s series, err error) (ColorGuide, bool) {
 	if err != nil || !c.varying(s) {
+		return ColorGuide{}, false
+	}
+	if _, discrete := scale.Discrete(c.colorScale); discrete {
 		return ColorGuide{}, false
 	}
 	label := c.label

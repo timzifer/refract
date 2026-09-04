@@ -431,6 +431,60 @@ func figures() []figure {
 			},
 		},
 		{
+			name: "stacked", width: 700, high: 420, theme: theme.Light, title: "Revenue by product",
+			build: func(p *refract.Plot) {
+				quarters, products, revenue := ledger()
+				src := refract.NewTable().
+					String("quarter", quarters).
+					String("product", products).
+					Float64("revenue", revenue)
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				// One layer over a long table: the series column makes the
+				// stack, and the discrete scale names and colours it.
+				p.Add(geom.Bar(src,
+					geom.X("quarter"), geom.Y("revenue"),
+					geom.GroupBy("product"),
+					geom.ColorBy("product", scale.Qualitative(palette.OkabeIto)),
+				))
+			},
+		},
+		{
+			name: "stream", width: 760, high: 400, theme: theme.Light, title: "Traffic by channel",
+			build: func(p *refract.Plot) {
+				days, channels, visits := channels()
+				src := refract.NewTable().
+					Float64("day", days).
+					String("channel", channels).
+					Float64("visits", visits)
+				p.X(scale.Linear())
+				p.Y(scale.Linear(scale.Nice()))
+				p.Add(geom.Area(src,
+					geom.X("day"), geom.Y("visits"),
+					geom.GroupBy("channel"),
+					geom.Stack(geom.StackWiggle),
+					geom.Order(geom.OrderInsideOut),
+					geom.ColorBy("channel", scale.Qualitative(palette.OkabeIto)),
+				))
+			},
+		},
+		{
+			name: "heatmap", width: 740, high: 400, theme: theme.Light, title: "Calls per hour",
+			build: func(p *refract.Plot) {
+				days, hours, calls := switchboard()
+				src := refract.NewTable().
+					String("day", days).
+					String("hour", hours).
+					Float64("calls", calls)
+				// A cell with no second column on either axis fills its slot,
+				// so a heatmap is a rect and a ramp and nothing else.
+				p.X(scale.Ordinal(scale.OrdinalPadding(0)))
+				p.Y(scale.Ordinal(scale.OrdinalPadding(0)))
+				p.Add(geom.Rect(src, geom.X("day"), geom.Y("hour"),
+					geom.ColorBy("calls", scale.Sequential(palette.Viridis))))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -450,6 +504,48 @@ func figures() []figure {
 			},
 		},
 	}
+}
+
+// ledger builds four quarters of revenue for three products: one row per
+// (quarter, product) pair, which is the long-table shape a grouped layer draws
+// from — twelve rows and one layer, not three layers of four.
+func ledger() (quarters, products []string, revenue []float64) {
+	for q, quarter := range []string{"Q1", "Q2", "Q3", "Q4"} {
+		for i, product := range []string{"prism", "lens", "filter"} {
+			quarters = append(quarters, quarter)
+			products = append(products, product)
+			revenue = append(revenue, 20+float64(q)*4+float64(i)*9-float64(q*i))
+		}
+	}
+	return quarters, products, revenue
+}
+
+// channels builds eight weeks of traffic for four channels, deterministically.
+func channels() (days []float64, names []string, visits []float64) {
+	for d := range 56 {
+		for i, name := range []string{"search", "social", "direct", "email"} {
+			t := float64(d) / 8
+			days = append(days, float64(d))
+			names = append(names, name)
+			visits = append(visits, math.Max(40+30*math.Sin(t/2+float64(i)*1.7)+8*math.Sin(t*3+float64(i)), 1))
+		}
+	}
+	return days, names, visits
+}
+
+// switchboard builds one cell per (weekday, hour) pair: two peaks in the day,
+// tailing off towards the end of the week.
+func switchboard() (days, hours []string, calls []float64) {
+	for d, name := range []string{"mon", "tue", "wed", "thu", "fri"} {
+		for h := 8; h < 18; h++ {
+			days = append(days, name)
+			hours = append(hours, fmt.Sprintf("%02d:00", h))
+			v := 60*math.Exp(-math.Pow(float64(h)-10, 2)/6) +
+				45*math.Exp(-math.Pow(float64(h)-15, 2)/8)
+			calls = append(calls, v*(1-float64(d)*0.12))
+		}
+	}
+	return days, hours, calls
 }
 
 // fleet builds five regions of hourly throughput, deterministically. A fixed

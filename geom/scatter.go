@@ -8,6 +8,9 @@ import (
 )
 
 // Scatter draws one marker per row.
+//
+// Given [GroupBy] it draws one set of markers per series, each in its own
+// colour and — where the theme asks for redundant encoding — its own shape.
 func Scatter(src data.Source, opts ...Option) Geom {
 	return &scatterGeom{src: src, cfg: newConfig(opts)}
 }
@@ -16,6 +19,7 @@ type scatterGeom struct {
 	src data.Source
 	cfg config
 	s   series
+	gs  groups
 	err error
 }
 
@@ -30,14 +34,25 @@ func (g *scatterGeom) Train(x, y scale.Scale) error {
 	trainColumn(x, g.s.x)
 	trainColumn(y, g.s.y)
 	g.cfg.trainColors(g.s)
-	return nil
+	// Independent marks have nothing to stack: two points at one X are two
+	// observations, not a total.
+	g.err = g.gs.train(g.src, g.s, g.cfg, x, y, NoStack)
+	return g.err
 }
 
 func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
-	col := g.cfg.colorFor(f)
+	if g.gs.grouped() {
+		return eachGroup(f, &g.gs, g.s, func(seg series, grp int) error {
+			return g.build(b, f, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupMarker(f, grp))
+		})
+	}
+	return g.build(b, f, g.s, g.cfg.colorFor(f), g.cfg.markerFor(f))
+}
+
+func (g *scatterGeom) build(b ir.Backend, f Frame, s series, col ir.Color, marker ir.Marker) error {
 	style := ir.MarkerStyle{
 		Size: pick(g.cfg.size, f.Theme.MarkerSize),
 		Fill: col,
@@ -52,21 +67,21 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 
 	// Missing rows are simply not drawn. Unlike a line, a scatter has no
 	// connectivity to break, so Gap and Interpolate are the same thing here.
-	ok := sc.plottable(g.s, f.X, f.Y)
+	ok := sc.plottable(s, f.X, f.Y)
 
-	if mode, _ := g.cfg.reduction(shapeMarkers, g.s, f); mode == DensityRaster {
+	if mode, _ := g.cfg.reduction(shapeMarkers, s, f); mode == DensityRaster {
 		// The raster takes the marker's own fill, so an explicit geom.Fill
 		// still decides what colour the cloud is.
-		return g.rasterize(b, f, sc, ok, style.Fill)
+		return g.rasterize(b, f, sc, s, ok, style.Fill)
 	}
 
 	pts := sc.pts[:0]
 	rows := sc.rows[:0]
-	for i := range g.s.x {
+	for i := range s.x {
 		if !ok[i] {
 			continue
 		}
-		pts = append(pts, ir.Point{X: f.X.Map(g.s.x[i]), Y: f.Y.Map(g.s.y[i])})
+		pts = append(pts, ir.Point{X: f.X.Map(s.x[i]), Y: f.Y.Map(s.y[i])})
 		rows = append(rows, i)
 	}
 	sc.pts, sc.rows = pts, rows
@@ -74,19 +89,19 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 	// A scatter is the easy case: one mark per row, at the row's own position.
-	f.Marks(pts, sc.sourceRows(g.s, rows))
-	cols := sc.colorsFor(g.cfg, g.s, rows)
+	f.Marks(pts, sc.sourceRows(s, rows))
+	cols := sc.colorsFor(g.cfg, s, rows)
 	if cols == nil {
-		b.Markers(g.cfg.markerFor(f), pts, style)
+		b.Markers(marker, pts, style)
 		return nil
 	}
 	for _, run := range sc.groupByColor(pts, cols) {
 		if run.color.A == 0 {
 			continue
 		}
-		s := style
-		s.Fill = run.color
-		b.Markers(g.cfg.markerFor(f), run.pts, s)
+		st := style
+		st.Fill = run.color
+		b.Markers(marker, run.pts, st)
 	}
 	return nil
 }
@@ -98,7 +113,7 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 // cloud span orders of magnitude, and under a linear one every cell but the
 // densest few would round away to nothing. An empty cell is left transparent,
 // so the plot's own grid still reads through.
-func (g *scatterGeom) rasterize(b ir.Backend, f Frame, sc *scratch, ok []bool, col ir.Color) error {
+func (g *scatterGeom) rasterize(b ir.Backend, f Frame, sc *scratch, s series, ok []bool, col ir.Color) error {
 	area := f.Area
 	if area.Empty() || col.A == 0 {
 		return nil
@@ -113,11 +128,11 @@ func (g *scatterGeom) rasterize(b ir.Backend, f Frame, sc *scratch, ok []bool, c
 		float64(area.Min.X), float64(area.Min.Y),
 		float64(area.Max.X), float64(area.Max.Y),
 	)
-	for i := range g.s.x {
+	for i := range s.x {
 		if !ok[i] {
 			continue
 		}
-		sc.grid.Add(float64(f.X.Map(g.s.x[i])), float64(f.Y.Map(g.s.y[i])))
+		sc.grid.Add(float64(f.X.Map(s.x[i])), float64(f.Y.Map(s.y[i])))
 	}
 	if sc.grid.N == 0 {
 		return nil
@@ -131,6 +146,13 @@ func (g *scatterGeom) rasterize(b ir.Backend, f Frame, sc *scratch, ok []bool, c
 
 func (g *scatterGeom) ColorGuide() (ColorGuide, bool) {
 	return g.cfg.colorGuide(g.s, g.err)
+}
+
+func (g *scatterGeom) Legends(f Frame) []LegendEntry {
+	if g.err != nil {
+		return nil
+	}
+	return LegendsOr(g, f, g.cfg.legends(f, &g.gs, g.s, SwatchMarker))
 }
 
 func (g *scatterGeom) Legend(f Frame) (LegendEntry, bool) {

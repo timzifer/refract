@@ -96,6 +96,29 @@ point. `layout.Panels` already sizes the legend box from the label list
   one mark per subpath, so a slice, a segment or a tile that is its own subpath is
   pointable, and one merged path would make a whole pie a single shape.
 
+## As built, in v0.7
+
+Two adjustments to the shapes sketched above, both in the direction the record
+was already arguing.
+
+- **`DiscreteColorScale` embeds `ColorScale`**, and `Encode` returns a `float64`
+  rather than an `int`. That is what makes the sketch's last sentence true
+  without a second option: `geom.ColorBy(col, s)` keeps one signature, a geom
+  that paints per mark already reads its colours through `ColorScale.Color`, and
+  a category is simply a value that had to be encoded before it was a number.
+  It is also exactly how `scale.Categorical` rides `Scale` — the precedent this
+  record cited — so a text column is encoded through the scale in both places,
+  and `scale.Discrete(cs)` is the type assertion that decides which guide the
+  layer contributes.
+- **The geoms answer `Legends` through `geom.LegendsOr`.** A layer that
+  implements `Legender` is not asked for `Legend` as well, so the fallback for a
+  layer with one entry has to live somewhere; putting it in one exported helper
+  keeps it out of six geoms and makes it available to a third-party one.
+
+`palette.RegisterQualitative`, `QualitativeByName` and `QualitativeName` are the
+registry treatment the consequences called for, and `scale.ColorDesc` names a
+palette through them exactly as it already named a ramp.
+
 ## Revisit if
 
 - **A layer needs both a colourbar and a legend** — coloured by a ramp, shaped by

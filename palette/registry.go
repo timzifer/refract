@@ -1,6 +1,10 @@
 package palette
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/timzifer/refract/ir"
+)
 
 // Ramps are registered by name so that a chart can be written down and read
 // back: a spec carries "viridis", not ten hex triples, and a reader who edits
@@ -34,6 +38,51 @@ func RampByName(name string) (Ramp, bool) {
 	return r, ok
 }
 
+// Qualitative palettes are registered the same way and for the same reason: a
+// discrete colour scale names "okabeito" in a spec rather than inlining eight
+// hex triples, and a reader editing the document has a word to type.
+var qualitatives = map[string]Qualitative{
+	"okabeito": OkabeIto,
+}
+
+// RegisterQualitative adds a qualitative palette under a name, replacing any
+// palette already there. It is how a third-party palette becomes reachable
+// from a spec or a config file.
+func RegisterQualitative(name string, q Qualitative) {
+	if name == "" || len(q) == 0 {
+		return
+	}
+	qualitatives[name] = q
+}
+
+// QualitativeByName looks up a registered qualitative palette.
+func QualitativeByName(name string) (Qualitative, bool) {
+	q, ok := qualitatives[name]
+	return q, ok
+}
+
+// QualitativeName reports the name a qualitative palette is registered under.
+// Like [RampName] it compares colours rather than identity, so a copy is still
+// recognised. ok is false for a palette nobody registered.
+func QualitativeName(q Qualitative) (string, bool) {
+	for _, name := range QualitativeNames() {
+		if sameColors(qualitatives[name], q) {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// QualitativeNames lists the registered qualitative palettes, sorted.
+func QualitativeNames() []string {
+	out := make([]string, 0, len(qualitatives))
+	for name := range qualitatives {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // RampName reports the name a ramp is registered under.
 //
 // It compares colours rather than identity, so a ramp that was copied — which
@@ -59,7 +108,9 @@ func RampNames() []string {
 	return out
 }
 
-func sameRamp(a, b Ramp) bool {
+func sameRamp(a, b Ramp) bool { return sameColors(a, b) }
+
+func sameColors[A, B ~[]ir.Color](a A, b B) bool {
 	if len(a) != len(b) {
 		return false
 	}

@@ -237,6 +237,9 @@ type ColorKind string
 const (
 	KindSequential ColorKind = "sequential"
 	KindDiverging  ColorKind = "diverging"
+	// KindQualitative is a discrete scale: one colour per category, from a
+	// qualitative palette rather than from a ramp. See [Qualitative].
+	KindQualitative ColorKind = "qualitative"
 )
 
 // ColorDesc is a colour scale reduced to what configures it.
@@ -246,6 +249,12 @@ const (
 // having named it. A ramp nobody registered has no name, so Colors carries it
 // literally instead — an unregistered ramp is still a ramp, and losing it
 // would be worse than spelling it out.
+//
+// A [KindQualitative] scale uses the same two fields for its palette, named
+// through [palette.QualitativeByName]. Min, Max, Fixed and Center have no
+// meaning for one: its domain is the labels it has been shown, and those are
+// the data rather than the scale — the same line [Desc] draws for a discovered
+// ordinal domain.
 type ColorDesc struct {
 	Kind      ColorKind
 	Ramp      string
@@ -275,6 +284,22 @@ func DescribeColor(s ColorScale) (ColorDesc, bool) {
 
 // ColorFromDesc builds the colour scale d describes.
 func ColorFromDesc(d ColorDesc) (ColorScale, error) {
+	if d.Kind == KindQualitative {
+		q := palette.Qualitative(d.Colors)
+		if d.Ramp != "" {
+			p, ok := palette.QualitativeByName(d.Ramp)
+			if !ok {
+				return nil, fmt.Errorf("refract/scale: unknown qualitative palette %q", d.Ramp)
+			}
+			q = p
+		}
+		opts := []ColorOption{ColorUndefined(d.Undefined)}
+		if d.Reverse {
+			opts = append(opts, ColorReverse())
+		}
+		return Qualitative(q, opts...), nil
+	}
+
 	ramp := d.Colors
 	if d.Ramp != "" {
 		r, ok := palette.RampByName(d.Ramp)

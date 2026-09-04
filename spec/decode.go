@@ -190,7 +190,7 @@ func domainValue(v any, origin int64) (float64, error) {
 }
 
 func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
-	mark, err := geomMark(l.Mark)
+	mark, err := geomMark(l.Mark, l.Encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -231,6 +231,10 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 	if l.Mark.Extend != nil {
 		d.Extend = *l.Mark.Extend
 	}
+	if l.Mark.Dodge != nil {
+		d.Dodge, d.DodgePad = true, *l.Mark.Dodge
+	}
+	d.Order = ordering(l.Mark.Order)
 	if l.Mark.Opacity != nil {
 		d.Opacity = *l.Mark.Opacity
 	}
@@ -272,6 +276,22 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 		return nil
 	}
 	d.X, d.Y, d.Y2 = fieldOf(enc.X), fieldOf(enc.Y), fieldOf(enc.Y2)
+	d.X2 = fieldOf(enc.X2)
+	d.Group, d.WidthCol = fieldOf(enc.Detail), fieldOf(enc.Width)
+	// The stack rides the channel it adjusts. A document that names none
+	// leaves the mark's own default in place, which is why this is a pair
+	// rather than a value — see [geom.Desc].
+	for _, ch := range [...]*Channel{enc.Y, enc.X} {
+		if ch == nil || ch.Stack == "" {
+			continue
+		}
+		s, ok := stacking(ch.Stack)
+		if !ok {
+			return fmt.Errorf("unknown stack %q", ch.Stack)
+		}
+		d.Stack, d.StackSet = s, true
+		break
+	}
 	d.Datum = geom.Datum{
 		X0: datumOf(enc.X), Y0: datumOf(enc.Y),
 		X1: datumOf(enc.X2), Y1: datumOf(enc.Y2),
@@ -321,8 +341,13 @@ func datumOf(ch *Channel) float64 {
 
 func decodeColorScale(s Scale) (scale.ColorScale, error) {
 	d := scale.ColorDesc{Kind: scale.KindSequential, Ramp: s.Scheme, Reverse: s.Reverse}
-	if s.Type == string(scale.KindDiverging) {
+	switch s.Type {
+	case string(scale.KindDiverging):
 		d.Kind = scale.KindDiverging
+	case string(scale.KindQualitative), "ordinal", "nominal":
+		// "ordinal" is what Vega-Lite calls a scale from categories to a
+		// discrete range, so a hand-written document that says it means this.
+		d.Kind = scale.KindQualitative
 	}
 	if s.Center != nil {
 		d.Center = *s.Center
