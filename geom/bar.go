@@ -128,6 +128,10 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	return nil
 }
 
+func (g *barGeom) ColorGuide() (ColorGuide, bool) {
+	return g.cfg.colorGuide(g.s, g.err)
+}
+
 func (g *barGeom) Legend(f Frame) (LegendEntry, bool) {
 	if g.err != nil || g.cfg.varying(g.s) {
 		return LegendEntry{}, false

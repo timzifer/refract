@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.2**, "data layer & scales". The
+> **Status: pre-alpha.** This is milestone **v0.3**, "layout, theming, PDF". The
 > API is not stable; every release below `v1.0.0` may contain breaking changes
 > without a deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and
 > the road ahead.
@@ -28,23 +28,22 @@ specification enters refract, a spectrum of output formats comes out.
 
 One declarative chart specification, rendered through interchangeable backends.
 The core is **pure Go with no dependencies at all** — not "no cgo", literally
-nothing outside the standard library — and emits SVG. Add one module and the
-same specification renders to PNG and JPEG through
+nothing outside the standard library — and emits both vector formats, SVG and
+PDF. Add one module and the same specification renders to PNG and JPEG through
 [`gogpu/gg`](https://github.com/gogpu/gg), still with `CGO_ENABLED=0`.
 
 | | Dependencies | Output |
 |---|---|---|
-| `github.com/timzifer/refract` | **stdlib only** | SVG |
+| `github.com/timzifer/refract` | **stdlib only** | SVG, PDF |
 | `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG |
 
-Raster, PDF, GPU, browser and interactive rendering all live behind the same
-`ir.Backend` interface. v0.1 ships the first two; the rest are milestones, not
-architecture changes.
+Raster, GPU, browser and interactive rendering all live behind the same
+`ir.Backend` interface. The rest are milestones, not architecture changes.
 
 ## Install
 
 ```sh
-go get github.com/timzifer/refract               # core: SVG, stdlib only
+go get github.com/timzifer/refract               # core: SVG and PDF, stdlib only
 go get github.com/timzifer/refract/backend/gg    # raster: PNG and JPEG
 ```
 
@@ -95,11 +94,12 @@ func main() {
 }
 ```
 
-For raster, swap the target — nothing else changes:
+For PDF or raster, swap the target — nothing else changes:
 
 ```go
-import ggbackend "github.com/timzifer/refract/backend/gg"
+err := p.Render(refract.PDF("signal.pdf"))          // still stdlib only
 
+import ggbackend "github.com/timzifer/refract/backend/gg"
 err := p.Render(ggbackend.PNG("signal.png"))
 ```
 
@@ -116,8 +116,9 @@ picture here cannot drift away from the code that produced it.
 | ![Three series with a legend](docs/images/series.png) | ![Two groups of scattered points](docs/images/scatter.png) |
 | ![A response time histogram](docs/images/bars.png) | ![A damped sine on a time axis](docs/images/signal.png) |
 | ![An estimate with a shaded interval](docs/images/area.png) | ![A step chart of replica counts](docs/images/steps.png) |
-| ![Bars by region, coloured by value](docs/images/categories.png) | ![Latency distributions as boxplots](docs/images/boxplot.png) |
-| ![Two growth curves on a log axis](docs/images/logscale.png) | |
+| ![Bars by region, coloured by value with a colourbar](docs/images/categories.png) | ![Latency distributions as boxplots](docs/images/boxplot.png) |
+| ![Two growth curves on a log axis](docs/images/logscale.png) | ![A series read against thresholds and a shaded window](docs/images/annotations.png) |
+| ![Throughput faceted into one panel per region](docs/images/facets.png) | ![Four subplots on one dark canvas](docs/images/subplots.png) |
 
 ## What it does
 
@@ -139,18 +140,27 @@ picture here cannot drift away from the code that produced it.
 - **Missing data** — one explicit policy per layer (gap, interpolate, error),
   covering both `NaN`/`Inf` and values a scale has no position for, such as zero
   on a log axis.
+- **Annotations** — `HLine`, `VLine`, `HBand`, `VBand`, `Segment`, `Region` and
+  `Note`. They take values rather than a data source, because there is no column
+  behind "the SLO is 200ms", and they extend the axis so the threshold is in
+  view even when the data is nowhere near it.
+- **Small multiples and subplots** — `facet.Wrap` and `facet.Grid` split one
+  plot by a column; `refract.NewGrid` puts different plots on one canvas. Both
+  go through one constraint solver, so panels are the same size and their axes
+  line up ([ADR 0010](docs/adr/0010-panel-layout.md)).
 - **Chart furniture** — axes, grid, tick labels with collision avoidance, chart
-  and axis titles, a legend.
-- **Themes** — light and dark, with a colourblind-safe
+  and axis titles, and a guide column carrying a legend and **colourbars**.
+- **Themes** — light and dark, built from a dozen
+  [tokens](theme/tokens.go) rather than fifty fields, with a colourblind-safe
   ([Okabe-Ito](https://jfly.uni-koeln.de/color/)) default palette and
-  perceptually uniform sequential ramps (Viridis, Cividis, Magma).
+  perceptually uniform sequential ramps (Viridis, Cividis, Magma). `Theme.With`
+  edits one; `theme.Register` and `theme.ByName` resolve one from a config file.
 - **Data** — columnar and batch-oriented, carrying numeric, time and categorical
   columns. A `[]float64`-backed source is borrowed, never copied.
-- **Backends** — the built-in SVG emitter, and the gg raster adapter.
+- **Backends** — two built-in emitters, SVG and PDF, and the gg raster adapter.
 
-Deliberately **not** here yet: faceting, constraint layout, PDF, colourbars and
-other guides, decimation, Arrow, the JSON spec, interactivity, GPU, browser.
-Each is a later milestone in
+Deliberately **not** here yet: decimation, Arrow, the JSON spec, interactivity,
+GPU, browser. Each is a later milestone in
 [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones).
 
 ## Categories, distributions and orders of magnitude
@@ -177,14 +187,42 @@ the bar guessing from the spacing of the data. The same applies to
 A runnable version, together with a boxplot over the same kind of data, is in
 [`examples/categories`](examples/categories).
 
+## Small multiples
+
+```go
+p := refract.New(refract.Size(900, 520), refract.Title("Throughput by region"))
+p.Add(
+    geom.Line(src, geom.X("hour"), geom.Y("rps"), geom.Label("throughput")),
+    geom.HLine(60, geom.Label("target")),          // no data: drawn on every panel
+)
+p.Facet(facet.Wrap("region", facet.Columns(3)))
+```
+
+Panels share their scales by default, which is what makes small multiples
+comparable at a glance. `facet.FreeX`, `facet.FreeY` and `facet.Free` give each
+panel its own — a deliberate choice, because a reader who does not notice the
+axes changed will read the panels as comparable when they are not.
+
+For unrelated charts on one canvas, build a grid of plots instead:
+
+```go
+g := refract.NewGrid(2, refract.GridSize(900, 560), refract.GridTitle("Fleet"))
+g.Add(latency, throughput, errors, saturation)
+err := g.Render(refract.PDF("overview.pdf"))
+```
+
+A runnable version of both, with annotations and PDF output, is in
+[`examples/dashboard`](examples/dashboard).
+
 ## How it fits together
 
 ```
    Your spec  ──►  Model  ──►  IR  ──►  Backend  ──►  output
    ─────────      ─────      ────      ───────       ──────
    geoms          scales     ~8        backend/svg    SVG
-   scales         layout     drawing   backend/gg     PNG / JPEG
-   theme          ticks      ops       (future)       PDF, GPU, browser
+   scales         layout     drawing   backend/pdf    PDF
+   theme          ticks      ops       backend/gg     PNG / JPEG
+   facets         panels               (future)       GPU, browser
 ```
 
 The `ir.Backend` interface is the seam. Geoms never touch a renderer; a renderer

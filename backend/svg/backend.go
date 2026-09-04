@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/timzifer/refract/internal/fontmetrics"
+	"github.com/timzifer/refract/internal/markers"
 	"github.com/timzifer/refract/ir"
 )
 
@@ -203,7 +204,7 @@ func (b *backend) symbol(shape ir.Marker, style ir.MarkerStyle) string {
 	b.symbols[key] = id
 
 	var p ir.Path
-	markerPath(&p, shape, style.Size)
+	markers.Path(&p, shape, style.Size)
 
 	b.defs.WriteString(`<path id="`)
 	b.defs.WriteString(id)

@@ -30,65 +30,179 @@ type Chart struct {
 
 	// ShowLegend requests a legend. Entries come from the layers.
 	ShowLegend bool
+
+	// Panels, Rows and Cols describe a multi-panel chart: subplots, or the
+	// facets of one plot. When Panels is empty the chart is the single panel
+	// described by X, Y and Layers.
+	Panels     []Panel
+	Rows, Cols int
+}
+
+// Panel is one Cartesian area of a multi-panel chart.
+type Panel struct {
+	// Row and Col place the panel in the grid.
+	Row, Col int
+	// Strip and RightStrip are the labels naming the panel, above it and
+	// beside it.
+	Strip, RightStrip string
+
+	// X and Y are this panel's scales. Panels sharing an axis share the scale
+	// object, which is what makes the axis shared rather than merely similar.
+	X, Y scale.Scale
+	// Layers are this panel's marks.
+	Layers []geom.Geom
+
+	// ShowX and ShowY report whether this panel writes its own tick labels. A
+	// panel that shares an axis with its neighbour leaves the labels to the
+	// edge of the grid.
+	ShowX, ShowY bool
 }
 
 // Draw lowers c into b. It does not call Flush: the caller owns the backend's
 // lifecycle.
+//
+// The order is fixed here and nowhere else: background, then every panel's
+// grid and axes, then the titles, then every panel's data inside its own clip,
+// then the guides. Data is drawn after the furniture so that a mark is never
+// hidden by a grid line, and the guides last because they sit outside every
+// panel and must not be clipped by one.
 func Draw(b ir.Backend, c Chart) error {
 	th := c.Theme
 	canvas := ir.R(0, 0, float32(c.Width), float32(c.Height))
+	panels, rows, cols := c.panels()
 
 	// 1. Train the scales. Tick labels depend on the domain, and the layout
 	//    depends on the tick labels, so this has to happen before anything is
 	//    measured.
-	for _, g := range c.Layers {
-		if err := g.Train(c.X, c.Y); err != nil {
-			return err
+	for _, p := range panels {
+		for _, g := range p.Layers {
+			if err := g.Train(p.X, p.Y); err != nil {
+				return err
+			}
 		}
 	}
 
-	// 2. Tick label *text* depends only on the domain, but Scale.Ticks also
-	//    reports positions, which need a range. Give the scales a provisional
-	//    unit range so the labels can be measured, then set the real range once
-	//    the plot rectangle is known and ask again.
-	c.X.SetRange(0, 1)
-	c.Y.SetRange(1, 0)
-	xTicks := c.X.Ticks(th.TickCountHintX)
-	yTicks := c.Y.Ticks(th.TickCountHintY)
+	// 2. Measure. Tick label *text* depends only on the domain, but
+	//    Scale.Ticks also reports positions, which need a range — so
+	//    measurePanels gives every scale a provisional unit range, and the
+	//    real one is set below once the rectangles exist. The guides are
+	//    collected here too, because how wide they are decides how wide the
+	//    panels can be.
+	legend := legendEntries(c, panels, ir.Rect{})
+	guides := panelColorGuides(panels)
 
-	legend := legendEntries(c, ir.Rect{})
-
-	lay := layout.Compute(layout.Chart{
+	lay := layout.Panels(layout.Grid{
 		Canvas:       canvas,
 		Theme:        th,
 		Title:        c.Title,
 		XTitle:       c.XTitle,
 		YTitle:       c.YTitle,
-		XLabels:      labelsOf(xTicks),
-		YLabels:      labelsOf(yTicks),
+		Rows:         rows,
+		Cols:         cols,
+		Panels:       measurePanels(panels, th),
 		LegendLabels: labelsOfEntries(legend),
+		Colorbars:    colorbarLabels(guides, th),
 	}, b)
 
-	// 3. Real ranges. Y is inverted: larger values are higher on screen.
-	c.X.SetRange(lay.Plot.Min.X, lay.Plot.Max.X)
-	c.Y.SetRange(lay.Plot.Max.Y, lay.Plot.Min.Y)
-	xTicks = c.X.Ticks(th.TickCountHintX)
-	yTicks = c.Y.Ticks(th.TickCountHintY)
+	// 3. Paint. Furniture for every panel first, then the titles, then the
+	//    data — so a mark is never buried under a grid line — and the guides
+	//    last, because they sit outside every panel and must not be clipped
+	//    by one.
+	drawBackground(b, canvas, th)
 
-	// 4. Paint.
-	drawBackground(b, canvas, lay.Plot, th)
-	drawGrid(b, lay.Plot, th, c, xTicks, yTicks)
-	drawAxes(b, lay, th, xTicks, yTicks)
+	for i, p := range panels {
+		area := lay.Areas[i]
+		xTicks, yTicks := p.rangeTo(area, th)
+		drawPanelFill(b, area, th)
+		drawGrid(b, area, th, p, xTicks, yTicks)
+		drawAxes(b, area, th, p, xTicks, yTicks)
+		drawStrip(b, lay.Strips[i], th, p.Strip, 0)
+		drawStrip(b, lay.RightStrips[i], th, p.RightStrip, halfPi)
+	}
+
 	drawTitles(b, lay, th, c)
 
-	if err := drawLayers(b, c, lay.Plot); err != nil {
-		return err
+	for i, p := range panels {
+		area := lay.Areas[i]
+		p.rangeTo(area, th)
+		if err := drawLayers(b, p, area, th); err != nil {
+			return err
+		}
 	}
 
 	if !lay.Legend.Empty() {
-		drawLegend(b, lay.Legend, th, legendEntries(c, lay.Plot))
+		drawLegend(b, lay.Legend, th, legendEntries(c, panels, lay.Areas[0]))
+	}
+	// The solver reserves one box per guide, in order, so these are parallel.
+	for i, box := range lay.Colorbars {
+		if i >= len(guides) {
+			break
+		}
+		drawColorbar(b, box, th, guides[i])
 	}
 	return nil
+}
+
+// panels resolves the chart into a panel list, wrapping a single-panel chart
+// into a one-by-one grid so that there is one code path rather than two.
+func (c Chart) panels() ([]Panel, int, int) {
+	if len(c.Panels) > 0 {
+		rows, cols := c.Rows, c.Cols
+		for _, p := range c.Panels {
+			rows = max(rows, p.Row+1)
+			cols = max(cols, p.Col+1)
+		}
+		return c.Panels, rows, cols
+	}
+	return []Panel{{
+		X: c.X, Y: c.Y, Layers: c.Layers, ShowX: true, ShowY: true,
+	}}, 1, 1
+}
+
+// rangeTo gives the panel's scales their real device range and returns the
+// ticks that fall in it. Y is inverted: larger values are higher on screen.
+//
+// It is called again before the data pass because panels sharing a scale share
+// one object, so the range left behind by the last panel of the furniture pass
+// is not this panel's.
+func (p Panel) rangeTo(area ir.Rect, th theme.Theme) (xTicks, yTicks []scale.Tick) {
+	p.X.SetRange(area.Min.X, area.Max.X)
+	p.Y.SetRange(area.Max.Y, area.Min.Y)
+	return p.X.Ticks(th.TickCountHintX), p.Y.Ticks(th.TickCountHintY)
+}
+
+// measurePanels reports what each panel will write, so the solver can size the
+// gutters around it.
+func measurePanels(panels []Panel, th theme.Theme) []layout.Panel {
+	out := make([]layout.Panel, len(panels))
+	for i, p := range panels {
+		p.X.SetRange(0, 1)
+		p.Y.SetRange(1, 0)
+		out[i] = layout.Panel{
+			Row:        p.Row,
+			Col:        p.Col,
+			Strip:      p.Strip,
+			RightStrip: p.RightStrip,
+		}
+		if p.ShowX {
+			out[i].XLabels = labelsOf(p.X.Ticks(th.TickCountHintX))
+		}
+		if p.ShowY {
+			out[i].YLabels = labelsOf(p.Y.Ticks(th.TickCountHintY))
+		}
+	}
+	return out
+}
+
+// panelColorGuides collects the colour guides across every panel. Faceted
+// panels share their colour scale, so the merge in colorGuides reduces them to
+// the one bar that describes all of them.
+func panelColorGuides(panels []Panel) []geom.ColorGuide {
+	var all []geom.Geom
+	for _, p := range panels {
+		all = append(all, p.Layers...)
+	}
+	return colorGuides(all)
 }
 
 // cullEps is the tolerance for "is this tick inside the plot area".
@@ -118,34 +232,77 @@ func labelsOfEntries(es []geom.LegendEntry) []string {
 	return out
 }
 
-func legendEntries(c Chart, plot ir.Rect) []geom.LegendEntry {
+// legendEntries collects the legend rows of every panel, keeping the first of
+// each label.
+//
+// Faceted panels carry the same layers over different rows, so every panel
+// offers the same entries; a legend that repeated them once per panel would
+// grow with the facet rather than with the data.
+func legendEntries(c Chart, panels []Panel, area ir.Rect) []geom.LegendEntry {
 	if !c.ShowLegend {
 		return nil
 	}
-	out := make([]geom.LegendEntry, 0, len(c.Layers))
-	for i, g := range c.Layers {
-		e, ok := g.Legend(geom.Frame{Area: plot, X: c.X, Y: c.Y, Theme: c.Theme, Index: i})
-		if ok && e.Label != "" {
+	var out []geom.LegendEntry
+	seen := map[string]bool{}
+	for _, p := range panels {
+		for i, g := range p.Layers {
+			e, ok := g.Legend(geom.Frame{Area: area, X: p.X, Y: p.Y, Theme: c.Theme, Index: i})
+			if !ok || e.Label == "" || seen[e.Label] {
+				continue
+			}
+			seen[e.Label] = true
 			out = append(out, e)
 		}
 	}
 	return out
 }
 
-func drawBackground(b ir.Backend, canvas, plot ir.Rect, th theme.Theme) {
-	if th.Background.A != 0 {
-		var p ir.Path
-		p.Rect(canvas)
-		b.FillPath(&p, ir.Solid(th.Background), ir.NonZero)
+func drawBackground(b ir.Backend, canvas ir.Rect, th theme.Theme) {
+	if th.Background.A == 0 {
+		return
 	}
-	if th.PlotFill.A != 0 && !plot.Empty() {
-		var p ir.Path
-		p.Rect(plot)
-		b.FillPath(&p, ir.Solid(th.PlotFill), ir.NonZero)
-	}
+	var p ir.Path
+	p.Rect(canvas)
+	b.FillPath(&p, ir.Solid(th.Background), ir.NonZero)
 }
 
-func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, c Chart, xTicks, yTicks []scale.Tick) {
+func drawPanelFill(b ir.Backend, area ir.Rect, th theme.Theme) {
+	if th.PlotFill.A == 0 || area.Empty() {
+		return
+	}
+	var p ir.Path
+	p.Rect(area)
+	b.FillPath(&p, ir.Solid(th.PlotFill), ir.NonZero)
+}
+
+// drawStrip paints the band naming a facet. rotation turns the label for a
+// band down the side of a panel, where it reads top to bottom.
+func drawStrip(b ir.Backend, box ir.Rect, th theme.Theme, label string, rotation float64) {
+	if label == "" || box.Empty() {
+		return
+	}
+	if th.StripBG.A != 0 {
+		var p ir.Path
+		p.Rect(box)
+		b.FillPath(&p, ir.Solid(th.StripBG), ir.NonZero)
+	}
+	if th.StripBorder.A != 0 {
+		var p ir.Path
+		p.Rect(box)
+		b.StrokePath(&p, ir.Stroke{Color: th.StripBorder, Width: th.AxisWidth})
+	}
+	b.Text(ir.TextRun{
+		Text:     label,
+		Font:     th.Font(th.StripSize),
+		At:       ir.Point{X: (box.Min.X + box.Max.X) / 2, Y: (box.Min.Y + box.Max.Y) / 2},
+		H:        ir.AlignCenter,
+		V:        ir.AlignMiddle,
+		Rotation: rotation,
+		Color:    th.StripColor,
+	})
+}
+
+func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, c Panel, xTicks, yTicks []scale.Tick) {
 	if plot.Empty() {
 		return
 	}
@@ -197,8 +354,7 @@ func tickLength(th theme.Theme, t scale.Tick) float32 {
 // minorTickScale is how long a minor tick is relative to a major one.
 const minorTickScale = 0.55
 
-func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []scale.Tick) {
-	plot := lay.Plot
+func drawAxes(b ir.Backend, plot ir.Rect, th theme.Theme, p Panel, xTicks, yTicks []scale.Tick) {
 	if plot.Empty() {
 		return
 	}
@@ -225,7 +381,7 @@ func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []
 				{X: t.Pos, Y: plot.Max.Y + l},
 			}, axis)
 		}
-		if t.Label == "" || !keep[i] {
+		if t.Label == "" || !keep[i] || !p.ShowX {
 			continue
 		}
 		b.Text(ir.TextRun{
@@ -250,7 +406,7 @@ func drawAxes(b ir.Backend, lay layout.Result, th theme.Theme, xTicks, yTicks []
 				{X: plot.Min.X, Y: t.Pos},
 			}, axis)
 		}
-		if t.Label == "" {
+		if t.Label == "" || !p.ShowY {
 			continue
 		}
 		b.Text(ir.TextRun{
@@ -285,7 +441,7 @@ func selectXLabels(m layout.Measurer, ticks []scale.Tick, font ir.FontRef, pad f
 	return keep
 }
 
-func drawTitles(b ir.Backend, lay layout.Result, th theme.Theme, c Chart) {
+func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 	if c.Title != "" {
 		b.Text(ir.TextRun{
 			Text:  c.Title,
@@ -321,8 +477,8 @@ func drawTitles(b ir.Backend, lay layout.Result, th theme.Theme, c Chart) {
 // rotation of -90 degrees in screen coordinates.
 const halfPi = 1.5707963267948966
 
-func drawLayers(b ir.Backend, c Chart, plot ir.Rect) error {
-	if plot.Empty() || len(c.Layers) == 0 {
+func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme) error {
+	if plot.Empty() || len(p.Layers) == 0 {
 		return nil
 	}
 	var clip ir.Path
@@ -330,8 +486,8 @@ func drawLayers(b ir.Backend, c Chart, plot ir.Rect) error {
 	b.Push(&clip, ir.Identity)
 	defer b.Pop()
 
-	for i, g := range c.Layers {
-		f := geom.Frame{Area: plot, X: c.X, Y: c.Y, Theme: c.Theme, Index: i}
+	for i, g := range p.Layers {
+		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Theme: th, Index: i}
 		if err := g.Build(b, f); err != nil {
 			return err
 		}

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/timzifer/refract/data"
@@ -105,6 +104,13 @@ type config struct {
 	colorScale scale.ColorScale
 	whisker    float64
 	outliers   bool
+
+	dashSet  bool
+	extend   bool
+	fontSize float64
+	halign   ir.HAlign
+	valign   ir.VAlign
+	rotation float64
 }
 
 // X selects the column mapped to the horizontal axis.
@@ -126,7 +132,9 @@ func Width(w float32) Option { return func(c *config) { c.width = w } }
 // Dash sets a dash pattern in device units. Dashing a series is redundant
 // encoding: it keeps the chart readable in greyscale and for colourblind
 // readers.
-func Dash(pattern ...float32) Option { return func(c *config) { c.dash = pattern } }
+func Dash(pattern ...float32) Option {
+	return func(c *config) { c.dash, c.dashSet = pattern, true }
+}
 
 // Tension smooths a line. 0 (the default) is a plain polyline; values in
 // (0, 1] progressively round the corners using a Catmull-Rom spline.
@@ -180,10 +188,8 @@ func Steps(where StepPos) Option { return func(c *config) { c.steps = where } }
 // own colour. It applies to [Scatter] and [Bar]; geoms whose mark is one
 // connected shape ignore it.
 //
-// A layer coloured this way contributes no legend entry: the guide such a
-// layer needs is a colourbar, and colourbars are a v0.3 milestone. Naming a
-// colour scale is not a substitute for one, so the legend says nothing rather
-// than saying something misleading.
+// A layer coloured this way contributes a colourbar rather than a legend
+// entry — a single swatch cannot represent a continuum. See [ColorGuide].
 func ColorBy(col string, s scale.ColorScale) Option {
 	return func(c *config) { c.colorCol, c.colorScale = col, s }
 }
@@ -197,8 +203,28 @@ func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
 // rows a reader opened the chart to find.
 func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
 
+// Align sets how a text annotation sits about its position. The default is
+// the run's start on the point, on the baseline.
+func Align(h ir.HAlign, v ir.VAlign) Option {
+	return func(c *config) { c.halign, c.valign = h, v }
+}
+
+// FontSize sets the type size of a text annotation in device units. The
+// default is the theme's label size.
+func FontSize(pt float64) Option { return func(c *config) { c.fontSize = pt } }
+
+// Rotate turns a text annotation about its anchor, in radians clockwise.
+func Rotate(radians float64) Option { return func(c *config) { c.rotation = radians } }
+
+// Extend controls whether an annotation widens the axis domain to include
+// itself. It is on by default: a threshold line the chart does not reach is
+// still worth seeing, because "we are nowhere near the limit" is the answer
+// the reader came for. Turn it off for an annotation that should appear only
+// when the data reaches it.
+func Extend(on bool) Option { return func(c *config) { c.extend = on } }
+
 func newConfig(opts []Option) config {
-	c := config{barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1}
+	c := config{barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1, extend: true}
 	for _, o := range opts {
 		o(&c)
 	}
@@ -317,7 +343,7 @@ func column(src data.Source, name string, s scale.Scale) ([]float64, error) {
 		if cat == nil {
 			return v, nil
 		}
-		return encode(cat, v, func(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }), nil
+		return encode(cat, v, data.FormatNumber), nil
 	}
 	if t, ok := src.TimeColumn(name); ok {
 		if cat != nil {

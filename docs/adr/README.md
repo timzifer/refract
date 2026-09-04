@@ -18,6 +18,8 @@ depends on.
 | [0006](0006-gg-coupling-surface.md) | How much of gg the adapter is allowed to touch | Accepted | §17.1 |
 | [0007](0007-per-mark-colour.md) | Colour varies per mark without changing the IR | Accepted | — |
 | [0008](0008-categorical-axes.md) | Categorical axes ride the numeric `Scale` interface | Accepted | — |
+| [0009](0009-pdf-backend.md) | PDF is a built-in emitter, not a gg recording | Accepted | — |
+| [0010](0010-panel-layout.md) | One constraint solver for every chart shape | Accepted | — |
 
 Still open, deliberately: **§17.3** (how faithful the JSON spec is to Vega-Lite)
 and **§17.7** (the third-party geom and backend extension API). Both belong to

@@ -24,6 +24,7 @@ import (
 
 	"github.com/timzifer/refract"
 	ggbackend "github.com/timzifer/refract/backend/gg"
+	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/svgdiff"
 	"github.com/timzifer/refract/ir"
@@ -129,16 +130,36 @@ func compareImage(path string, want []byte) string {
 }
 
 // figure is one documented chart.
+//
+// Most are a single plot, described by build. A figure that documents subplots
+// is a grid of plots instead, described by grid; exactly one of the two is set.
 type figure struct {
 	name  string
 	width int
 	high  int
 	build func(*refract.Plot)
+	grid  func(*refract.Grid)
 	theme theme.Theme
 	title string
 }
 
-func (f figure) plot() *refract.Plot {
+// chart is anything that can be rendered into a target: a plot, or a grid of
+// them. Both halves of every figure go through it, which is what keeps the SVG
+// and the PNG two renders of one specification.
+type chart interface {
+	Render(refract.Target) error
+}
+
+func (f figure) chart() chart {
+	if f.grid != nil {
+		g := refract.NewGrid(2,
+			refract.GridTheme(f.theme),
+			refract.GridSize(f.width, f.high),
+			refract.GridTitle(f.title),
+		)
+		f.grid(g)
+		return g
+	}
 	p := refract.New(
 		refract.Theme(f.theme),
 		refract.Size(f.width, f.high),
@@ -150,11 +171,11 @@ func (f figure) plot() *refract.Plot {
 
 func (f figure) render() (svg, png []byte, err error) {
 	var sb bytes.Buffer
-	if err := f.plot().Render(refract.SVGWriter(&sb)); err != nil {
+	if err := f.chart().Render(refract.SVGWriter(&sb)); err != nil {
 		return nil, nil, err
 	}
 	var pb bytes.Buffer
-	if err := f.plot().Render(ggbackend.Writer(&pb, ggbackend.FormatPNG)); err != nil {
+	if err := f.chart().Render(ggbackend.Writer(&pb, ggbackend.FormatPNG)); err != nil {
 		return nil, nil, err
 	}
 	return sb.Bytes(), pb.Bytes(), nil
@@ -298,7 +319,78 @@ func figures() []figure {
 				)
 			},
 		},
+		{
+			name: "facets", width: 800, high: 460, theme: theme.Light, title: "Throughput by region",
+			build: func(p *refract.Plot) {
+				regions, hours, rps := fleet()
+				src := refract.NewTable().
+					String("region", regions).
+					Float64("hour", hours).
+					Float64("rps", rps)
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(geom.Line(src, geom.X("hour"), geom.Y("rps"),
+					geom.Color(palette.Blue), geom.Label("throughput")))
+				p.Add(geom.HLine(60, geom.Label("target")))
+				p.Facet(facet.Wrap("region", facet.Columns(3)))
+			},
+		},
+		{
+			name: "annotations", width: 760, high: 400, theme: theme.Light, title: "Latency against its budget",
+			build: func(p *refract.Plot) {
+				xs := ramp(0, 60, 180)
+				src := refract.Float64Columns(map[string][]float64{
+					"minute": xs,
+					"p99": apply(xs, func(x float64) float64 {
+						return 190 + 45*math.Sin(x/7) + 12*math.Sin(x/2.3)
+					}),
+				})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(
+					geom.HBand(170, 210, geom.Label("tolerance")),
+					geom.VBand(22, 26, geom.Fill(palette.Orange), geom.Opacity(0.18), geom.Label("deploy")),
+					geom.Line(src, geom.X("minute"), geom.Y("p99"),
+						geom.Color(palette.Blue), geom.Label("p99")),
+					geom.HLine(250, geom.Label("SLO")),
+					geom.Note(1, 246, "budget", geom.FontSize(11), geom.Align(ir.AlignStart, ir.AlignTop)),
+				)
+			},
+		},
+		{
+			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
+			grid: func(g *refract.Grid) {
+				xs := ramp(0, 12, 120)
+				add := func(title string, fn func(float64) float64, c int) {
+					p := refract.New(refract.Title(title))
+					p.X(scale.Linear(scale.Nice()))
+					p.Y(scale.Linear(scale.Nice()))
+					p.Add(geom.Line(refract.Float64Columns(map[string][]float64{
+						"x": xs, "y": apply(xs, fn),
+					}), geom.X("x"), geom.Y("y"), geom.Color(palette.OkabeIto.At(c))))
+					g.Add(p)
+				}
+				add("latency", func(x float64) float64 { return 50 + 20*math.Sin(x) }, 0)
+				add("throughput", func(x float64) float64 { return 900 * math.Exp(-x/9) }, 1)
+				add("errors", func(x float64) float64 { return 3 * math.Sin(x/2) * math.Sin(x/2) }, 2)
+				add("saturation", func(x float64) float64 { return 0.45 + 0.3*math.Sin(x/3) }, 3)
+			},
+		},
 	}
+}
+
+// fleet builds five regions of hourly throughput, deterministically. A fixed
+// formula rather than math/rand is what makes -check meaningful.
+func fleet() (regions []string, hours, rps []float64) {
+	for ri, name := range []string{"north", "south", "east", "west", "central"} {
+		for h := range 24 {
+			regions = append(regions, name)
+			hours = append(hours, float64(h))
+			base := 40 + 12*float64(ri)
+			rps = append(rps, base+18*math.Sin(float64(h)/3.8+float64(ri)))
+		}
+	}
+	return regions, hours, rps
 }
 
 // cohorts builds three deterministic latency distributions, each with a tail.
