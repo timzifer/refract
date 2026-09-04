@@ -19,7 +19,7 @@
 // # Shape
 //
 //	{
-//	  "$schema": "https://github.com/timzifer/refract/spec/v0.5",
+//	  "$schema": "https://github.com/timzifer/refract/spec/v0.6",
 //	  "width": 800, "height": 500,
 //	  "title": "Signal",
 //	  "data": {"values": [{"t": 0, "y": 1}], "format": {"parse": {"t": "number", "y": "number"}}},
@@ -50,7 +50,13 @@ import (
 // Schema is the value written to `$schema`. It names the dialect and the
 // version of it; nothing fetches it, and a Vega-Lite consumer that checks the
 // field will refuse the document, which is the honest outcome.
-const Schema = "https://github.com/timzifer/refract/spec/v0.5"
+//
+// It moves when the dialect gains or changes a field: v0.6 added a time
+// scale's `origin` and made a mark's `shape` the layer's choice rather than
+// its effective value. Reading is not gated on it — a document written by an
+// older refract reads fine, and refusing one because of a version string would
+// make the field a trap rather than a label.
+const Schema = "https://github.com/timzifer/refract/spec/v0.6"
 
 // Chart is the part of a plot that survives being written down: everything
 // [Of] reads and everything [Spec.Chart] returns.
@@ -178,11 +184,18 @@ type Scale struct {
 	Range    []string `json:"range,omitempty"`
 	Reverse  bool     `json:"reverse,omitempty"`
 
-	// MinorTicks, Center, Undefined and TimeZone are refract's.
+	// MinorTicks, Center, Undefined, TimeZone and Origin are refract's.
 	MinorTicks *bool    `json:"minorTicks,omitempty"`
 	Center     *float64 `json:"center,omitempty"`
 	Undefined  string   `json:"undefined,omitempty"`
 	TimeZone   string   `json:"timeZone,omitempty"`
+
+	// Origin is the instant a time scale measures its domain from, written as
+	// a timestamp. It is refract's own — Vega-Lite has no equivalent because
+	// it has no float64 domain to run out of precision — and it is spelled out
+	// rather than dropped because it says what the numbers on that axis mean.
+	// See [github.com/timzifer/refract/scale.Origin].
+	Origin string `json:"origin,omitempty"`
 }
 
 // Data is a table written inline.

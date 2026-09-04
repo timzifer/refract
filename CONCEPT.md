@@ -378,13 +378,19 @@ full span, all `CGO_ENABLED=0`:
 - **Text** — gg's pure-Go font stack: GSUB/GPOS shaping, ligatures, kerning,
   variable fonts, OpenType features, CJK, bidi, color emoji. refract adds no text
   dependency of its own.
-- **GPU acceleration (opt-in beta)** via `import _ "github.com/gogpu/gg/gpu"` →
-  `gogpu/wgpu` (Vulkan/Metal/DX12/GLES, or software fallback). Transparent CPU
-  fallback when no GPU is present. This is the "60 fps pan/zoom over millions of
-  points" tier, with float64 origin rebasing for deep zoom.
-- **Browser (`GOOS=js`)** — gg/wgpu target browser WebGPU via `syscall/js`; Wasm
-  has no cgo, so this is inherently cgo-free. Big-data interaction on the web.
-- **Native window** via `gogpu/gogpu` for desktop interactive plots.
+- **GPU acceleration (opt-in beta)**, shipped in v0.6 — but not from this
+  module. `backend/gg` still must not import `gg/gpu`
+  ([ADR 0006](docs/adr/0006-gg-coupling-surface.md)), so the tier is a nested
+  module of its own, `backend/gg/gpu`, and importing it is the opt-in
+  ([ADR 0022](docs/adr/0022-gpu-tier.md)). Transparent CPU fallback when no GPU
+  is present.
+- ~~**Browser (`GOOS=js`)** — gg/wgpu target browser WebGPU via `syscall/js`.~~
+  gg has no `syscall/js` at the pinned version, so the browser is `backend/canvas`
+  in the core instead ([ADR 0017](docs/adr/0017-browser-backend.md)).
+- **Native window** via `gogpu/gogpu` for desktop interactive plots, shipped in
+  v0.6 as the nested module `backend/window`. It draws with this module's CPU
+  rasterizer and presents the result as a texture, so a window and a file are
+  the same picture ([ADR 0021](docs/adr/0021-native-window.md)).
 
 ### What this buys refract (and what it must still not assume)
 
@@ -439,8 +445,15 @@ Two decoupled tiers:
     - **Density binning → raster** (datashader-style) for large scatter / point
       clouds; emit an `Image` primitive.
 - **GPU tier (opt-in).** Interactive pan/zoom over the full dataset at framerate
-  via the gg GPU backend, with float64 origin rebasing for precision at deep zoom.
-  **v0.6, not yet implemented.**
+  via the gg GPU backend. **Shipped in v0.6**, as a nested module whose import
+  is the opt-in: `_ "github.com/timzifer/refract/backend/gg/gpu"` registers gg's
+  accelerator, and importing nothing leaves `backend/gg` exactly as it was
+  ([ADR 0022](docs/adr/0022-gpu-tier.md)). Registration fails quietly on a
+  machine with no device and gg falls back to the CPU, so a chart still renders.
+  Precision at deep zoom turned out to be a separate matter and to belong
+  elsewhere: device coordinates are pixels within a canvas and never large, and
+  what runs out of digits is the float64 a timestamp becomes — so the rebasing
+  is `scale.Origin`, which measures a time domain from an instant near the data.
 
 Default per geom and dataset size; user-overridable through `geom.Decimate`,
 `geom.Budget` and `geom.NoDecimation`. The reduction happens in `Build`, never
@@ -507,8 +520,12 @@ q, _ := refract.ParseJSON(doc)
 
 Interactivity — **shipped in v0.5** for the browser, through the built-in
 canvas backend rather than through gg, which has no js target at the pinned
-version ([ADR 0017](docs/adr/0017-browser-backend.md)). A native window is
-still v0.6.
+version ([ADR 0017](docs/adr/0017-browser-backend.md)). A native window followed
+in v0.6, through `backend/window`, and is one call:
+
+```go
+show.Plot(p, window.Title("Signal"))   // backend/window/show
+```
 
 ```go
 p.On(refract.Hover, func(ev refract.Event) { /* ev.Point, ev.Series(), ev.Hit */ })
@@ -683,24 +700,74 @@ the GPU tier is untouched, which is the point of the CPU tier: big-data
   handed in.
 
 Not in v0.5, in case they look like oversights. There is no native window and
-no GPU tier: both are v0.6, and both need `gogpu/gogpu` and `gg/gpu` rather than
-anything in this milestone. Row identity is off by default and not every mark
-has one — a boxplot's box aggregates many rows, a density raster is not a mark,
+no GPU tier: both landed in v0.6, and both needed `gogpu/gogpu` and `gg/gpu`
+rather than anything in this milestone. Row identity is off by default and not
+every mark has one — a boxplot's box aggregates many rows, a density raster is
+not a mark,
 an interpolated point was never measured — and those report no row rather than
 a nearby one. And the damage unit is a drawing call, so moving one point of a
 line repaints the line's box; what it does not repaint is the title, the axes
 and the margins, which is most of the canvas.
 
-### v0.6 — Native interactive & polish
+### v0.6 — Native interactive & polish — **shipped**
 
-- Native interactive window via `gogpu/gogpu`. The event system it needs is
-  already here — `Plot.Live` takes any `ir.Target`, and a window backend has
-  only to implement `ir.Backend` and, for cheap repaints, `ir.Partial`.
-- GPU tier enabled (opt-in) via `gg/gpu`; float64 origin rebasing for deep zoom.
-- Math typesetting for labels (optional, pluggable).
-- Responsiveness (line widths/font sizes on resize — leans on gg device scale).
-- Accessibility: redundant encoding (patterns/dashes), SVG `title`/`desc`/ARIA,
-  data-table fallback.
+- Native interactive window via `gogpu/gogpu`, in a new nested module,
+  `backend/window`. The event system it needed was already here, and so was the
+  rasterizer: the window draws with the same CPU backend that writes a PNG, into
+  a new in-memory `gg.Surface`, and presents that as one texture per changed
+  frame. There is one implementation of every mark, so a window shows exactly
+  what a file would ([ADR 0021](docs/adr/0021-native-window.md)). The steering
+  moved into the core as `refract.Input` — a portable state machine that turns
+  presses, moves and wheel notches into hovers, clicks, pans and zooms — and
+  `Live.Bind` was rewritten onto it, so the browser and the window share one
+  implementation rather than two that drift.
+- GPU tier enabled, opt-in, as a nested module of its own:
+  importing `backend/gg/gpu` registers gg's accelerator, and importing nothing
+  keeps `backend/gg`'s dependency graph exactly as small as it was
+  ([ADR 0022](docs/adr/0022-gpu-tier.md)). Origin rebasing turned out not to
+  belong here: refract's device coordinates are pixels within a canvas and are
+  never large, and the precision a deep zoom loses is in the float64 a timestamp
+  becomes. So it landed in `scale.Origin`, which measures a time domain from an
+  instant near the data — and keeps a nanosecond a nanosecond, where absolute
+  Unix nanoseconds in this century need 61 bits of a 53-bit mantissa.
+- Math typesetting for labels, optional and pluggable. `mathtext.Typesetter` is
+  the seam and `mathtext.TeX` is the subset that ships — scripts, `\frac`,
+  `\sqrt`, `\mathrm`, the spacing commands and the symbols a chart label
+  reaches for. A typesetter is installed by wrapping the backend, so notation
+  works in every label a chart has, including the ones layout measures and the
+  ones a geom that does not exist yet will draw
+  ([ADR 0023](docs/adr/0023-math-typesetting.md)).
+- Responsiveness: `refract.Responsive` scales a theme by how much smaller or
+  larger the drawing is than the design it was made at, `Live.Resize` is how a
+  surface says its size changed, and `ir.Resizer` is what tells a backend
+  ([ADR 0025](docs/adr/0025-responsive-charts.md)). Device scale was already
+  handled and is a different thing.
+- Accessibility, in three channels
+  ([ADR 0024](docs/adr/0024-accessibility.md)): a chart's title becomes an SVG
+  `<title>` with `role="img"`, a PDF document title and a canvas `aria-label`,
+  through a new optional backend interface, `ir.Semantics`; `Plot.Describe`
+  reads the data and writes the `<desc>` a screen reader announces after it;
+  `Plot.DataTable` writes the rows as an HTML table, which is the fallback a
+  picture cannot be; and `theme.Redundant` gives every layer a dash pattern and
+  a marker shape of its own, so that colour is not the only channel.
+- *DoD:* a chart opens in a native window on the desktop and pans, zooms and
+  resizes there; the same chart renders with the GPU tier switched on by one
+  import and without it; a label can be written as notation and is measured as
+  it is drawn; a chart drawn at a third of its size is the chart rather than a
+  photograph of it; and a reader who cannot see it gets a name, a description
+  and the numbers. ✔
+
+Not in v0.6, in case they look like oversights. The GPU tier is **opt-in beta**
+and stays that way past v1.0: for server-side stills the CPU rasterizer and the
+vector emitters are the supported path. The window cannot be opened by CI, so
+what is tested is everything that is not the window and the window itself is
+only compiled — the same hole `backend/canvas` has about a browser. The built-in
+typesetter is a small subset on purpose: no matrices, no growing delimiters, no
+document-class macros, and a label needing those wants an engine plugged into
+the interface. Accessibility stops at the document: there is no per-mark
+`<title>`, no tab order through the data, and no reduced-motion or contrast
+handling — a chart with ten thousand points has no useful reading as ten
+thousand elements, and the table is the better answer to the same question.
 
 ### v0.7 — Marks, groups and adjustments
 
@@ -833,8 +900,12 @@ what it is.
 ```
 refract/                     # core module — pure Go, STDLIB ONLY (no requires)
   refract.go                 # top-level API: New, X, Y, Add, Render      (v0.1)
+  input.go                   # the portable pointer state machine         (v0.6)
+  describe.go                # Plot.Describe, Plot.DataTable              (v0.6)
   data/                      # Source, Float64Columns, Table              (v0.1)
   scale/                     # linear, time (+ log, symlog, ordinal, colour) (v0.1)
+                             # + Origin, for a time domain that keeps its
+                             # nanoseconds at any zoom                    (v0.6)
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
   stat/                      # LTTB, min/max, density binning              (v0.4)
                              # (smooth and aggregate are still to come)
@@ -843,30 +914,45 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
   render/                    # model -> IR lowering, + Observer           (v0.1)
   facet/                     # faceting (wrap/grid)                       (v0.3)
   theme/  palette/           # tokens, colourblind-safe palettes          (v0.1)
+                             # + Scaled and Redundant                     (v0.6)
   ir/                        # IR primitives + Backend interface          (v0.1)
                              # + Damage and Partial                       (v0.5)
+                             # + Semantics and Resizer                    (v0.6)
   interact/                  # hit index and event vocabulary             (v0.5)
   spec/                      # JSON (Vega-Lite-shaped) marshal/unmarshal  (v0.5)
+  mathtext/                  # pluggable notation, and a TeX subset       (v0.6)
+  a11y/                      # description and data-table fallback        (v0.6)
   backend/svg/               # built-in, zero-dependency SVG emitter      (v0.1)
   backend/pdf/               # built-in, zero-dependency PDF emitter      (v0.3)
   backend/canvas/            # built-in canvas 2D, js/wasm only           (v0.5)
   internal/fontmetrics/      # stdlib hmtx/cmap reader + Helvetica table  (v0.1)
   internal/markers/          # the marker outlines both emitters share    (v0.3)
 
-  backend/gg/                # NESTED MODULE: raster now; GPU and native   (v0.1)
-                             # window later. Depends on gogpu/gg. Zero CGO.
-                             # PDF did not land here — see ADR 0009 — and
-                             # neither did the browser — see ADR 0017.
+  backend/gg/                # NESTED MODULE: the raster backend, and the  (v0.1)
+                             # in-memory Surface a window draws into.
+                             # Depends on gogpu/gg. Zero CGO. PDF did not
+                             # land here — see ADR 0009 — and neither did
+                             # the browser — see ADR 0017.
     cmd/gallery/             # renders every documented figure            (v0.1)
+    gpu/                     # NESTED MODULE: the opt-in GPU tier.        (v0.6)
+                             # Importing it is the opt-in — ADR 0022.
+
+  backend/window/            # NESTED MODULE: a native window.            (v0.6)
+                             # Depends on gogpu/gogpu and on backend/gg.
+                             # Zero CGO. See ADR 0021.
+    show/                    # one call: show.Plot(p)                     (v0.6)
+    cmd/demo/                # a signal to pan and zoom by hand           (v0.6)
 
   arrow/                     # NESTED MODULE: Apache Arrow adapter        (v0.4)
                              # Depends on apache/arrow-go. Zero CGO.
 ```
 
-`backend/gg` and `arrow` depend on the core, never the reverse. A nested
-module is excluded from its parent's module graph, so importing only `refract`
-yields a graph with no external packages in it at all — CI asserts this on every
-commit. SVG output works with no GoGPU present. See
+`backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow` depend on the core,
+never the reverse. A nested module is excluded from its parent's module graph, so
+importing only `refract` yields a graph with no external packages in it at all —
+CI asserts this on every commit, and the same mechanism one level down is what
+keeps `backend/gg` free of a GPU stack while `backend/gg/gpu` offers one. SVG
+output works with no GoGPU present. See
 [ADR 0001](docs/adr/0001-module-layout.md) for why the gg backend is a nested
 module here rather than the separate `refract-gg` repository this section
 originally proposed.
@@ -908,7 +994,8 @@ remains genuinely open, and is marked so.
 6. ~~**Minimum Go version**~~ — **settled:** Go 1.25, forced by gg's
    `iter.Seq`-returning `Face`. The ABI sensitivity this item worried about
    lives in `goffi`, reachable only through `gg/gpu`, which v0.1 excludes — so
-   it becomes live at v0.6, not now.
+   it became live at v0.6, where the GPU tier is a module a caller opts into
+   rather than something on the supported path.
    → [ADR 0005](docs/adr/0005-go-version.md)
 7. **Geom/backend extension API** — the interfaces third parties implement.
    **Still open**; it freezes at v1.0, and freezing it well is what makes the

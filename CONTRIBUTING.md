@@ -2,12 +2,14 @@
 
 ## Layout
 
-This is a three-module repository:
+This is a five-module repository:
 
 | Path | Module | Depends on |
 |---|---|---|
 | `.` | `github.com/timzifer/refract` | **nothing** — the standard library only |
 | `backend/gg` | `github.com/timzifer/refract/backend/gg` | `gogpu/gg`, `x/image` |
+| `backend/gg/gpu` | `github.com/timzifer/refract/backend/gg/gpu` | `gogpu/gg/gpu` → `wgpu`, `naga`, `goffi` |
+| `backend/window` | `github.com/timzifer/refract/backend/window` | `gogpu/gogpu`, and the two above |
 | `arrow` | `github.com/timzifer/refract/arrow` | `apache/arrow-go` |
 
 Three backends are in the core module — `backend/svg`, `backend/pdf` and
@@ -25,9 +27,18 @@ dependencies while the raster backend links GoGPU and the adapter links Arrow.
 CI enforces it — see [ADR 0001](docs/adr/0001-module-layout.md) and
 [ADR 0013](docs/adr/0013-arrow-adapter.md).
 
-`go.work` at the repository root is **committed**, so the three modules build
+`backend/gg/gpu` is the same mechanism one level down: it is nested *inside*
+`backend/gg` precisely so that the raster backend's own graph stays gg,
+`x/image` and the core, while importing the tier is the whole opt-in
+([ADR 0022](docs/adr/0022-gpu-tier.md)). `backend/window` is where a window
+layer is allowed to be linked, and it holds two packages on purpose: `window`
+draws and `window/show` steers, because a backend must not import the model
+([ADR 0021](docs/adr/0021-native-window.md)).
+
+`go.work` at the repository root is **committed**, so the five modules build
 together with no setup. If your tooling ignores it,
-`go work init . ./arrow ./backend/gg` reproduces it.
+`go work init . ./arrow ./backend/gg ./backend/gg/gpu ./backend/window`
+reproduces it.
 
 > Each nested module requires the core at a published tag, not through a
 > `replace` directive. The workspace still overrides that for local
@@ -41,12 +52,18 @@ together with no setup. If your tooling ignores it,
 # build and test everything
 go build ./... && go test ./...
 (cd backend/gg && go test ./...)
+(cd backend/gg/gpu && go test ./...)
+(cd backend/window && go test ./...)
 (cd arrow && go test ./...)
 
 # the checks CI runs
 gofmt -l .                                   # must print nothing
-go vet ./... && (cd backend/gg && go vet ./...) && (cd arrow && go vet ./...)
+for m in . backend/gg backend/gg/gpu backend/window arrow; do (cd "$m" && go vet ./...); done
 CGO_ENABLED=0 go build ./...
+
+# a chart in a window, by hand — the one thing CI cannot check, because a
+# runner has no display
+(cd backend/window && go run ./cmd/demo)
 
 # the benchmarks, and the gate on what they measure
 go test -run='^$' -bench=. -benchtime=10x ./... | awk -f .github/scripts/allocgate.awk
@@ -58,6 +75,8 @@ go list -deps ./... | grep -v '^github.com/timzifer/refract' | grep '\.'
 # cross-compilation, which is half the point of being cgo-free
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
 CGO_ENABLED=0 GOOS=js    GOARCH=wasm  go build ./...
+# ...for every module except the GPU tier under js/wasm: gg/gpu reaches wgpu's
+# native core, which has no browser target. The browser draws on canvas 2D.
 
 # the browser backend, run rather than merely compiled: node is the JS side and
 # the tests supply a recording 2D context
@@ -170,6 +189,21 @@ with that dependency as small as you can, and say what you touched — see
 backend is a separate module and cannot import it, so it carries a copy and
 says so.
 
+It should also answer the optional interfaces it can. One drawing into a surface
+rather than a document implements `ir.Partial`, so that a live chart repaints
+only what changed, and `ir.Resizer`, so that a surface which can change size says
+so. One whose output can carry words — a document, an element with attributes —
+implements `ir.Semantics`, which is how a chart's name and description reach it.
+A backend that writes a document implements neither of the first two, and a
+raster does not implement the third: a PNG has nowhere to put words.
+
+**A wrapper around a backend** — a recorder, a probe, a typesetting shim — has
+to forward those interfaces deliberately: a wrapper hides what it does not
+declare, and the failure is silent. `ir.Recorder` and `interact`'s probe both
+carry `Describe` for exactly this reason, and `render.Draw` keeps the unwrapped
+backend to ask it the one question that is about the backend rather than about
+the drawing.
+
 **A reduction** goes in `stat/`, takes plain slices and returns row numbers —
 never a `Source`, never IR. It is generic over `float32` and `float64` so that a
 geom can run it on projected device coordinates, which is where the reduction
@@ -191,10 +225,6 @@ what catch forgetting.
 scale's `Describe`, and a case in `scale.FromDesc`. If the option changes the
 domain rather than the framing, it probably also belongs in `SetDomain`'s
 notion of a pin — see `scale.Zoomer`.
-
-**A backend** that draws into a surface rather than a document should also
-implement `ir.Partial`, so that a live chart repaints only what changed. One
-that writes a document should not.
 
 **A theme** is `theme.Tokens` plus `theme.Build`, not fifty literal fields.
 Register it by name if it should be reachable from a config file. Reach for
@@ -242,7 +272,7 @@ go test -run='^$' -bench=. -benchtime=10x ./... | awk -f .github/scripts/allocga
 ```
 
 That is exactly what the `Benchmarks and the allocation gate` CI job runs, over
-all three modules. It gates allocation counts and never times: a shared runner
+the modules that have benchmarks. It gates allocation counts and never times: a shared runner
 has nothing reliable to say about times, and a gate that flakes is a gate people
 learn to ignore.
 

@@ -31,26 +31,45 @@ type options struct {
 	jpegQuality int
 }
 
-// WithFont replaces the embedded Go fonts with a supplied TrueType or
-// OpenType file. Pass bold as nil to synthesise nothing and reuse regular for
-// bold text.
-func WithFont(regular, bold []byte) Option {
+// WithFont replaces the embedded Go fonts with supplied TrueType or OpenType
+// files.
+//
+// Pass bold or italic as nil to synthesise nothing and reuse regular for that
+// style. Italic is worth supplying for a chart whose labels carry notation: a
+// typesetter sets variables italic, and the vector emitters ask the viewer for
+// an italic face whether or not one is given here.
+func WithFont(regular, bold, italic []byte) Option {
 	return func(o *options) {
 		reg, err := text.NewFontSource(regular)
 		if err != nil {
 			o.fontErr = fmt.Errorf("refract/backend/gg: parsing the supplied regular font: %w", err)
 			return
 		}
-		var boldSrc *text.FontSource
-		if len(bold) > 0 {
-			boldSrc, err = text.NewFontSource(bold)
-			if err != nil {
-				o.fontErr = fmt.Errorf("refract/backend/gg: parsing the supplied bold font: %w", err)
-				return
-			}
+		boldSrc, err := optionalFont(bold, "bold")
+		if err != nil {
+			o.fontErr = err
+			return
 		}
-		o.fonts = newFontSet(reg, boldSrc)
+		italicSrc, err := optionalFont(italic, "italic")
+		if err != nil {
+			o.fontErr = err
+			return
+		}
+		o.fonts = newFontSet(reg, boldSrc, italicSrc)
 	}
+}
+
+// optionalFont parses one of WithFont's optional styles, or reports nil for a
+// style the caller did not supply.
+func optionalFont(ttf []byte, style string) (*text.FontSource, error) {
+	if len(ttf) == 0 {
+		return nil, nil
+	}
+	src, err := text.NewFontSource(ttf)
+	if err != nil {
+		return nil, fmt.Errorf("refract/backend/gg: parsing the supplied %s font: %w", style, err)
+	}
+	return src, nil
 }
 
 // JPEGQuality sets the JPEG encoder quality, 1 to 100. The default is 90.
@@ -113,8 +132,13 @@ func (t *target) Open(widthPx, heightPx int, dpr float64) (ir.Backend, error) {
 	// coordinates handed to the backend stay in device-independent units while
 	// the pixel buffer is dpr times larger. gg owns the HiDPI mapping; refract
 	// does not scale anything itself.
+	if dpr <= 0 {
+		dpr = 1
+	}
 	t.ctx = gogg.NewContextWithScale(widthPx, heightPx, dpr)
-	return newBackend(t.ctx, fonts), nil
+	b := newBackend(t.ctx, fonts)
+	b.dpr = dpr
+	return b, nil
 }
 
 func (t *target) Close() error {

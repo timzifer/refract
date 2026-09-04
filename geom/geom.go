@@ -113,12 +113,13 @@ type config struct {
 	budget     int
 	cellSize   float64
 
-	dashSet  bool
-	extend   bool
-	fontSize float64
-	halign   ir.HAlign
-	valign   ir.VAlign
-	rotation float64
+	dashSet   bool
+	markerSet bool
+	extend    bool
+	fontSize  float64
+	halign    ir.HAlign
+	valign    ir.VAlign
+	rotation  float64
 }
 
 // X selects the column mapped to the horizontal axis.
@@ -154,8 +155,12 @@ func OnMissing(m Missing) Option { return func(c *config) { c.missing = m } }
 // Label names the series in the legend. It defaults to the Y column's name.
 func Label(s string) Option { return func(c *config) { c.label = s } }
 
-// Shape sets the marker shape for scatter geoms.
-func Shape(m ir.Marker) Option { return func(c *config) { c.marker = m } }
+// Shape sets the marker shape for scatter geoms. Setting it explicitly opts
+// the layer out of a theme's redundant-encoding ladder — see
+// [github.com/timzifer/refract/theme.Redundant].
+func Shape(m ir.Marker) Option {
+	return func(c *config) { c.marker, c.markerSet = m, true }
+}
 
 // Size sets the marker diameter in device units.
 func Size(s float32) Option { return func(c *config) { c.size = s } }
@@ -252,6 +257,29 @@ func (c config) colorFor(f Frame) ir.Color {
 	return pal.At(f.Index)
 }
 
+// dashFor resolves the dash pattern: the layer's own if it named one,
+// otherwise the theme's redundant-encoding ladder — which is empty unless the
+// theme asked for it, so this is nil for every ordinary chart.
+func (c config) dashFor(f Frame) []float32 {
+	if c.dashSet {
+		return c.dash
+	}
+	return f.Theme.SeriesDash(f.Index)
+}
+
+// markerFor resolves the marker shape the same way. A layer that named a shape
+// keeps it: redundant encoding is a default, and an explicit choice outranks
+// a default even when the default is the more accessible one.
+func (c config) markerFor(f Frame) ir.Marker {
+	if c.markerSet {
+		return c.marker
+	}
+	if m, ok := f.Theme.SeriesMarker(f.Index); ok {
+		return m
+	}
+	return c.marker
+}
+
 func (c config) labelFor() string {
 	if c.label != "" {
 		return c.label
@@ -340,9 +368,11 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 // column reads one column as float64 for the axis it feeds.
 //
 // A numeric column on a continuous scale is returned as it lies — that is the
-// zero-copy path the data layer exists for. A time column becomes Unix
-// nanoseconds, so a time scale sees the same numeric domain as any other. A
-// text column is encoded through the scale, which must be categorical.
+// zero-copy path the data layer exists for. A time column becomes a number in
+// the axis's own time space through [scale.ValueOf], so a time scale sees the
+// same numeric domain as any other — nanoseconds since the scale's origin,
+// which is the Unix epoch unless [scale.Origin] moved it. A text column is
+// encoded through the scale, which must be categorical.
 //
 // A numeric or time column on a *categorical* scale is encoded too, one
 // category per distinct formatted value: asking for an ordinal axis over
@@ -371,7 +401,7 @@ func column(src data.Source, name string, s scale.Scale) ([]float64, error) {
 		}
 		out := make([]float64, len(t))
 		for i, tv := range t {
-			out[i] = scale.Nanos(tv)
+			out[i] = scale.ValueOf(s, tv)
 		}
 		return out, nil
 	}

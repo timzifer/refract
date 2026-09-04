@@ -91,6 +91,7 @@ import (
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/ir"
+	"github.com/timzifer/refract/mathtext"
 	"github.com/timzifer/refract/render"
 	"github.com/timzifer/refract/scale"
 	themepkg "github.com/timzifer/refract/theme"
@@ -136,6 +137,21 @@ type Plot struct {
 	legend    bool
 	legendSet bool
 
+	// math typesets the notation in this plot's labels, and is nil for a plot
+	// whose labels are text.
+	math mathtext.Typesetter
+
+	// desc is the accessible description, and descSet distinguishes "no
+	// description" from one deliberately set to nothing.
+	desc    ir.Description
+	descSet bool
+
+	// responsive scales the theme with the size the chart is actually drawn
+	// at; refW and refH are the size it was designed at, which is the size
+	// given at construction.
+	responsive bool
+	refW, refH int
+
 	serial bool
 
 	handlers map[EventKind][]func(Event)
@@ -167,6 +183,57 @@ func DPR(r float64) Option {
 		}
 	}
 }
+
+// Responsive scales the theme with the size the chart is drawn at.
+//
+// A plot is designed at one size — the one [Size] gave it, or the default
+// 800x500 — and a responsive one keeps its proportions when it is drawn at
+// another: half the width and half the height means half-size type, half-width
+// strokes, half the margins. Without it a chart shrunk to a third of its
+// design size keeps 12pt labels, and they eat the plot area.
+//
+// It matters for a window, which the reader resizes, and for a browser canvas
+// in a fluid layout. It does nothing at all to a chart rendered once at the
+// size it was built with — the factor is exactly 1 — so turning it on cannot
+// change an existing still.
+//
+// The factor is the smaller of the two ratios, so that a chart stretched wide
+// scales to what still fits its height, and it is clamped to the range a chart
+// stays legible over. Colours do not scale; see [theme.Scaled] for what does.
+func Responsive(on bool) Option { return func(p *Plot) { p.responsive = on } }
+
+// ResponsiveFrom is [Responsive] with the design size given explicitly rather
+// than taken from [Size].
+//
+// It is what a still rendered at another size needs: a thumbnail of a chart
+// designed at 800x500 is `Size(200, 125)` with `ResponsiveFrom(800, 500)`, and
+// it comes out as the chart at a quarter of the size rather than as the chart
+// with four times the type in it. A [Live] surface needs neither, because the
+// size it was built with is already the design.
+func ResponsiveFrom(w, h int) Option {
+	return func(p *Plot) {
+		if w > 0 && h > 0 {
+			p.responsive, p.refW, p.refH = true, w, h
+		}
+	}
+}
+
+// Math typesets the notation in the chart's labels.
+//
+// It applies to every label the chart draws — the title, the axis titles, the
+// tick labels, the legend, a facet's strip, a geom's own note — because a
+// typesetter is installed by wrapping the backend rather than by being consulted
+// at each place text is written.
+//
+//	p := refract.New(
+//	    refract.Math(mathtext.TeX()),
+//	    refract.YTitle(`flux density $F_\nu$ ($\mathrm{W\,m^{-2}\,Hz^{-1}}$)`),
+//	)
+//
+// Passing nil turns it off, which is the default: a chart with no typesetter
+// draws its labels exactly as they were written, and pays nothing for the
+// notation it does not have. See package mathtext.
+func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } }
 
 // Theme sets the visual tokens. The default is [theme.Light].
 func Theme(t themepkg.Theme) Option { return func(p *Plot) { p.theme = t } }
@@ -209,8 +276,54 @@ func New(opts ...Option) *Plot {
 	for _, o := range opts {
 		o(p)
 	}
+	// The size the plot was configured at is the size it was designed at, and
+	// [Responsive] measures every later size against it — unless
+	// [ResponsiveFrom] named a different design, which is the case where the
+	// two are not the same thing.
+	if p.refW == 0 || p.refH == 0 {
+		p.refW, p.refH = p.width, p.height
+	}
 	return p
 }
+
+// themeFor returns the theme to draw at the given size: the plot's own, scaled
+// to the size when the plot is responsive.
+func (p *Plot) themeFor(w, h int) themepkg.Theme {
+	f := p.sizeFactor(w, h)
+	if f == 1 {
+		return p.theme
+	}
+	return p.theme.With(themepkg.Scaled(f))
+}
+
+// sizeFactor is how much smaller or larger this drawing is than the one the
+// plot was designed for.
+//
+// The smaller of the two ratios wins: a chart stretched to twice the width at
+// the same height has no more room for type than it had, and scaling by the
+// width would overflow it. The clamp is what stops a thumbnail from asking for
+// a half-pixel stroke and a wall display for a 200pt tick label; past those
+// bounds a chart wants a different design rather than the same one scaled.
+func (p *Plot) sizeFactor(w, h int) float64 {
+	if !p.responsive || p.refW <= 0 || p.refH <= 0 || w <= 0 || h <= 0 {
+		return 1
+	}
+	f := min(float64(w)/float64(p.refW), float64(h)/float64(p.refH))
+	return min(max(f, minResponsiveScale), maxResponsiveScale)
+}
+
+// The bounds [Plot.sizeFactor] clamps to. A quarter size keeps a 12pt label at
+// 3pt, which is the smallest that is still text; four times over is a chart
+// filling a wall.
+const (
+	minResponsiveScale = 0.25
+	maxResponsiveScale = 4
+)
+
+// Size reports the size the plot is drawn at, in device-independent pixels.
+// It is what [Size] set, or the default, and it is what a surface opening a
+// window for this plot wants to know.
+func (p *Plot) Size() (w, h int) { return p.width, p.height }
 
 // X sets the horizontal scale. The default is [scale.Linear] with nicing.
 func (p *Plot) X(s scale.Scale) *Plot { p.x = s; return p }
@@ -272,18 +385,20 @@ func (p *Plot) Render(t Target) (err error) {
 // panels a facet spec cuts it into.
 func (p *Plot) chart() (render.Chart, error) {
 	c := render.Chart{
-		Width:      p.width,
-		Height:     p.height,
-		DPR:        p.dpr,
-		Theme:      p.theme,
-		Title:      p.title,
-		XTitle:     p.xTitle,
-		YTitle:     p.yTitle,
-		X:          p.scaleX(),
-		Y:          p.scaleY(),
-		Layers:     p.layers,
-		ShowLegend: p.showLegend(),
-		Serial:     p.serial,
+		Width:       p.width,
+		Height:      p.height,
+		DPR:         p.dpr,
+		Theme:       p.themeFor(p.width, p.height),
+		Title:       p.title,
+		XTitle:      p.xTitle,
+		YTitle:      p.yTitle,
+		X:           p.scaleX(),
+		Y:           p.scaleY(),
+		Layers:      p.layers,
+		ShowLegend:  p.showLegend(),
+		Description: p.Description(),
+		Math:        p.math,
+		Serial:      p.serial,
 	}
 	if p.facet == nil {
 		return c, nil

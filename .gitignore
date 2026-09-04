@@ -25,7 +25,8 @@ profile.cov
 # vendor/
 
 # Go workspace file. go.work is committed: this repository is multi-module
-# (core + backend/gg + arrow) and the workspace is how they are built together.
+# (core + backend/gg + backend/gg/gpu + backend/window + arrow) and the
+# workspace is how they are built together.
 go.work.sum
 
 # env file
@@ -34,6 +35,9 @@ go.work.sum
 # Charts written by the examples when they are run by hand.
 bigdata-*.svg
 live.svg
+accessible.svg
+accessible.html
+accessible.txt
 
 # The browser example's build output. The wasm binary is compiled from the
 # source next to it, and wasm_exec.js is copied out of GOROOT — neither is

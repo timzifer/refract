@@ -1,13 +1,16 @@
 // Development workspace.
 //
-// The gg backend and the Arrow adapter are separate modules so that importing
-// refract's core keeps a stdlib-only dependency graph. During development the
-// three are built together from this workspace; released builds resolve the
-// core through the require directive in each nested module's go.mod.
+// The gg backend, the window backend, the opt-in GPU tier and the Arrow adapter
+// are separate modules so that importing refract's core keeps a stdlib-only
+// dependency graph. During development they are built together from this
+// workspace; released builds resolve the core through the require directive in
+// each nested module's go.mod.
 go 1.25.0
 
 use (
 	.
 	./arrow
 	./backend/gg
+	./backend/gg/gpu
+	./backend/window
 )

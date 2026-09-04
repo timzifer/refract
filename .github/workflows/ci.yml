@@ -30,6 +30,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: gofmt
@@ -45,6 +47,8 @@ jobs:
         run: |
           go vet ./...
           (cd backend/gg && go vet ./...)
+          (cd backend/gg/gpu && go vet ./...)
+          (cd backend/window && go vet ./...)
           (cd arrow && go vet ./...)
 
       - name: The core module must depend on nothing but the standard library
@@ -83,12 +87,16 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: Build
         run: |
           go build ./...
           go build ./backend/gg/...
+          go build ./backend/gg/gpu/...
+          go build ./backend/window/...
           go build ./arrow/...
 
       - name: Test the core
@@ -96,6 +104,21 @@ jobs:
 
       - name: Test the gg backend
         working-directory: backend/gg
+        run: go test ./...
+
+      # The window layer cannot be opened on a runner with no display, so what
+      # runs here is everything that is not the window: the input conversions
+      # and the seams. The window itself is compiled on every platform above
+      # and cross-compiled below. See docs/adr/0021.
+      - name: Test the window backend
+        working-directory: backend/window
+        run: go test ./...
+
+      # The GPU tier registers an accelerator that a runner has no device for.
+      # The test asserts the property that has to hold either way: a chart
+      # renders, and it renders the same chart. See docs/adr/0022.
+      - name: Test the GPU tier
+        working-directory: backend/gg/gpu
         run: go test ./...
 
       - name: Test the Arrow adapter
@@ -119,6 +142,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: Test the core
@@ -126,6 +151,10 @@ jobs:
 
       - name: Test the gg backend
         working-directory: backend/gg
+        run: go test -race ./...
+
+      - name: Test the window backend
+        working-directory: backend/window
         run: go test -race ./...
 
       - name: Test the Arrow adapter
@@ -154,6 +183,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: Build the core for ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -167,6 +198,24 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build ./backend/gg/...
+
+      - name: Build the window backend for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./backend/window/...
+
+      # The GPU tier is the one thing here that does not build for the browser:
+      # gg/gpu reaches wgpu's native core, which has no js target. That is a
+      # property of the tier rather than an oversight — the browser draws on a
+      # canvas 2D context (docs/adr/0017) — so it is checked everywhere else and
+      # skipped there.
+      - name: Build the GPU tier for ${{ matrix.goos }}/${{ matrix.goarch }}
+        if: matrix.goos != 'js'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./backend/gg/gpu/...
 
       - name: Build the Arrow adapter for ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
@@ -194,6 +243,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
       - uses: actions/setup-node@v4
         with:
@@ -233,6 +284,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       # The gate's own tests. They live behind //go:build !race because the
@@ -249,6 +302,7 @@ jobs:
           {
             go test -run='^$' -bench=. -benchtime=10x -count=1 ./...
             (cd backend/gg && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+            (cd backend/window && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
             (cd arrow && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
           } | tee bench.txt
 
@@ -283,6 +337,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: Measure
@@ -294,10 +350,11 @@ jobs:
           # by their own tests.
           go test -covermode=atomic -coverpkg=./... -coverprofile=core.cov ./...
           (cd backend/gg && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../gg.cov ./...)
+          (cd backend/window && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../window.cov ./...)
           (cd arrow && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../arrow.cov ./...)
 
           # Merge the profiles: one mode line, then every data line from each.
-          { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov arrow.cov; } > coverage.cov
+          { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov window.cov arrow.cov; } > coverage.cov
           go tool cover -func=coverage.cov | tail -n 1 | tee coverage-total.txt
 
       - name: Write the badge endpoint
@@ -373,6 +430,8 @@ jobs:
           cache-dependency-path: |
             go.sum
             backend/gg/go.sum
+            backend/gg/gpu/go.sum
+            backend/window/go.sum
             arrow/go.sum
 
       - name: Check the committed figures against the code

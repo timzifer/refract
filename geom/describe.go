@@ -75,29 +75,35 @@ type Desc struct {
 
 	// The styling options, one field per [Option]. A nil Color or Fill means
 	// the layer takes its colour from the palette.
-	Color    *ir.Color
-	Fill     *ir.Color
-	Width    float32
-	Dash     []float32
-	DashSet  bool
-	Tension  float64
-	Missing  Missing
-	Marker   ir.Marker
-	Size     float32
-	BarWidth float64
-	Baseline float64
-	Opacity  float64
-	Steps    StepPos
-	Whisker  float64
-	Outliers bool
-	Decimate Decimation
-	Budget   int
-	CellSize float64
-	FontSize float64
-	HAlign   ir.HAlign
-	VAlign   ir.VAlign
-	Rotation float64
-	Extend   bool
+	Color   *ir.Color
+	Fill    *ir.Color
+	Width   float32
+	Dash    []float32
+	DashSet bool
+	Tension float64
+	Missing Missing
+	// Marker is the shape a scatter draws, and MarkerSet reports whether the
+	// layer chose it. The pair is [Dash] and DashSet again, and for the same
+	// reason: a circle is both the zero value and a shape somebody may have
+	// asked for, and a theme's redundant encoding replaces the first but not
+	// the second.
+	Marker    ir.Marker
+	MarkerSet bool
+	Size      float32
+	BarWidth  float64
+	Baseline  float64
+	Opacity   float64
+	Steps     StepPos
+	Whisker   float64
+	Outliers  bool
+	Decimate  Decimation
+	Budget    int
+	CellSize  float64
+	FontSize  float64
+	HAlign    ir.HAlign
+	VAlign    ir.VAlign
+	Rotation  float64
+	Extend    bool
 }
 
 // Describer is implemented by a layer that can say what it is.
@@ -176,7 +182,6 @@ func FromDesc(d Desc) (Geom, error) {
 func (d Desc) options() []Option {
 	opts := []Option{
 		OnMissing(d.Missing),
-		Shape(d.Marker),
 		Size(d.Size),
 		Width(d.Width),
 		Tension(d.Tension),
@@ -215,6 +220,9 @@ func (d Desc) options() []Option {
 	if d.DashSet {
 		opts = append(opts, Dash(d.Dash...))
 	}
+	if d.MarkerSet {
+		opts = append(opts, Shape(d.Marker))
+	}
 	if d.ColorCol != "" && d.ColorScale != nil {
 		opts = append(opts, ColorBy(d.ColorCol, d.ColorScale))
 	}
@@ -240,6 +248,7 @@ func (c config) describe(mark Mark) Desc {
 		Tension:    c.tension,
 		Missing:    c.missing,
 		Marker:     c.marker,
+		MarkerSet:  c.markerSet,
 		Size:       c.size,
 		BarWidth:   c.barWidth,
 		Baseline:   c.baseline,

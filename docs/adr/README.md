@@ -30,6 +30,11 @@ depends on.
 | [0018](0018-coordinate-systems.md) | Coordinates are a stage between the scales and the IR | Accepted | — |
 | [0019](0019-position-adjustments.md) | Stacking is a position adjustment within a layer, derived in `Train` | Accepted | — |
 | [0020](0020-discrete-colour-and-multi-entry-legends.md) | Discrete colour is a scale; a layer may contribute many legend entries | Accepted | — |
+| [0021](0021-native-window.md) | The native window rasterizes on the CPU and presents one texture | Accepted | — |
+| [0022](0022-gpu-tier.md) | The GPU tier is opted into by importing a module | Accepted | — |
+| [0023](0023-math-typesetting.md) | Notation is typeset by a pluggable typesetter, installed by wrapping the backend | Accepted | — |
+| [0024](0024-accessibility.md) | A chart says what it is in three channels: a name, a description, and its data | Accepted | — |
+| [0025](0025-responsive-charts.md) | A chart follows its surface by scaling its theme | Accepted | — |
 
 Still open, deliberately: **§17.7** (the third-party geom and backend extension
 API). It freezes at v1.0, and freezing it well is what makes the "last plotting

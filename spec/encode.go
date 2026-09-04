@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/geom"
@@ -128,6 +129,9 @@ func encodeScale(d scale.Desc) *Scale {
 		out.MinorTicks = boolPtr(d.MinorTicks)
 	case scale.KindTime:
 		out.Type, out.TimeZone = "time", d.Location
+		if d.Origin != 0 {
+			out.Origin = time.Unix(0, d.Origin).UTC().Format(timeLayout)
+		}
 	case scale.KindOrdinal:
 		// "band" is Vega-Lite's name for a scale that gives each category a
 		// slot of finite width, which is what this one does — see scale.Band.
@@ -140,9 +144,12 @@ func encodeScale(d scale.Desc) *Scale {
 	if d.Fixed {
 		switch d.Kind {
 		case scale.KindTime:
+			// The bounds are written as instants, so they are read back
+			// against whatever origin the document carries rather than
+			// against the one this axis happens to have.
 			out.Domain = []any{
-				scale.FromNanos(d.Min).UTC().Format(timeLayout),
-				scale.FromNanos(d.Max).UTC().Format(timeLayout),
+				time.Unix(0, d.Origin+int64(d.Min)).UTC().Format(timeLayout),
+				time.Unix(0, d.Origin+int64(d.Max)).UTC().Format(timeLayout),
 			}
 		case scale.KindOrdinal:
 			// The categories are already the domain.
@@ -283,7 +290,13 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		stroke()
 		fill()
 		rows()
-		m.Shape, m.Size = shapeName(d.Marker), d.Size
+		m.Size = d.Size
+		// The shape is written when the layer chose one. Left out, the mark is
+		// a circle unless the theme's redundant encoding has an opinion — and
+		// a document that spelled "circle" out would pin it and lose that.
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
 		m.DensityCells = d.CellSize
 	case geom.MarkBar:
 		stroke()

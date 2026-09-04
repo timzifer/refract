@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Bars</title>
 <defs>
 <clipPath id="c1"><path d="M42.406,32.8 L464.942,32.8 L464.942,288.825 L42.406,288.825 Z"/></clipPath>
 </defs>

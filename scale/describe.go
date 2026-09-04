@@ -52,6 +52,14 @@ type Desc struct {
 	// MinorTicks reports the unlabelled subdivisions of a log or symlog axis.
 	MinorTicks bool
 
+	// Origin is a time scale's epoch, in Unix nanoseconds: the instant its
+	// domain values are measured from. It is zero for every other kind, and
+	// for a time scale left on the Unix epoch. It is not a formatting choice
+	// like Location is — it decides what the numbers in Min and Max *mean* —
+	// so a document that dropped it would read back a different axis. See
+	// [Origin].
+	Origin int64
+
 	// Categories is an ordinal scale's fixed category set, empty when it
 	// discovers its categories from the data. Padding is the fraction of each
 	// slot left blank.
@@ -137,6 +145,9 @@ func FromDesc(d Desc) (Scale, error) {
 			}
 			opts = append(opts, In(loc))
 		}
+		if d.Origin != 0 {
+			opts = append(opts, Origin(time.Unix(0, d.Origin)))
+		}
 		s := Time(opts...)
 		if d.Fixed {
 			s.(Zoomer).SetDomain(d.Min, d.Max)
@@ -184,7 +195,7 @@ func (s *symlogScale) Describe() Desc {
 }
 
 func (s *timeScale) Describe() Desc {
-	d := Desc{Kind: KindTime, Fixed: s.fixed, Formatted: s.format != nil}
+	d := Desc{Kind: KindTime, Fixed: s.fixed, Origin: s.origin, Formatted: s.format != nil}
 	if s.loc != nil {
 		d.Location = s.loc.String()
 	}

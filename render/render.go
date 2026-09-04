@@ -10,6 +10,7 @@ import (
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/layout"
+	"github.com/timzifer/refract/mathtext"
 	"github.com/timzifer/refract/scale"
 	"github.com/timzifer/refract/theme"
 )
@@ -30,6 +31,16 @@ type Chart struct {
 
 	// ShowLegend requests a legend. Entries come from the layers.
 	ShowLegend bool
+
+	// Description is what the chart says about itself in words, for a backend
+	// that can carry it — see [ir.Semantics]. It is announced before anything
+	// is drawn and never affects what is.
+	Description ir.Description
+
+	// Math typesets the notation in this chart's labels. It is nil for a chart
+	// whose labels are text, which is the default and costs nothing: the
+	// backend is wrapped only when there is a typesetter to wrap it with.
+	Math mathtext.Typesetter
 
 	// Panels, Rows and Cols describe a multi-panel chart: subplots, or the
 	// facets of one plot. When Panels is empty the chart is the single panel
@@ -110,6 +121,17 @@ type Panel struct {
 // hidden by a grid line, and the guides last because they sit outside every
 // panel and must not be clipped by one.
 func Draw(b ir.Backend, c Chart) error {
+	// Every label — measured during layout and drawn during the paint — goes
+	// through the backend, so a typesetter is installed by wrapping it once
+	// here rather than at each of the dozen places that write text.
+	//
+	// The unwrapped backend is kept for the one thing that is asked of the
+	// backend itself rather than of the drawing: whether it can carry a
+	// description. A wrapper forwards drawing calls and hides optional
+	// interfaces, so the question has to be put to the backend that answers it.
+	raw := b
+	b = withMath(b, c.Math)
+
 	th := c.Theme
 	canvas := ir.R(0, 0, float32(c.Width), float32(c.Height))
 	panels, rows, cols := c.panels()
@@ -151,6 +173,12 @@ func Draw(b ir.Backend, c Chart) error {
 	//    data — so a mark is never buried under a grid line — and the guides
 	//    last, because they sit outside every panel and must not be clipped
 	//    by one.
+	//
+	//    The description goes first of all, before any ink: a backend that
+	//    writes a document header has it in hand when it writes one.
+	if s, ok := raw.(ir.Semantics); ok && !c.Description.Empty() {
+		s.Describe(c.Description)
+	}
 	drawBackground(b, canvas, th)
 
 	for i, p := range panels {

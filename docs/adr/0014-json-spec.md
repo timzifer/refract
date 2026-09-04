@@ -60,7 +60,9 @@ Concretely:
   `scale.minorTicks`, `scale.center`, `scale.timeZone`, `config.theme`. No
   Vega-Lite name is borrowed for something that is not what Vega-Lite means by
   it.
-- `$schema` is `https://github.com/timzifer/refract/spec/v0.5`. It identifies
+- `$schema` is `https://github.com/timzifer/refract/spec/v0.6` (it was `v0.5`
+  when this record was written; the dialect moves when it gains a field, and
+  v0.6 added a time scale's `origin`). It identifies
   the dialect; nothing fetches it. A Vega-Lite consumer that checks the field
   will refuse the document, which is the honest outcome — the alternative is a
   document that claims to be Vega-Lite and renders as something else.

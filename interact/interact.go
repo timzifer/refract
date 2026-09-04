@@ -483,6 +483,19 @@ func (p *probe) Measure(run ir.TextRun) ir.TextMetrics {
 }
 func (p *probe) Flush() error { return p.b.Flush() }
 
+// Describe forwards a description to the watched backend, when that backend
+// can carry one.
+//
+// A wrapper hides the optional interfaces of what it wraps, and a probe is a
+// wrapper: without this, watching a render would quietly cost the chart its
+// accessible name, and only for the interactive charts — which are the ones
+// that need it most. Nothing is indexed here; words are not marks.
+func (p *probe) Describe(d ir.Description) {
+	if s, ok := p.b.(ir.Semantics); ok {
+		s.Describe(d)
+	}
+}
+
 func bounds(pts []ir.Point, pad float32) ir.Rect {
 	out := ir.Rect{Min: pts[0], Max: pts[0]}
 	for _, q := range pts[1:] {
@@ -494,4 +507,7 @@ func bounds(pts []ir.Point, pad float32) ir.Rect {
 	return out.Inset(-pad, -pad, -pad, -pad)
 }
 
-var _ ir.Backend = (*probe)(nil)
+var (
+	_ ir.Backend   = (*probe)(nil)
+	_ ir.Semantics = (*probe)(nil)
+)

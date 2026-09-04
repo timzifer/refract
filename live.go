@@ -96,6 +96,14 @@ type Live struct {
 	t Target
 	b ir.Backend
 
+	// width, height and dpr describe the surface, which starts as the plot
+	// says and changes when the surface does — see [Live.Resize] and
+	// [Live.Rescale]. They live here rather than on the Plot because a window
+	// being dragged onto another display is not an edit to the chart
+	// specification.
+	width, height int
+	dpr           float64
+
 	chart render.Chart
 	idx   *interact.Index
 
@@ -130,7 +138,11 @@ func (p *Plot) Live(t Target) (*Live, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &Live{p: p, t: t, b: b, idx: interact.New(), panel: -1}
+	l := &Live{
+		p: p, t: t, b: b,
+		width: p.width, height: p.height, dpr: p.dpr,
+		idx: interact.New(), panel: -1,
+	}
 	if l.chart, err = p.chart(); err != nil {
 		t.Close()
 		return nil, err
@@ -177,6 +189,84 @@ func (l *Live) TrackRows(on bool) *Live {
 	return l
 }
 
+// Resize tells the chart its surface has changed size, and redraws it.
+//
+// It is what a window's resize event and a reflowed canvas element call. The
+// scales keep whatever they were zoomed or panned to — a reader who has dragged
+// a view into place has not asked to leave it — and the chart is laid out
+// again at the new size, so the margins, the tick count and the legend follow.
+// A [Responsive] plot also rescales its type and stroke weights here.
+//
+// The backend is told too, if it can be: a surface that implements
+// [ir.Resizer] is resized in place rather than reopened, which is what keeps
+// the frame on screen and the zoom in the scales. One that cannot is redrawn
+// at the new logical size into the surface it has, which is the best available
+// answer and is what a document target would do.
+//
+// Resizing to the size it already has is not an error and draws nothing.
+func (l *Live) Resize(w, h int) error {
+	if l.b == nil {
+		return errors.New("refract: Resize on a closed Live")
+	}
+	if w <= 0 || h <= 0 {
+		return fmt.Errorf("refract: chart size %dx%d is not positive", w, h)
+	}
+	if w == l.width && h == l.height {
+		return nil
+	}
+	l.width, l.height = w, h
+	l.chart.Width, l.chart.Height = w, h
+	l.chart.Theme = l.p.themeFor(w, h)
+	if r, ok := l.b.(ir.Resizer); ok {
+		if err := r.Resize(w, h, l.dpr); err != nil {
+			return err
+		}
+	}
+	// A frame of a different size is not comparable with the last one: every
+	// coordinate in it moved, so there is no damage to compute.
+	l.drawn = false
+	return l.Draw()
+}
+
+// Size reports the surface's current size in device-independent pixels.
+func (l *Live) Size() (w, h int) { return l.width, l.height }
+
+// Rescale tells the chart its surface's device pixel ratio has changed, and
+// redraws it.
+//
+// It is what a window dragged onto a display with a different one calls. The
+// chart is not laid out differently — a device pixel ratio is not a size, and
+// coordinates stay in device-independent units either way — but the surface
+// behind it wants more pixels, and a backend that can provide them is told to.
+// A backend that cannot is left alone and the frame is redrawn as it was.
+//
+// Rescaling to the ratio it already has is not an error and draws nothing.
+func (l *Live) Rescale(dpr float64) error {
+	if l.b == nil {
+		return errors.New("refract: Rescale on a closed Live")
+	}
+	if dpr <= 0 {
+		return fmt.Errorf("refract: device pixel ratio %v is not positive", dpr)
+	}
+	if dpr == l.dpr {
+		return nil
+	}
+	l.dpr = dpr
+	r, ok := l.b.(ir.Resizer)
+	if !ok {
+		return nil
+	}
+	if err := r.Resize(l.width, l.height, dpr); err != nil {
+		return err
+	}
+	// The pixels behind the frame are gone: the surface reallocated them.
+	l.drawn = false
+	return l.Draw()
+}
+
+// DPR reports the surface's current device pixel ratio.
+func (l *Live) DPR() float64 { return l.dpr }
+
 // Rebuild resolves the plot again, picking up layers, scales or a facet added
 // since the Live was created. It forgets any zoom on a facet's free axes,
 // which belong to panels that no longer exist.
@@ -189,6 +279,10 @@ func (l *Live) Rebuild() error {
 	if l.idx.TrackingRows() {
 		c.RowSink = l.idx
 	}
+	// A Live that has been resized keeps its size across a rebuild: the plot
+	// still says what it was built with, and the surface is the size it is.
+	c.Width, c.Height = l.width, l.height
+	c.Theme = l.p.themeFor(l.width, l.height)
 	l.chart = c
 	l.drawn = false
 	return nil

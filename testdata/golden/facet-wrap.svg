@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Throughput by region</title>
 <defs>
 <clipPath id="c1"><path d="M59.506,50.975 L350.067,50.975 L350.067,186.675 L59.506,186.675 Z"/></clipPath>
 <clipPath id="c2"><path d="M362.067,50.975 L652.628,50.975 L652.628,186.675 L362.067,186.675 Z"/></clipPath>

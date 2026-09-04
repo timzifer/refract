@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Estimate and interval</title>
 <defs>
 <clipPath id="c1"><path d="M30.779,32.8 L624.942,32.8 L624.942,368.825 L30.779,368.825 Z"/></clipPath>
 </defs>

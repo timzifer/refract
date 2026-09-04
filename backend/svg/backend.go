@@ -26,6 +26,8 @@ type backend struct {
 	defs bytes.Buffer
 	body bytes.Buffer
 
+	desc ir.Description
+
 	depth   int // open <g> elements from Push
 	nextID  int
 	symbols map[string]string // marker style key -> symbol id
@@ -52,6 +54,54 @@ func newBackend(out io.Writer, w, h int, dpr float64, o options) *backend {
 	}
 }
 
+// The ids the accessible title and description are written under. A document
+// has one chart in it, so they need no counter.
+const (
+	titleID = "refract-title"
+	descID  = "refract-desc"
+)
+
+// accessibilityAttrs writes the ARIA attributes that belong on the open <svg>
+// element: the role that makes assistive technology treat the document as one
+// graphic rather than as a pile of shapes, and the ids of the elements that
+// name it.
+//
+// A document with nothing to say gets neither, rather than an empty <title>
+// that a screen reader would announce as an unnamed graphic.
+func (b *backend) accessibilityAttrs(head *bytes.Buffer) {
+	if b.desc.Empty() {
+		return
+	}
+	head.WriteString(` role="img" aria-labelledby="`)
+	switch {
+	case b.desc.Title != "" && b.desc.Detail != "":
+		head.WriteString(titleID + " " + descID)
+	case b.desc.Title != "":
+		head.WriteString(titleID)
+	default:
+		head.WriteString(descID)
+	}
+	head.WriteString(`"`)
+}
+
+// accessibilityElements writes the <title> and <desc> the attributes point at.
+// They come first inside the <svg>, which is where the specification says a
+// reader should find them.
+func (b *backend) accessibilityElements(head *bytes.Buffer) {
+	if b.desc.Title != "" {
+		head.WriteString(`<title id="` + titleID + `">`)
+		xmlEscape(head, b.desc.Title)
+		head.WriteString(`</title>`)
+		b.nl(head)
+	}
+	if b.desc.Detail != "" {
+		head.WriteString(`<desc id="` + descID + `">`)
+		xmlEscape(head, b.desc.Detail)
+		head.WriteString(`</desc>`)
+		b.nl(head)
+	}
+}
+
 func (b *backend) id(prefix string) string {
 	b.nextID++
 	return prefix + strconv.Itoa(b.nextID)
@@ -64,6 +114,16 @@ func (b *backend) nl(w *bytes.Buffer) {
 		w.WriteByte('\n')
 	}
 }
+
+// Describe records what the document says about itself. It is written into the
+// header at Flush, where the rest of the <svg> element is written.
+//
+// This is the whole of what an SVG needs to be accessible: a <title> is the
+// picture's name, a <desc> is its long reading, role="img" tells assistive
+// technology to treat the document as one graphic rather than as a pile of
+// shapes, and aria-labelledby points at the two elements. The ids are fixed
+// rather than generated because there is exactly one of each per document.
+func (b *backend) Describe(d ir.Description) { b.desc = d }
 
 // --- drawing -------------------------------------------------------------
 
@@ -345,8 +405,11 @@ func (b *backend) Flush() error {
 	head.WriteString(strconv.Itoa(b.w))
 	head.WriteByte(' ')
 	head.WriteString(strconv.Itoa(b.h))
-	head.WriteString(`">`)
+	head.WriteString(`"`)
+	b.accessibilityAttrs(&head)
+	head.WriteString(`>`)
 	b.nl(&head)
+	b.accessibilityElements(&head)
 
 	if _, err := b.out.Write(head.Bytes()); err != nil {
 		return err
