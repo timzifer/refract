@@ -44,6 +44,7 @@ type linear struct {
 	nice   bool
 	zero   bool
 	fixed  bool
+	pinned bool
 	format func(float64) string
 
 	// cached nicing, invalidated whenever the domain changes
@@ -61,6 +62,13 @@ func (l *linear) Train(vs ...float64) {
 }
 
 func (l *linear) effective() (float64, float64) {
+	// A pinned domain is the domain. Zero-forcing and nicing are choices about
+	// how to frame data; a view someone dragged into place is not data, and an
+	// axis that snapped to round numbers after every wheel notch would not
+	// follow the pointer. See [Zoomer].
+	if l.pinned {
+		return l.dmin, l.dmax
+	}
 	lo, hi := l.span()
 	if l.zero {
 		lo, hi = math.Min(lo, 0), math.Max(hi, 0)

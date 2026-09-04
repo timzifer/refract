@@ -1,13 +1,15 @@
 // Package refract turns one declarative chart specification into any output
-// you need — SVG and PDF today, raster now, GPU and browser through additional
-// backends — from the same model, with the same geometry.
+// you need — SVG, PDF and a browser canvas today, raster through one more
+// module, GPU and a native window through later ones — from the same model,
+// with the same geometry.
 //
 // The core module is pure Go and depends on nothing but the standard library.
 // Both vector emitters are built in and need no rendering engine and no font
 // stack, so a server that wants a chart as SVG or a report generator that
-// wants one as PDF links nothing native and nothing young. Raster output lives
-// in a separate module, github.com/timzifer/refract/backend/gg, which is still
-// CGO-free.
+// wants one as PDF links nothing native and nothing young. The browser backend
+// is built in for the same reason: a canvas 2D context is reached through
+// syscall/js. Raster output lives in a separate module,
+// github.com/timzifer/refract/backend/gg, which is still CGO-free.
 //
 // # Shape of the API
 //
@@ -45,6 +47,32 @@
 // panels out with the same solver, so the axes line up either way.
 //
 //	p.Facet(facet.Wrap("region", facet.Columns(3)))
+//
+// # Interaction
+//
+// [Plot.On] registers a handler for hover, click, zoom or pan, and [Plot.Live]
+// draws the chart into a surface that can be redrawn, pointed at, panned and
+// zoomed. Each redraw repaints only what changed, and a frame identical to the
+// last is not painted at all. In a browser, [Live.Bind] wires a DOM element to
+// all of it; see package backend/canvas.
+//
+//	p.On(refract.Hover, func(ev refract.Event) {
+//	    if ev.Found {
+//	        tooltip(ev.Series(), ev.Hit.X, ev.Hit.Y)
+//	    }
+//	})
+//
+//	live, err := p.Live(canvas.Element(el))
+//
+// # Live data
+//
+// [data.Stream] is a table a producer appends to from one goroutine while the
+// renderer draws a frozen snapshot on another.
+//
+// # A chart as JSON
+//
+// A Plot marshals to a Vega-Lite-shaped document and reads back as the same
+// chart — see [Plot.Spec], [ParseJSON] and package spec.
 //
 // # Status
 //
@@ -109,6 +137,8 @@ type Plot struct {
 	legendSet bool
 
 	serial bool
+
+	handlers map[EventKind][]func(Event)
 }
 
 // Option configures a Plot at construction.

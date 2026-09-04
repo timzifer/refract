@@ -67,6 +67,7 @@ type logScale struct {
 	base   float64
 	nice   bool
 	fixed  bool
+	pinned bool
 	minor  bool
 	format func(float64) string
 }
@@ -88,6 +89,11 @@ func (l *logScale) Defined(v float64) bool { return v > 0 && !math.IsInf(v, 0) }
 // effective returns the domain actually mapped, guaranteed positive and
 // non-degenerate.
 func (l *logScale) effective() (float64, float64) {
+	// See [linear.effective]: a pinned domain skips nicing, which on a log
+	// axis would round the view out to whole decades.
+	if l.pinned {
+		return l.dmin, l.dmax
+	}
 	lo, hi := l.dmin, l.dmax
 	if !l.trained || lo <= 0 || hi <= 0 {
 		lo, hi = 1, 10

@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>refract — interactive</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 2rem; color: #222; }
+  canvas { border: 1px solid #ddd; touch-action: none; }
+  #readout { font-variant-numeric: tabular-nums; margin-top: .5rem; color: #555; }
+  p { max-width: 55rem; color: #444; }
+</style>
+
+<h1>refract in a browser</h1>
+<p>
+  The same chart model that renders SVG on a server, drawing on a canvas.
+  Move the pointer to read a row, use the wheel to zoom about it, drag to pan,
+  and double click to reset the view.
+</p>
+
+<canvas id="chart"></canvas>
+<div id="readout">—</div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("chart.wasm"), go.importObject)
+    .then((result) => go.run(result.instance))
+    .catch((err) => { document.getElementById("readout").textContent = String(err); });
+</script>

@@ -2,10 +2,10 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **pre-alpha.** Milestones **v0.1 through v0.4 are implemented** — see
+> Status: **pre-alpha.** Milestones **v0.1 through v0.5 are implemented** — see
 > [§14](#14-roadmap--milestones) for what that covers and the
 > [README](README.md) to use it. This document remains the working concept for
-> everything past v0.4. The API is **not** stable: every release below `v1.0.0`
+> everything past v0.5. The API is **not** stable: every release below `v1.0.0`
 > may contain breaking changes without deprecation cycles (see
 > [Versioning](#15-versioning--stability)) — v0.2 added a method to
 > `data.Source`, which is exactly the kind of break that policy exists for.
@@ -246,9 +246,12 @@ type DataSource interface {
   Since v0.2 the same policy covers a value the *scale* cannot place — zero on a
   log axis, a category outside a fixed set — because from the chart's point of
   view those are the same failure ([ADR 0008](docs/adr/0008-categorical-axes.md)).
-- **Streaming** via a `StreamSource` with a snapshot model
-  ([§11](#11-concurrency--allocation)): produce on one goroutine, render a
-  consistent snapshot on another.
+- **Streaming** via a snapshot model ([§11](#11-concurrency--allocation)):
+  produce on one goroutine, render a consistent snapshot on another. Shipped in
+  v0.5 as `data.Stream`, which is deliberately *not* a `Source` — a table being
+  appended to between two column reads is a table that disagrees with itself,
+  so the only way to draw one is to freeze it
+  ([ADR 0016](docs/adr/0016-streaming-and-damage.md)).
 
 ---
 
@@ -400,8 +403,13 @@ GPU path, which is a compatibility fallback, not a throughput path.
   a parallel render emits byte-identical output to a serial one
   ([ADR 0012](docs/adr/0012-parallel-panels.md)).
 - **Snapshot streaming** — producer and renderer never share mutable state; the
-  renderer reads an immutable snapshot (copy-on-swap). gg's damage tracking then
-  repaints only dirty regions. **v0.5, not yet implemented.**
+  renderer reads an immutable snapshot (copy-on-swap), and only the dirty
+  regions are repainted. Shipped in v0.5: `data.Stream` is the snapshot and the
+  swap, `ir.Damage` compares two recordings to find what moved, and `ir.Partial`
+  is the one-method interface a backend implements to act on it. The damage is
+  computed above the backends rather than inside one, because gg is one backend
+  of four and the browser backend is not it
+  ([ADR 0016](docs/adr/0016-streaming-and-damage.md)).
 - **Allocation discipline** — refract keeps its IR construction allocation-light
   and leans on gg's zero-alloc fill/stroke/text paths. A benchmark gate asserts no
   per-frame allocations on the hot path. Shipped in v0.4: everything sized by the
@@ -480,22 +488,37 @@ func main() {
 }
 ```
 
-Serialization and the web workflow — **v0.5, not yet implemented**:
+Serialization and the web workflow — **shipped in v0.5**. The document is
+Vega-Lite-*shaped* rather than a Vega-Lite subset: it borrows the vocabulary
+where the concept exists in both and names refract's own things plainly, and
+what it guarantees is the round trip through refract
+([ADR 0014](docs/adr/0014-json-spec.md)):
 
 ```go
-spec, _ := p.Spec().MarshalJSON()   // Vega-Lite-compatible where feasible
-// ship `spec` to a Go-Wasm or JS frontend, which renders it identically
+doc, _ := json.Marshal(p)           // a Plot is a json.Marshaler
+// ship `doc` to a Go-Wasm frontend, or to a server, which renders it identically
+q, _ := refract.ParseJSON(doc)
 ```
 
-Interactivity (native window or browser, via the gg backend) — **v0.5/v0.6, not
-yet implemented**. `Spec` and `On` are deliberately absent from the v0.1 API
-rather than stubbed, so that nothing compiles against a shape that has not been
-designed yet:
+Interactivity — **shipped in v0.5** for the browser, through the built-in
+canvas backend rather than through gg, which has no js target at the pinned
+version ([ADR 0017](docs/adr/0017-browser-backend.md)). A native window is
+still v0.6.
 
 ```go
-p.On(refract.Hover, func(ev refract.HoverEvent) { /* ev.Point, ev.Series */ })
-p.On(refract.Zoom,  func(ev refract.ZoomEvent)  { /* ev.Rect */ })
+p.On(refract.Hover, func(ev refract.Event) { /* ev.Point, ev.Series(), ev.Hit */ })
+p.On(refract.Zoom,  func(ev refract.Event) { /* ev.Rect, ev.Factor */ })
+
+live, _ := p.Live(canvas.Element(el))   // a surface, redrawn
+defer live.Close()
+live.Draw()
+defer live.Bind(el)()                   // pointer, wheel and drag
 ```
+
+The kinds share one `Event` struct rather than the per-kind types this section
+first sketched: Go has no sum types, and a handler signature per kind means
+`On` takes an `any` and the caller writes a type assertion
+([ADR 0015](docs/adr/0015-hit-testing.md)).
 
 ---
 
@@ -601,7 +624,7 @@ contributes a colour guide instead of nothing.
   six times as long and produces 15 MB — and the same chart redrawn every frame
   allocates nothing that grows with its data. ✔
 
-Not in v0.4, in case they look like oversights. Streaming is v0.5: there is no
+Not in v0.4, in case they look like oversights. Streaming was v0.5: there was no
 `StreamSource` and no snapshot/swap, because the interesting half of that is
 damage-aware repaint, which needs the interactive backends. `stat` carries the
 decimation family only — smoothing, regression and hexbin are stats rather than
@@ -609,17 +632,55 @@ big-data machinery, and they belong with the geoms that would draw them. And
 the GPU tier is untouched, which is the point of the CPU tier: big-data
 *stills* are complete without it.
 
-### v0.5 — Web & interactivity
+### v0.5 — Web & interactivity — **shipped**
 
-- Browser rendering via the gg backend under `GOOS=js` (WebGPU; canvas fallback
-  where WebGPU is unavailable).
-- Event system: hover/click/zoom/pan with IR-level hit-testing.
-- Full-spec JSON serialization (Vega-Lite-compatible where feasible).
-- Streaming with snapshot/double-buffer + gg damage-aware updates.
+- Browser rendering under `GOOS=js`. **Not** via the gg backend: gg has no
+  `syscall/js` anywhere in it at the pinned version, so there is no WebGPU path
+  to take and no canvas fallback to fall back to. refract draws on the canvas
+  2D context itself, from `backend/canvas` in the core module, because
+  `syscall/js` is the standard library and costs the core nothing
+  ([ADR 0017](docs/adr/0017-browser-backend.md)). Paths go to `Path2D` as one
+  string per drawing call: crossing the WebAssembly boundary is what costs in a
+  browser.
+- Event system: hover, click, zoom and pan, with hit-testing over the marks a
+  render actually emitted. `interact.Index` watches a render — `render.Chart`
+  gained an `Observer` that says which panel and which layer is drawing — so
+  hit-testing is correct for every geom including ones that do not exist yet,
+  and the IR gained no identity channel
+  ([ADR 0015](docs/adr/0015-hit-testing.md)). `Plot.On` registers handlers,
+  `Plot.Live` draws into a surface, and `Live.Bind` wires a DOM element to it.
+- Full-spec JSON serialization, in `spec/`. Vega-Lite-shaped rather than a
+  Vega-Lite subset, and §17.3 is settled with the reasoning
+  ([ADR 0014](docs/adr/0014-json-spec.md)). A `Plot` is a `json.Marshaler`; the
+  round trip through refract is guaranteed and tested per mark and per scale.
+  It rests on three new description APIs — `geom.Desc`, `scale.Desc` and
+  `facet.Desc` — so that the format lives outside the model packages.
+- Streaming with snapshot/double-buffer, and damage-aware updates computed in
+  the IR rather than in a backend. `data.Stream` is appended to from any
+  goroutine and frozen between frames; `ir.Damage` diffs two recordings;
+  `ir.Partial` is what a repaintable backend implements
+  ([ADR 0016](docs/adr/0016-streaming-and-damage.md)).
+- *DoD:* a chart can be written down as JSON and read back as the same chart, a
+  pointer over it reports the row underneath, the wheel zooms about that point
+  and a drag pans, a producer can append to it on another goroutine while it is
+  drawn, a redraw repaints only what changed and skips a frame that changed
+  nothing — and all of that runs in a browser from the same model that renders
+  SVG on a server. ✔
+
+Not in v0.5, in case they look like oversights. There is no native window and
+no GPU tier: both are v0.6, and both need `gogpu/gogpu` and `gg/gpu` rather than
+anything in this milestone. A hit reports data values rather than a row number,
+because carrying row identity through decimation is bookkeeping the design
+avoids — the x value and a lookup are what a caller has. And the damage unit is
+a drawing call, so moving one point of a line repaints the line's box; what it
+does not repaint is the title, the axes and the margins, which is most of the
+canvas.
 
 ### v0.6 — Native interactive & polish
 
-- Native interactive window via `gogpu/gogpu`.
+- Native interactive window via `gogpu/gogpu`. The event system it needs is
+  already here — `Plot.Live` takes any `ir.Target`, and a window backend has
+  only to implement `ir.Backend` and, for cheap repaints, `ir.Partial`.
 - GPU tier enabled (opt-in) via `gg/gpu`; float64 origin rebasing for deep zoom.
 - Math typesetting for labels (optional, pluggable).
 - Responsiveness (line widths/font sizes on resize — leans on gg device scale).
@@ -666,7 +727,9 @@ the GPU tier is untouched, which is the point of the CPU tier: big-data
 Dependency boundaries enforce the "lean by default" promise: the core depends on
 nothing at all, and GoGPU enters only through the nested `backend/gg` module.
 
-Packages marked *(v0.1)* exist; the rest are placed by milestone.
+Every package below exists except `coord/`, which is still the pluggable stage
+the Cartesian mapping is hard-coded into; the milestone each arrived in is
+marked.
 
 ```
 refract/                     # core module — pure Go, STDLIB ONLY (no requires)
@@ -678,20 +741,23 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
                              # (smooth and aggregate are still to come)
   coord/                     # cartesian (pluggable stage)
   layout/                    # panel-grid constraint solver               (v0.3)
-  render/                    # model -> IR lowering                       (v0.1)
+  render/                    # model -> IR lowering, + Observer           (v0.1)
   facet/                     # faceting (wrap/grid)                       (v0.3)
   theme/  palette/           # tokens, colourblind-safe palettes          (v0.1)
   ir/                        # IR primitives + Backend interface          (v0.1)
+                             # + Damage and Partial                       (v0.5)
+  interact/                  # hit index and event vocabulary             (v0.5)
+  spec/                      # JSON (Vega-Lite-shaped) marshal/unmarshal  (v0.5)
   backend/svg/               # built-in, zero-dependency SVG emitter      (v0.1)
   backend/pdf/               # built-in, zero-dependency PDF emitter      (v0.3)
+  backend/canvas/            # built-in canvas 2D, js/wasm only           (v0.5)
   internal/fontmetrics/      # stdlib hmtx/cmap reader + Helvetica table  (v0.1)
   internal/markers/          # the marker outlines both emitters share    (v0.3)
-  spec/                      # JSON (Vega-Lite-compatible) marshal/unmarshal
 
-  backend/gg/                # NESTED MODULE: raster now; GPU, browser    (v0.1)
-                             # and native window later. Depends on
-                             # gogpu/gg. Zero CGO. PDF did not land here —
-                             # see ADR 0009.
+  backend/gg/                # NESTED MODULE: raster now; GPU and native   (v0.1)
+                             # window later. Depends on gogpu/gg. Zero CGO.
+                             # PDF did not land here — see ADR 0009 — and
+                             # neither did the browser — see ADR 0017.
     cmd/gallery/             # renders every documented figure            (v0.1)
 
   arrow/                     # NESTED MODULE: Apache Arrow adapter        (v0.4)
@@ -710,8 +776,9 @@ originally proposed.
 
 ## 17. Open decisions
 
-Six of the seven were settled while building v0.1; each has a record in
-[docs/adr](docs/adr/). Two remain genuinely open, and are marked so.
+Six of the seven were settled while building v0.1 and the seventh — spec
+fidelity — while building v0.5; each has a record in [docs/adr](docs/adr/). One
+remains genuinely open, and is marked so.
 
 1. ~~**gg coupling surface**~~ — **settled:** pin gg to an exact version and
    import only `gg` and `gg/text`; never `gg/gpu`, `gg/scene` or `gg/recording`.
@@ -723,8 +790,14 @@ Six of the seven were settled while building v0.1; each has a record in
    geometry, so no gg vector path exists to unify with.
    → [ADR 0004](docs/adr/0004-svg-source-of-truth.md),
    [ADR 0009](docs/adr/0009-pdf-backend.md)
-3. **Spec fidelity to Vega-Lite** — strict round-trippable subset vs "inspired
-   by". **Still open**; belongs to v0.5, and deciding it now would be guessing.
+3. ~~**Spec fidelity to Vega-Lite**~~ — **settled:** neither a strict subset nor
+   "inspired by", but Vega-Lite's *vocabulary* with refract's semantics. The
+   names and the structure are Vega-Lite's wherever the concept exists in both;
+   what refract has and Vega-Lite does not is named plainly rather than
+   smuggled through a borrowed name; and `$schema` says which dialect the
+   document is. What is guaranteed is the round trip through refract, tested
+   per mark and per scale.
+   → [ADR 0014](docs/adr/0014-json-spec.md)
 4. ~~**Text ownership**~~ — **settled:** the backend shapes, refract places, and
    `Measure` is the entire seam between them. The core carries a stdlib metrics
    reader and a fallback advance table, never a shaper.

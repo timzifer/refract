@@ -1,0 +1,269 @@
+// Package spec writes a chart down as JSON and reads it back.
+//
+// The document is Vega-Lite-shaped: `data.values`, `mark`, `encoding.x.field`,
+// `scale.type`, `facet` and `resolve` mean what they mean in Vega-Lite, and a
+// person who knows that vocabulary can read a refract spec without a manual.
+// It is not a Vega-Lite subset, and it does not claim to be one — refract has
+// marks Vega-Lite has no name for and Vega-Lite has transforms refract does
+// not run. See docs/adr/0014-json-spec.md for what that choice buys and costs.
+//
+// What is guaranteed is the round trip through refract:
+//
+//	s, err := spec.Of(chart)      // chart -> document
+//	c, err := s.Chart()           // document -> chart
+//
+// draws the same marks in the same places. The one thing that cannot survive
+// is a Go function: a custom tick formatter or a custom colour ramp has no
+// JSON, and a scale carrying one says so through [scale.Desc.Formatted].
+//
+// # Shape
+//
+//	{
+//	  "$schema": "https://github.com/timzifer/refract/spec/v0.5",
+//	  "width": 800, "height": 500,
+//	  "title": "Signal",
+//	  "data": {"values": [{"t": 0, "y": 1}], "format": {"parse": {"t": "number", "y": "number"}}},
+//	  "encoding": {
+//	    "x": {"type": "quantitative", "scale": {"type": "linear", "nice": true}},
+//	    "y": {"type": "quantitative", "scale": {"type": "linear", "nice": true}}
+//	  },
+//	  "layer": [{"mark": {"type": "line"}, "encoding": {"x": {"field": "t"}, "y": {"field": "y"}}}]
+//	}
+//
+// The top-level `encoding` carries the plot's scales and axis titles, which is
+// where a layered Vega-Lite spec puts the encodings its layers share. Each
+// layer's own `encoding` carries the columns it reads. Data is hoisted to the
+// top level when every layer draws from the same source and written per layer
+// when they do not.
+package spec
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/timzifer/refract/facet"
+	"github.com/timzifer/refract/geom"
+	"github.com/timzifer/refract/scale"
+	"github.com/timzifer/refract/theme"
+)
+
+// Schema is the value written to `$schema`. It names the dialect and the
+// version of it; nothing fetches it, and a Vega-Lite consumer that checks the
+// field will refuse the document, which is the honest outcome.
+const Schema = "https://github.com/timzifer/refract/spec/v0.5"
+
+// Chart is the part of a plot that survives being written down: everything
+// [Of] reads and everything [Spec.Chart] returns.
+//
+// It exists so that this package does not import the root one — a spec is
+// built out of the model packages, and the root package assembles a Plot from
+// what comes back.
+type Chart struct {
+	Width, Height int
+	DPR           float64
+	Theme         theme.Theme
+	Title         string
+	XTitle        string
+	YTitle        string
+	X, Y          scale.Scale
+	Layers        []geom.Geom
+	Facet         *facet.Spec
+
+	// Legend forces the legend on or off. Nil leaves the default, which shows
+	// one as soon as a plot has more than one layer.
+	Legend *bool
+}
+
+// Spec is a chart as a JSON document.
+type Spec struct {
+	Schema   string    `json:"$schema,omitempty"`
+	Width    int       `json:"width,omitempty"`
+	Height   int       `json:"height,omitempty"`
+	Title    string    `json:"title,omitempty"`
+	Data     *Data     `json:"data,omitempty"`
+	Encoding *Encoding `json:"encoding,omitempty"`
+	Layer    []Layer   `json:"layer,omitempty"`
+	Facet    *Facet    `json:"facet,omitempty"`
+	Columns  int       `json:"columns,omitempty"`
+	Resolve  *Resolve  `json:"resolve,omitempty"`
+	Config   *Config   `json:"config,omitempty"`
+}
+
+// Layer is one set of marks.
+type Layer struct {
+	// Name is the layer's legend label, when it was given one.
+	Name     string    `json:"name,omitempty"`
+	Mark     Mark      `json:"mark"`
+	Data     *Data     `json:"data,omitempty"`
+	Encoding *Encoding `json:"encoding,omitempty"`
+}
+
+// Mark is what a layer draws, and how.
+//
+// Type and the properties above the line are Vega-Lite's, spelled as
+// Vega-Lite spells them. The properties below it are refract's own: they name
+// behaviour Vega-Lite has no equivalent for, so borrowing a Vega-Lite name for
+// them would be the misleading option.
+type Mark struct {
+	Type        string    `json:"type"`
+	Color       string    `json:"color,omitempty"`
+	Fill        string    `json:"fill,omitempty"`
+	Opacity     *float64  `json:"opacity,omitempty"`
+	Size        float32   `json:"size,omitempty"`
+	Shape       string    `json:"shape,omitempty"`
+	StrokeWidth float32   `json:"strokeWidth,omitempty"`
+	StrokeDash  []float32 `json:"strokeDash,omitempty"`
+	Interpolate string    `json:"interpolate,omitempty"`
+	Tension     float64   `json:"tension,omitempty"`
+	Orient      string    `json:"orient,omitempty"`
+	Extent      float64   `json:"extent,omitempty"`
+	Outliers    *bool     `json:"outliers,omitempty"`
+	Text        string    `json:"text,omitempty"`
+	Align       string    `json:"align,omitempty"`
+	Baseline    string    `json:"baseline,omitempty"`
+	FontSize    float64   `json:"fontSize,omitempty"`
+	Angle       float64   `json:"angle,omitempty"`
+
+	// Origin is the value bars and areas grow from — Vega-Lite reaches the
+	// same place through a scale's `zero`, which is a different thing.
+	Origin float64 `json:"origin,omitempty"`
+	// BarWidth is the fraction of the slot a bar fills.
+	BarWidth *float64 `json:"barWidth,omitempty"`
+	// Missing is the NaN policy: "gap", "interpolate" or "error".
+	Missing string `json:"missing,omitempty"`
+	// Decimate is the reduction: "auto", "none", "lttb", "minmax" or
+	// "density".
+	Decimate string `json:"decimate,omitempty"`
+	// Budget caps how many marks survive a reduction.
+	Budget int `json:"budget,omitempty"`
+	// DensityCells is the cell size of a density raster, in device units.
+	DensityCells float64 `json:"densityCells,omitempty"`
+	// Extend reports whether an annotation widens the axis to include itself.
+	Extend *bool `json:"extend,omitempty"`
+}
+
+// Encoding maps channels onto columns, values and scales.
+type Encoding struct {
+	X     *Channel `json:"x,omitempty"`
+	Y     *Channel `json:"y,omitempty"`
+	X2    *Channel `json:"x2,omitempty"`
+	Y2    *Channel `json:"y2,omitempty"`
+	Color *Channel `json:"color,omitempty"`
+}
+
+// Channel is one encoding: a column, or a literal value, and the scale behind
+// it.
+type Channel struct {
+	Field string `json:"field,omitempty"`
+	Type  string `json:"type,omitempty"`
+	// Datum is the literal value an annotation is placed at: a number, or a
+	// timestamp string on a temporal axis. Vega-Lite's `datum` is the same
+	// shape and there for the same reason.
+	Datum any    `json:"datum,omitempty"`
+	Title string `json:"title,omitempty"`
+	Scale *Scale `json:"scale,omitempty"`
+}
+
+// Scale is a positional or colour scale.
+type Scale struct {
+	Type   string  `json:"type,omitempty"`
+	Domain []any   `json:"domain,omitempty"`
+	Nice   bool    `json:"nice,omitempty"`
+	Zero   bool    `json:"zero,omitempty"`
+	Base   float64 `json:"base,omitempty"`
+	// Constant is Vega-Lite's name for a symlog's linear threshold.
+	Constant float64  `json:"constant,omitempty"`
+	Padding  *float64 `json:"padding,omitempty"`
+	Scheme   string   `json:"scheme,omitempty"`
+	Range    []string `json:"range,omitempty"`
+	Reverse  bool     `json:"reverse,omitempty"`
+
+	// MinorTicks, Center, Undefined and TimeZone are refract's.
+	MinorTicks *bool    `json:"minorTicks,omitempty"`
+	Center     *float64 `json:"center,omitempty"`
+	Undefined  string   `json:"undefined,omitempty"`
+	TimeZone   string   `json:"timeZone,omitempty"`
+}
+
+// Data is a table written inline.
+//
+// Values is one object per row; a missing or null field is a NaN, which is the
+// same thing the missing-data policy already handles. Format.Parse gives every
+// column's type, so a table reads back as the columns it was — Vega-Lite has
+// the same field for the same reason.
+type Data struct {
+	Values []map[string]any `json:"values"`
+	Format *Format          `json:"format,omitempty"`
+}
+
+// Format carries the column types.
+type Format struct {
+	// Parse maps a column name to "number", "date" or "string".
+	Parse map[string]string `json:"parse,omitempty"`
+}
+
+// The column types Format.Parse uses.
+const (
+	ParseNumber = "number"
+	ParseDate   = "date"
+	ParseString = "string"
+)
+
+// Facet describes small multiples: a field to wrap on, or a row and a column
+// field to cross.
+type Facet struct {
+	Field  string      `json:"field,omitempty"`
+	Type   string      `json:"type,omitempty"`
+	Row    *FacetField `json:"row,omitempty"`
+	Column *FacetField `json:"column,omitempty"`
+}
+
+// FacetField is one axis of a facet grid.
+type FacetField struct {
+	Field string `json:"field,omitempty"`
+	Type  string `json:"type,omitempty"`
+}
+
+// Resolve says whether panels share their scales. It carries Vega-Lite's
+// "independent" and "shared".
+type Resolve struct {
+	Scale *ResolveScale `json:"scale,omitempty"`
+}
+
+// ResolveScale is the per-axis resolution.
+type ResolveScale struct {
+	X string `json:"x,omitempty"`
+	Y string `json:"y,omitempty"`
+}
+
+// The scale resolutions.
+const (
+	Independent = "independent"
+	Shared      = "shared"
+)
+
+// Config carries the choices that are refract's rather than the chart's.
+type Config struct {
+	// Theme names a theme registered with [theme.Register].
+	Theme string `json:"theme,omitempty"`
+	// Legend forces the legend on or off.
+	Legend *bool `json:"legend,omitempty"`
+	// DevicePixelRatio is the backend's pixel ratio.
+	DevicePixelRatio float64 `json:"devicePixelRatio,omitempty"`
+}
+
+// Marshal writes s as indented JSON.
+//
+// Indented rather than compact: a spec is a thing people read and edit, and
+// the compact form of a chart over a hundred rows is one very long line. Use
+// [encoding/json] directly for the compact form.
+func (s Spec) Marshal() ([]byte, error) { return json.MarshalIndent(s, "", "  ") }
+
+// Parse reads a spec from JSON.
+func Parse(b []byte) (Spec, error) {
+	var s Spec
+	if err := json.Unmarshal(b, &s); err != nil {
+		return Spec{}, fmt.Errorf("refract/spec: %w", err)
+	}
+	return s, nil
+}

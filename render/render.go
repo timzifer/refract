@@ -41,6 +41,36 @@ type Chart struct {
 	// concurrently where that is possible and worth it — see [drawData] — and
 	// produces the same output either way.
 	Serial bool
+
+	// Observer is told which panel and which layer is drawing, so that a
+	// caller watching the backend can attribute a mark to the layer that made
+	// it. It is nil for an ordinary render, and setting it forces the serial
+	// path: the observer is told things in order, and two panels drawing at
+	// once have no order to be told in.
+	Observer Observer
+}
+
+// Observer is told the structure a render is drawing, as it draws it.
+//
+// It is how hit-testing gets built without widening the IR. A backend sees
+// primitives — a polyline, some markers — and nothing about which layer of
+// which panel emitted them; an Observer is told that separately, so a caller
+// wrapping the backend can tag what it sees. Nothing here draws, and nothing
+// here can change what is drawn.
+//
+// The calls come in paint order: one Panel, then a Layer for each of its
+// layers, then the next Panel. Only the data pass is announced — the grid, the
+// axes and the guides are furniture, and a pointer landing on a grid line has
+// not landed on anything.
+type Observer interface {
+	// Panel opens a panel: its index in the chart, the rectangle it occupies,
+	// and the scales that place values in it. The scales are ranged for this
+	// panel and must not be modified.
+	Panel(i int, area ir.Rect, x, y scale.Scale)
+
+	// Layer opens a layer within the panel just announced: its index among
+	// that panel's layers, and its legend label if it has one.
+	Layer(i int, label string)
 }
 
 // Panel is one Cartesian area of a multi-panel chart.
@@ -484,7 +514,7 @@ func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 // rotation of -90 degrees in screen coordinates.
 const halfPi = 1.5707963267948966
 
-func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme) error {
+func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer) error {
 	if plot.Empty() || len(p.Layers) == 0 {
 		return nil
 	}
@@ -495,11 +525,35 @@ func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme) error {
 
 	for i, g := range p.Layers {
 		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Theme: th, Index: i}
+		if obs != nil {
+			obs.Layer(i, layerLabel(g, f))
+		}
 		if err := g.Build(b, f); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// layerLabel is what the layer calls itself: its legend entry, or failing
+// that what it was configured with.
+//
+// The fallback is not redundant. A layer coloured from a continuous scale
+// contributes a colourbar rather than a legend entry, so it has no legend
+// label at all — and it is exactly the layer a reader is most likely to point
+// at. An unlabelled annotation still has no name, and gets none.
+func layerLabel(g geom.Geom, f geom.Frame) string {
+	if e, ok := g.Legend(f); ok && e.Label != "" {
+		return e.Label
+	}
+	d, ok := geom.Describe(g)
+	if !ok {
+		return ""
+	}
+	if d.Label != "" {
+		return d.Label
+	}
+	return d.Y
 }
 
 func drawLegend(b ir.Backend, box ir.Rect, th theme.Theme, entries []geom.LegendEntry) {

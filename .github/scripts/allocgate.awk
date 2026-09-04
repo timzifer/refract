@@ -73,6 +73,13 @@ END {
 	atMost("BenchmarkLTTB", 0)
 	atMost("BenchmarkMinMax", 0)
 
+	# The streaming path, added in v0.5. A live chart appends a row and freezes
+	# a view once per frame, for as long as the process runs; either of those
+	# allocating is a leak with a plot attached. Both measure the steady state,
+	# where the window is full and the snapshot buffers are already sized.
+	atMost("BenchmarkStreamAppend", 0)
+	atMost("BenchmarkStreamSnapshot", 0)
+
 	if (bad) {
 		print ""
 		print "allocgate: failed. Find the culprit with"
