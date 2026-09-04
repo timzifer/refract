@@ -16,8 +16,3 @@ require (
 	github.com/gogpu/gputypes v0.5.2 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
-
-// Until the core module is tagged v0.1.0, resolve it from this repository.
-// A replace directive in a dependency is ignored by consumers, so this only
-// affects builds of this repository itself; it is removed at release time.
-replace github.com/timzifer/refract => ../..
