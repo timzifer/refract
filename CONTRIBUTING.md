@@ -18,9 +18,11 @@ dependencies while the raster backend links GoGPU. CI enforces it — see
 together with no setup. If your tooling ignores it, `go work init . ./backend/gg`
 reproduces it.
 
-> `backend/gg/go.mod` carries a temporary
-> `replace github.com/timzifer/refract => ../..`, because the core is not tagged
-> yet. Remove it when `v0.1.0` is tagged.
+> `backend/gg/go.mod` requires the core at a published tag, not through a
+> `replace` directive. The workspace still overrides that for local
+> development, so a change to the core is picked up immediately — but the
+> module as published always resolves to a real release. Bumping that require
+> line is part of tagging a release, and needs the core's tag to exist first.
 
 ## Everyday commands
 

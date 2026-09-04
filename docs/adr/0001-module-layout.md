@@ -27,19 +27,22 @@ dependency graph is unaffected by anything the backend needs. A `go.work` at the
 repository root builds both together during development, and is committed for
 that reason.
 
-Releases are tagged separately: `v0.1.0` for the core, `backend/gg/v0.1.0` for
-the backend.
+Releases are tagged separately: `v0.2.0` for the core, `backend/gg/v0.2.0` for
+the backend. The backend's tag comes second, on a commit that already requires
+the core tag it was validated against.
 
 ## Consequences
 
 - The stdlib-only promise is mechanically enforceable rather than aspirational.
   CI asserts it: `go list -deps ./...` on the core must not name a single
   non-stdlib package.
-- Until the core is tagged, `backend/gg/go.mod` carries a
-  `replace github.com/timzifer/refract => ../..`. A replace directive in a
-  dependency is ignored by consumers, so it only affects builds of this
-  repository. **It must be removed when `v0.1.0` is tagged**, and the require
-  line left to resolve normally.
+- `backend/gg/go.mod` requires the core at a published tag and carries no
+  `replace` directive. It did until `v0.1.0` existed, because `go.work` does
+  not exempt a required version from module-graph loading, so the backend
+  otherwise tried to fetch a tag that was not there. **Bumping that require
+  line to the new core tag is a step in every release**, and it needs the core
+  tag published first — which is why it lands after the core tag rather than
+  with it.
 - The import path is `.../backend/gg`, not `refract-gg`. `CONCEPT.md` §13 and
   §16 have been updated to match.
 
