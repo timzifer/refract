@@ -9,6 +9,7 @@ package irtest
 import (
 	"fmt"
 	"image"
+	"image/draw"
 	"strings"
 
 	"github.com/timzifer/refract/internal/fontmetrics"
@@ -72,7 +73,21 @@ func (r *Recorder) Markers(shape ir.Marker, at []ir.Point, style ir.MarkerStyle)
 }
 
 func (r *Recorder) Image(img image.Image, dst ir.Rect) {
-	r.add(Call{Op: "Image", Image: img, Rect: dst})
+	// Snapshot rather than keep the reference. A geom that rasterizes draws
+	// into pooled pixels and hands them over for the length of the call, the
+	// same as it hands over a point slice — so a recording that kept the
+	// original would show the next frame's image, not this one's.
+	r.add(Call{Op: "Image", Image: snapshot(img), Rect: dst})
+}
+
+func snapshot(img image.Image) image.Image {
+	if img == nil {
+		return nil
+	}
+	b := img.Bounds()
+	out := image.NewNRGBA(b)
+	draw.Draw(out, b, img, b.Min, draw.Src)
+	return out
 }
 
 func (r *Recorder) Push(clip *ir.Path, xform ir.Affine) {
@@ -178,3 +193,39 @@ func clone(p *ir.Path) *ir.Path {
 }
 
 var _ ir.Backend = (*Recorder)(nil)
+
+// NullBackend returns an ir.Backend that draws nothing and remembers nothing,
+// measuring with the same built-in table [Recorder] uses.
+//
+// It is what a benchmark renders into when the thing being measured is
+// refract's own work: with a real emitter most of a frame's time and memory
+// belongs to the emitter, and a gate on refract's allocations would be reading
+// someone else's.
+func NullBackend() ir.Backend { return null{} }
+
+// NullTarget returns an ir.Target handing out [NullBackend].
+func NullTarget() ir.Target { return nullTarget{} }
+
+type null struct{}
+
+func (null) Polyline([]ir.Point, ir.Stroke)                {}
+func (null) StrokePath(*ir.Path, ir.Stroke)                {}
+func (null) FillPath(*ir.Path, ir.Fill, ir.FillRule)       {}
+func (null) Text(ir.TextRun)                               {}
+func (null) Markers(ir.Marker, []ir.Point, ir.MarkerStyle) {}
+func (null) Image(image.Image, ir.Rect)                    {}
+func (null) Push(*ir.Path, ir.Affine)                      {}
+func (null) Pop()                                          {}
+func (null) Flush() error                                  { return nil }
+
+func (null) Measure(run ir.TextRun) ir.TextMetrics { return (&Recorder{}).Measure(run) }
+
+type nullTarget struct{}
+
+func (nullTarget) Open(int, int, float64) (ir.Backend, error) { return null{}, nil }
+func (nullTarget) Close() error                               { return nil }
+
+var (
+	_ ir.Backend = null{}
+	_ ir.Target  = nullTarget{}
+)

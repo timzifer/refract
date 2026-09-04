@@ -358,6 +358,34 @@ func figures() []figure {
 			},
 		},
 		{
+			name: "decimation", width: 800, high: 400, theme: theme.Light,
+			title: "A quarter of a million samples",
+			build: func(p *refract.Plot) {
+				xs, ys := trace(250_000)
+				src := refract.Float64Columns(map[string][]float64{"i": xs, "v": ys})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice()))
+				// No option asks for the reduction: the layer sees a quarter of
+				// a million rows against eight hundred pixel columns and picks
+				// one. The spike is still full height.
+				p.Add(geom.Line(src, geom.X("i"), geom.Y("v"), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			name: "density", width: 760, high: 440, theme: theme.Light,
+			title: "A million points",
+			build: func(p *refract.Plot) {
+				xs, ys := cloud(1_000_000)
+				src := refract.Float64Columns(map[string][]float64{"x": xs, "y": ys})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice()))
+				// Markers this dense would bury each other and the picture would
+				// be decided by row order, so the layer counts per cell and
+				// draws the counts instead.
+				p.Add(geom.Scatter(src, geom.X("x"), geom.Y("y"), geom.Color(palette.Blue)))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -411,6 +439,53 @@ func cohorts() ([]string, []float64) {
 		keys, vals = append(keys, name), append(vals, 62+float64(g)*5)
 	}
 	return keys, vals
+}
+
+// trace builds a long, detailed signal with one spike in it: the shape that
+// needs decimating, and the feature that catches a reduction which flattens.
+// A fixed recurrence rather than math/rand keeps the figure byte-stable.
+func trace(n int) (xs, ys []float64) {
+	xs = make([]float64, n)
+	ys = make([]float64, n)
+	for i := range n {
+		t := float64(i) / float64(n)
+		xs[i] = float64(i)
+		ys[i] = math.Sin(6*math.Pi*t) +
+			0.35*math.Sin(211*math.Pi*t) +
+			0.18*math.Sin(1013*math.Pi*t)
+	}
+	ys[n/3] = 2.6
+	return xs, ys
+}
+
+// cloud builds a correlated point cloud: the overplotted scatter a density
+// raster exists for.
+//
+// The generator is written out here rather than taken from math/rand so that
+// the figure is byte-stable for -check no matter what any library does later.
+// A low-discrepancy sequence would be shorter, but it lays the points on a
+// lattice, and a picture of a lattice is not a picture of a point cloud.
+func cloud(n int) (xs, ys []float64) {
+	xs = make([]float64, n)
+	ys = make([]float64, n)
+	var seed uint64 = 0x9e3779b97f4a7c15
+	next := func() float64 {
+		// splitmix64, then the top 53 bits as a fraction of one.
+		seed += 0x9e3779b97f4a7c15
+		z := seed
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		return float64(z>>11) / (1 << 53)
+	}
+	for i := range n {
+		u, v := next(), next()
+		r := math.Sqrt(-2 * math.Log(u+1e-15))
+		a, b := r*math.Cos(2*math.Pi*v), r*math.Sin(2*math.Pi*v)
+		xs[i] = a
+		ys[i] = 0.65*a + 0.76*b
+	}
+	return xs, ys
 }
 
 // --- sample data ---------------------------------------------------------

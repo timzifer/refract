@@ -2,12 +2,13 @@
 
 ## Layout
 
-This is a two-module repository:
+This is a three-module repository:
 
 | Path | Module | Depends on |
 |---|---|---|
 | `.` | `github.com/timzifer/refract` | **nothing** — the standard library only |
 | `backend/gg` | `github.com/timzifer/refract/backend/gg` | `gogpu/gg`, `x/image` |
+| `arrow` | `github.com/timzifer/refract/arrow` | `apache/arrow-go` |
 
 Both vector backends — `backend/svg` and `backend/pdf` — are in the core
 module, so SVG and PDF cost no dependency at all
@@ -15,29 +16,31 @@ module, so SVG and PDF cost no dependency at all
 
 The split is not cosmetic. A nested module is excluded from its parent's module
 graph, which is what lets `import "github.com/timzifer/refract"` pull in zero
-dependencies while the raster backend links GoGPU. CI enforces it — see
-[ADR 0001](docs/adr/0001-module-layout.md).
+dependencies while the raster backend links GoGPU and the adapter links Arrow.
+CI enforces it — see [ADR 0001](docs/adr/0001-module-layout.md) and
+[ADR 0013](docs/adr/0013-arrow-adapter.md).
 
-`go.work` at the repository root is **committed**, so the two modules build
-together with no setup. If your tooling ignores it, `go work init . ./backend/gg`
-reproduces it.
+`go.work` at the repository root is **committed**, so the three modules build
+together with no setup. If your tooling ignores it,
+`go work init . ./arrow ./backend/gg` reproduces it.
 
-> `backend/gg/go.mod` requires the core at a published tag, not through a
+> Each nested module requires the core at a published tag, not through a
 > `replace` directive. The workspace still overrides that for local
 > development, so a change to the core is picked up immediately — but the
-> module as published always resolves to a real release. Bumping that require
-> line is part of tagging a release, and needs the core's tag to exist first.
+> module as published always resolves to a real release. Bumping those require
+> lines is part of tagging a release, and needs the core's tag to exist first.
 
 ## Everyday commands
 
 ```sh
 # build and test everything
 go build ./... && go test ./...
-cd backend/gg && go test ./... && cd ../..
+(cd backend/gg && go test ./...)
+(cd arrow && go test ./...)
 
 # the checks CI runs
 gofmt -l .                                   # must print nothing
-go vet ./... && (cd backend/gg && go vet ./...)
+go vet ./... && (cd backend/gg && go vet ./...) && (cd arrow && go vet ./...)
 CGO_ENABLED=0 go build ./...
 
 # the core must stay dependency-free
@@ -115,13 +118,28 @@ coordinate out of a backend. If it positions categories in slots, implement
 `scale.Categorical` and `scale.Band`; see
 [ADR 0008](docs/adr/0008-categorical-axes.md).
 
-**A backend** implements `ir.Backend` and `ir.Target`. If it needs a dependency
-the core must not have, it belongs in its own nested module. Keep its contact
+**A backend** implements `ir.Backend` and `ir.Target`. Whatever a drawing call
+hands it — a point slice, a path, an image — is lent for that call only: refract
+draws from pooled buffers, so a backend that keeps one will render the next
+frame's data. Copy what you need to keep; `ir.Recorder` is the worked example.
+If it needs a dependency the core must not have, it belongs in its own nested
+module. Keep its contact
 with that dependency as small as you can, and say what you touched — see
 [ADR 0006](docs/adr/0006-gg-coupling-surface.md). Marker outlines come from
 `internal/markers` so that a diamond is the same diamond everywhere; the gg
 backend is a separate module and cannot import it, so it carries a copy and
 says so.
+
+**A reduction** goes in `stat/`, takes plain slices and returns row numbers —
+never a `Source`, never IR. It is generic over `float32` and `float64` so that a
+geom can run it on projected device coordinates, which is where the reduction
+belongs ([ADR 0011](docs/adr/0011-decimation.md)). Give it an `Append` form as
+well: the plain one is what reads well in documentation, the `Append` one is
+what a chart redrawn every frame calls.
+
+Wiring one into a geom means adding a case to `geom.config.reduction`, not a new
+option namespace — `geom.Decimate` and `geom.Budget` are shared like every other
+option. Reduce in `Build`, never in `Train`.
 
 **A theme** is `theme.Tokens` plus `theme.Build`, not fifty literal fields.
 Register it by name if it should be reachable from a config file. Reach for
@@ -145,6 +163,28 @@ Write the test that would have caught the bug.
 `TestLinearFractionalStepKeepsItsDecimal` in `scale/` exists because a step of
 2.5 once rounded its labels to whole numbers, producing an evenly spaced axis
 that read 0, 2, 5, 8, 10.
+
+### The allocation gate
+
+`TestARenderDoesNotAllocatePerPoint` renders the same chart over a thousand rows
+and over a million and fails if the second allocates more than a handful of
+times more than the first. It is not a performance test — it is the assertion
+that nothing on the data path allocates *per row*, which is what makes a chart
+redrawn every frame affordable.
+
+It is built out under `-race`, which allocates on refract's behalf; the race
+job and the ordinary test job are separate, so the gate still runs on every
+commit.
+
+When it fails, find the culprit rather than raising the bar:
+
+```sh
+go test -run=XXX -bench=Frame -memprofile=mem.out .
+go tool pprof -sample_index=alloc_objects -top mem.out
+```
+
+The usual causes are a new buffer that should have come from `geom.scratch`, and
+a variadic interface method being called once per row.
 
 ## Style
 

@@ -26,8 +26,8 @@ func (g *lineGeom) Train(x, y scale.Scale) error {
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
-	trainFinite(x, g.s.x)
-	trainFinite(y, g.s.y)
+	trainColumn(x, g.s.x)
+	trainColumn(y, g.s.y)
 	return nil
 }
 
@@ -46,8 +46,13 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
-	for _, seg := range segments(g.s, g.s.plottable(f.X, f.Y), g.cfg.missing) {
-		pts := project(seg, f)
+	sc := acquire()
+	defer sc.release()
+
+	mode, budget := g.cfg.reduction(shapePath, g.s, f)
+	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
+		x, y, _ := sc.project(seg, f)
+		pts := sc.marks(x, y, sc.reduce(mode, budget, x, y, nil))
 		if len(pts) < 2 {
 			continue
 		}
@@ -55,9 +60,9 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 			b.Polyline(pts, stroke)
 			continue
 		}
-		var p ir.Path
-		appendCurve(&p, pts, float32(clamp01(g.cfg.tension)), true)
-		b.StrokePath(&p, stroke)
+		sc.line.Reset()
+		appendCurve(&sc.line, pts, float32(clamp01(g.cfg.tension)), true)
+		b.StrokePath(&sc.line, stroke)
 	}
 	return nil
 }
@@ -83,11 +88,12 @@ func (g *lineGeom) Legend(f Frame) (LegendEntry, bool) {
 // ok marks the rows that can be drawn — see [series.plottable]. It is passed
 // in rather than recomputed so that every traversal of one series agrees on
 // which rows are holes.
-func segments(s series, ok []bool, m Missing) []series {
+func (sc *scratch) segments(s series, ok []bool, m Missing) []series {
+	out := sc.segs[:0]
 	if m == Interpolate {
-		return []series{interpolate(s, ok)}
+		sc.segs = append(out, sc.interpolate(s, ok))
+		return sc.segs
 	}
-	var out []series
 	start := -1
 	for i := range s.x {
 		switch {
@@ -101,6 +107,7 @@ func segments(s series, ok []bool, m Missing) []series {
 	if start >= 0 {
 		out = append(out, s.slice(start, len(s.x)))
 	}
+	sc.segs = out
 	return out
 }
 
@@ -119,7 +126,7 @@ func (s series) slice(lo, hi int) series {
 // interpolate fills interior holes by linear interpolation between the nearest
 // plottable neighbours. Leading and trailing holes are dropped: there is
 // nothing to interpolate between.
-func interpolate(s series, ok []bool) series {
+func (sc *scratch) interpolate(s series, ok []bool) series {
 	n := len(s.x)
 	first, last := -1, -1
 	for i := 0; i < n; i++ {
@@ -134,12 +141,20 @@ func interpolate(s series, ok []bool) series {
 		return series{}
 	}
 	out := series{
-		x: make([]float64, 0, last-first+1),
-		y: make([]float64, 0, last-first+1),
+		x: grow(sc.fx, last-first+1)[:0],
+		y: grow(sc.fy, last-first+1)[:0],
 	}
 	if s.y2 != nil {
-		out.y2 = make([]float64, 0, last-first+1)
+		out.y2 = grow(sc.fz, last-first+1)[:0]
 	}
+	// The interpolated columns live in the scratch, so the next frame fills
+	// the same memory instead of asking for more.
+	defer func() {
+		sc.fx, sc.fy = out.x, out.y
+		if out.y2 != nil {
+			sc.fz = out.y2
+		}
+	}()
 	prev := first
 	for i := first; i <= last; i++ {
 		if ok[i] {
@@ -175,25 +190,6 @@ func (s *series) append(src series, i int) {
 }
 
 func lerp(a, b, t float64) float64 { return a + (b-a)*t }
-
-// project maps a segment into device space.
-func project(s series, f Frame) []ir.Point {
-	pts := make([]ir.Point, 0, len(s.x))
-	for i := range s.x {
-		pts = append(pts, ir.Point{X: f.X.Map(s.x[i]), Y: f.Y.Map(s.y[i])})
-	}
-	return pts
-}
-
-// projectY2 maps a segment's second bound into device space, in reverse order
-// so that appending it to the forward pass closes a band.
-func projectY2(s series, f Frame) []ir.Point {
-	pts := make([]ir.Point, 0, len(s.x))
-	for i := len(s.x) - 1; i >= 0; i-- {
-		pts = append(pts, ir.Point{X: f.X.Map(s.x[i]), Y: f.Y.Map(s.y2[i])})
-	}
-	return pts
-}
 
 // appendCurve appends pts to p, straight when tension is zero and
 // Catmull-Rom-smoothed otherwise, starting a new subpath when move is set.

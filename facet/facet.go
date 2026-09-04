@@ -275,16 +275,27 @@ func matchRows(src data.Source, want map[string]string) ([]int, bool) {
 		cols = append(cols, labels)
 		values = append(values, v)
 	}
-	var rows []int
-	for i := range src.Len() {
-		match := true
+	match := func(i int) bool {
 		for j, labels := range cols {
 			if i >= len(labels) || labels[i] != values[j] {
-				match = false
-				break
+				return false
 			}
 		}
-		if match {
+		return true
+	}
+
+	// Count, then fill. Growing the list by appending costs one allocation per
+	// doubling, so a facet over a million rows would allocate twenty times per
+	// panel per frame for want of a number it can work out in one pass.
+	n := 0
+	for i := range src.Len() {
+		if match(i) {
+			n++
+		}
+	}
+	rows := make([]int, 0, n)
+	for i := range src.Len() {
+		if match(i) {
 			rows = append(rows, i)
 		}
 	}

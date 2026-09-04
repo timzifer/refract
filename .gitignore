@@ -25,11 +25,14 @@ profile.cov
 # vendor/
 
 # Go workspace file. go.work is committed: this repository is multi-module
-# (core + backend/gg) and the workspace is how the two are built together.
+# (core + backend/gg + arrow) and the workspace is how they are built together.
 go.work.sum
 
 # env file
 .env
+
+# Charts written by the examples when they are run by hand.
+bigdata-*.svg
 
 # Editor/IDE
 .idea/

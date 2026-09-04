@@ -36,6 +36,11 @@ type Chart struct {
 	// described by X, Y and Layers.
 	Panels     []Panel
 	Rows, Cols int
+
+	// Serial draws the panels one at a time. The zero value builds them
+	// concurrently where that is possible and worth it — see [drawData] — and
+	// produces the same output either way.
+	Serial bool
 }
 
 // Panel is one Cartesian area of a multi-panel chart.
@@ -122,12 +127,8 @@ func Draw(b ir.Backend, c Chart) error {
 
 	drawTitles(b, lay, th, c)
 
-	for i, p := range panels {
-		area := lay.Areas[i]
-		p.rangeTo(area, th)
-		if err := drawLayers(b, p, area, th); err != nil {
-			return err
-		}
+	if err := drawData(b, c, panels, lay.Areas, th); err != nil {
+		return err
 	}
 
 	if !lay.Legend.Empty() {
@@ -166,9 +167,15 @@ func (c Chart) panels() ([]Panel, int, int) {
 // one object, so the range left behind by the last panel of the furniture pass
 // is not this panel's.
 func (p Panel) rangeTo(area ir.Rect, th theme.Theme) (xTicks, yTicks []scale.Tick) {
+	p.setRange(area)
+	return p.X.Ticks(th.TickCountHintX), p.Y.Ticks(th.TickCountHintY)
+}
+
+// setRange is rangeTo without the ticks, for the data pass, which needs the
+// range and has no use for the tick list the furniture pass already drew.
+func (p Panel) setRange(area ir.Rect) {
 	p.X.SetRange(area.Min.X, area.Max.X)
 	p.Y.SetRange(area.Max.Y, area.Min.Y)
-	return p.X.Ticks(th.TickCountHintX), p.Y.Ticks(th.TickCountHintY)
 }
 
 // measurePanels reports what each panel will write, so the solver can size the

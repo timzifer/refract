@@ -1,0 +1,3 @@
+github.com/apache/arrow-go/v18 v18.7.0 h1:Vw/i+cJyebUofT7JlqFpe65LrmwxULn166jjwStM4HY=
+github.com/apache/arrow-go/v18 v18.7.0/go.mod h1:PM6IigLJkdMwIpeHXnymo+xZ52f42a9EYiLtRel4p/A=
+github.com/timzifer/refract v0.2.0/go.mod h1:Jwur80fZ3oDgHMbz+zbYOZX/2aICv+bNQ9NyQlKCfMU=

@@ -37,6 +37,8 @@ type Grid struct {
 
 	legend    bool
 	legendSet bool
+
+	serial bool
 }
 
 type gridCell struct {
@@ -86,6 +88,11 @@ func GridAxisTitles(x, y string) GridOption {
 func GridLegend(show bool) GridOption {
 	return func(g *Grid) { g.legend, g.legendSet = show, true }
 }
+
+// GridParallel controls whether the panels are built concurrently. See
+// [Parallel]; a grid is the shape that benefits most, because its panels are
+// different charts over different data.
+func GridParallel(on bool) GridOption { return func(g *Grid) { g.serial = !on } }
 
 // NewGrid creates a grid that flows plots into rows of cols panels.
 func NewGrid(cols int, opts ...GridOption) *Grid {
@@ -172,6 +179,7 @@ func (g *Grid) chart() (render.Chart, error) {
 		XTitle:     g.xTitle,
 		YTitle:     g.yTitle,
 		ShowLegend: g.showLegend(),
+		Serial:     g.serial,
 	}
 	rows := 0
 	for _, cell := range g.cells {

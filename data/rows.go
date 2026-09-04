@@ -117,15 +117,31 @@ func GroupBy(src Source, col string) (keys []string, rows [][]int, ok bool) {
 	if !ok {
 		return nil, nil, false
 	}
+	// Count first, then fill. Growing each group by appending would allocate
+	// once per doubling per group, which is a cost that rises with the row
+	// count for no reason: the counts are known after one pass, and one
+	// backing array sliced up serves every group.
 	at := map[string]int{}
-	for i, l := range labels {
+	var counts []int
+	for _, l := range labels {
 		j, seen := at[l]
 		if !seen {
 			j = len(keys)
 			at[l] = j
 			keys = append(keys, l)
-			rows = append(rows, nil)
+			counts = append(counts, 0)
 		}
+		counts[j]++
+	}
+	flat := make([]int, 0, len(labels))
+	rows = make([][]int, len(keys))
+	off := 0
+	for j, n := range counts {
+		rows[j] = flat[off : off : off+n]
+		off += n
+	}
+	for i, l := range labels {
+		j := at[l]
 		rows[j] = append(rows[j], i)
 	}
 	return keys, rows, true
