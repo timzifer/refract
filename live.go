@@ -141,6 +141,42 @@ func (p *Plot) Live(t Target) (*Live, error) {
 	return l, nil
 }
 
+// TrackRows turns row identity on or off and returns l, so the call can be
+// chained onto [Plot.Live].
+//
+//	live, err := p.Live(canvas.Element(el))
+//	live.TrackRows(true)
+//	// ...
+//	p.On(refract.Hover, func(ev refract.Event) {
+//	    if ev.Found && ev.Hit.Row >= 0 {
+//	        highlightTableRow(ev.Hit.Row)
+//	    }
+//	})
+//
+// It is off by default because it is not free. With it on, every layer that
+// can report its rows records where each one landed, and the hit index keeps a
+// position and a row number per mark on top of the marks it already keeps —
+// memory proportional to the marks on screen, which after decimation is
+// thousands rather than millions, but not nothing. Without it, [Hit.Row] is
+// -1 and a hit still reports the data values under the pointer.
+//
+// It takes effect on the next [Live.Draw].
+//
+// Not every mark has a row to report. A boxplot's box aggregates many rows, a
+// density raster is not a mark at all, an interpolated point across a gap was
+// never measured, and a third-party geom that does not report its rows has
+// none to report; all of those leave [Hit.Row] at -1 rather than guessing a
+// nearby one.
+func (l *Live) TrackRows(on bool) *Live {
+	l.idx.TrackRows(on)
+	l.chart.RowSink = nil
+	if on {
+		l.chart.RowSink = l.idx
+	}
+	l.drawn = false // the next frame is not comparable with the last
+	return l
+}
+
 // Rebuild resolves the plot again, picking up layers, scales or a facet added
 // since the Live was created. It forgets any zoom on a facet's free axes,
 // which belong to panels that no longer exist.
@@ -150,6 +186,9 @@ func (l *Live) Rebuild() error {
 		return err
 	}
 	c.Observer = l.idx
+	if l.idx.TrackingRows() {
+		c.RowSink = l.idx
+	}
 	l.chart = c
 	l.drawn = false
 	return nil

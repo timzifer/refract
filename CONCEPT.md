@@ -667,14 +667,24 @@ the GPU tier is untouched, which is the point of the CPU tier: big-data
   nothing — and all of that runs in a browser from the same model that renders
   SVG on a server. ✔
 
+- Row identity, opt-in. A hit always reports the data values under the pointer;
+  with `Live.TrackRows(true)` it also reports the source row behind the mark,
+  which is what highlighting the matching row of a table beside the chart
+  needs. Geoms report where each of their rows landed through `geom.Rows`,
+  separately from what they drew — a smoothed line is a curve through its rows
+  and a bar is four corners around one, so the drawn points are not the rows.
+  Decimation is not in the way: LTTB and MinMax keep real rows. Faceting is not
+  either: rows are resolved back through `data.Subset` to the table that was
+  handed in.
+
 Not in v0.5, in case they look like oversights. There is no native window and
 no GPU tier: both are v0.6, and both need `gogpu/gogpu` and `gg/gpu` rather than
-anything in this milestone. A hit reports data values rather than a row number,
-because carrying row identity through decimation is bookkeeping the design
-avoids — the x value and a lookup are what a caller has. And the damage unit is
-a drawing call, so moving one point of a line repaints the line's box; what it
-does not repaint is the title, the axes and the margins, which is most of the
-canvas.
+anything in this milestone. Row identity is off by default and not every mark
+has one — a boxplot's box aggregates many rows, a density raster is not a mark,
+an interpolated point was never measured — and those report no row rather than
+a nearby one. And the damage unit is a drawing call, so moving one point of a
+line repaints the line's box; what it does not repaint is the title, the axes
+and the margins, which is most of the canvas.
 
 ### v0.6 — Native interactive & polish
 

@@ -65,7 +65,7 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 	tension := float32(clamp01(g.cfg.tension))
 	base := baselinePos(f, g.cfg.baseline)
 
-	sc := acquire()
+	sc := acquire(f)
 	defer sc.release()
 
 	// A band is bounded by both of its edges, so its reduction has to see both;
@@ -83,6 +83,10 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 		if len(top) < 2 {
 			continue
 		}
+		// The upper edge carries the rows. A band's lower edge is the same
+		// rows in reverse, and reporting it as well would put two positions on
+		// each row for no gain.
+		f.Marks(top, sc.rowsOf(seg, keep, len(x)))
 		if fill.A != 0 {
 			sc.fill.Reset()
 			appendCurve(&sc.fill, top, tension, true)

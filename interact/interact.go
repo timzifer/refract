@@ -65,6 +65,15 @@ type Hit struct {
 	// Distance is how far At is from the point that was asked about, in
 	// device units. It is zero for a point inside an area.
 	Distance float32
+
+	// Row is the source row behind the mark, or -1 when it is not known.
+	//
+	// It is -1 unless row tracking was on for the render — see
+	// [Index.TrackRows] — and it stays -1 for a mark that no row is behind: a
+	// boxplot's box aggregates many rows, a density raster is not a mark, an
+	// interpolated point across a gap was never measured, and a third-party
+	// geom that does not report its rows has none to report.
+	Row int
 }
 
 // Panel is one panel of a watched render: where it is and what places values
@@ -88,10 +97,25 @@ type Index struct {
 	marks  []mark
 	pts    []ir.Point
 
+	track bool
+	rows  []rowMark
+
 	panel int
 	layer int
 	label string
 	open  bool
+}
+
+// rowMark is where one source row landed.
+//
+// It is kept apart from the drawn marks on purpose: what a layer draws and
+// what a row is are different points — a smoothed line is a curve through its
+// rows, a staircase draws two points per row, a bar is four corners around
+// one. See [geom.Rows].
+type rowMark struct {
+	panel, layer int
+	at           ir.Point
+	row          int
 }
 
 type mark struct {
@@ -110,8 +134,48 @@ func (ix *Index) Reset() {
 	ix.panels = ix.panels[:0]
 	ix.marks = ix.marks[:0]
 	ix.pts = ix.pts[:0]
+	ix.rows = ix.rows[:0]
 	ix.panel, ix.layer, ix.label, ix.open = -1, -1, "", false
 }
+
+// TrackRows turns row identity on or off and returns ix, so the call can be
+// chained onto [New].
+//
+// It is off by default because it is not free: every layer that can report its
+// rows does the bookkeeping, and the index keeps a position and a row number
+// per mark on top of the marks it already keeps. Turn it on when a hit has to
+// name a row rather than describe a point — highlighting the matching row of a
+// table beside the chart is the case it exists for.
+//
+// It takes effect on the next render, and only if the caller also hands the
+// index to the renderer as its row sink; [github.com/timzifer/refract.Live]
+// does that.
+func (ix *Index) TrackRows(on bool) *Index { ix.track = on; return ix }
+
+// TrackingRows reports whether row identity is on.
+func (ix *Index) TrackingRows() bool { return ix.track }
+
+// Marks implements the geom package's Rows: it is how a layer reports where
+// each of its source rows landed.
+//
+// The slices are lent for the call — they come from the geom's pooled
+// scratch — so the positions are copied out.
+func (ix *Index) Marks(at []ir.Point, rows []int) {
+	if !ix.track || !ix.open || len(at) != len(rows) {
+		return
+	}
+	for i, p := range at {
+		if rows[i] < 0 {
+			continue
+		}
+		ix.rows = append(ix.rows, rowMark{
+			panel: ix.panel, layer: ix.layer, at: p, row: rows[i],
+		})
+	}
+}
+
+// RowCount reports how many marks carry a source row.
+func (ix *Index) RowCount() int { return len(ix.rows) }
 
 // Panel implements the render package's Observer.
 func (ix *Index) Panel(i int, area ir.Rect, x, y scale.Scale) {
@@ -140,9 +204,9 @@ func (ix *Index) PanelAt(pt ir.Point) (int, bool) {
 	return 0, false
 }
 
-// Marks reports how many marks were indexed. It is what a test asserts on and
-// what a caller watching memory looks at.
-func (ix *Index) Marks() int { return len(ix.marks) }
+// MarkCount reports how many marks were indexed. It is what a test asserts on
+// and what a caller watching memory looks at.
+func (ix *Index) MarkCount() int { return len(ix.marks) }
 
 // DefaultTolerance is how near a pointer has to be to a mark to hit it, in
 // device units.
@@ -170,8 +234,9 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	if tol <= 0 {
 		tol = DefaultTolerance
 	}
-	best := Hit{Distance: float32(math.Inf(1))}
+	best := Hit{Distance: float32(math.Inf(1)), Row: -1}
 	bestRank := len(ranked)
+	var bestBounds ir.Rect
 	found := false
 	for _, m := range ix.marks {
 		if !within(m.bounds, pt, tol) {
@@ -186,9 +251,10 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 			continue
 		}
 		bestRank = r
+		bestBounds = m.bounds
 		best, found = Hit{
 			Panel: m.panel, Layer: m.layer, Series: m.label,
-			Kind: m.kind, At: at, Distance: d,
+			Kind: m.kind, At: at, Distance: d, Row: -1,
 		}, true
 	}
 	if !found {
@@ -197,7 +263,45 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	if p := ix.panelOf(best.Panel); p != nil && p.X != nil && p.Y != nil {
 		best.X, best.Y = p.X.Invert(best.At.X), p.Y.Invert(best.At.Y)
 	}
+	best.Row = ix.rowAt(best, bestBounds)
 	return best, true
+}
+
+// rowAt finds the source row behind a hit: the nearest position its own layer
+// reported, which for every geom that reports one mark per row is the hit's
+// own position.
+//
+// The search is confined to the hit's layer, so two series crossing cannot
+// take each other's rows, and it is bounded by the tolerance a hit already
+// passed — a bar reports the middle of its end rather than the corner the
+// pointer landed on, and that is the largest gap this has to cross.
+func (ix *Index) rawRowAt(panel, layer int, at ir.Point, tol float32) int {
+	best, bestD := -1, tol*tol
+	for _, r := range ix.rows {
+		if r.panel != panel || r.layer != layer {
+			continue
+		}
+		dx, dy := r.at.X-at.X, r.at.Y-at.Y
+		if d := dx*dx + dy*dy; d <= bestD {
+			best, bestD = r.row, d
+		}
+	}
+	return best
+}
+
+func (ix *Index) rowAt(h Hit, bounds ir.Rect) int {
+	if !ix.track || len(ix.rows) == 0 {
+		return -1
+	}
+	// An area is hit by containment rather than by proximity, so the position
+	// its row was reported at may be as far away as the shape is large — a bar
+	// reports the middle of its end and can be hit at the far corner.
+	// Everything else was already within the tolerance the caller asked for.
+	tol := float32(DefaultTolerance)
+	if h.Kind != Vertex {
+		tol = max(bounds.Dx(), bounds.Dy(), tol)
+	}
+	return ix.rawRowAt(h.Panel, h.Layer, h.At, tol)
 }
 
 // ranked orders the kinds from most specific to least. A vertex is a row; an

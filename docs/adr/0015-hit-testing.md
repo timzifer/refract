@@ -50,14 +50,50 @@ renderer announces which panel and which layer is drawing.**
   of bars one shape, and pointing at the fourth bar would report whichever
   corner of whichever bar happened to be nearest.
 - The data values come from inverting the panel's scales at the mark's
-  position, not from a row number carried alongside. That is what keeps the
-  index free of per-row bookkeeping, and it is exact for the position that was
-  actually drawn.
+  position. That is exact for the position that was actually drawn, and it
+  needs nothing from the geom.
 - Marks are ranked by specificity and then by distance: a vertex the pointer is
   near beats a shape it is merely inside, which beats a label. Within a rank,
   the later mark wins, because it was drawn on top.
 - A watched render is serial. The observer is told things in order, and two
   panels drawing at once have no order to be told in.
+
+### Row identity, added afterwards
+
+Values answer "what is here". They do not answer "which row is this", which is
+what highlighting the matching row of a table beside the chart needs — and a
+neighbouring row highlighted confidently is a wrong answer rather than a
+missing one. So a second, opt-in channel carries it.
+
+**A geom reports where each of its rows landed, separately from what it drew.**
+
+- `geom.Rows` is a one-method interface; `geom.Frame.Rows` is nil for an
+  ordinary render, and every geom checks it before doing the bookkeeping.
+  `render.Chart.RowSink` is what turns it on; `Live.TrackRows` is the switch a
+  caller reaches for.
+- The report is of *marks*, not of the points of a drawing call. Those are not
+  the same points: a smoothed line is a Bézier path whose control points are
+  not measurements, a staircase draws two points per row, a bar is four corners
+  around one value. Attributing rows to a call's points would attribute them to
+  whichever encoding the geom happened to use.
+- A hit resolves its row from the nearest position its own layer reported.
+  Confining it to the layer is what stops two crossing series taking each
+  other's rows.
+- Rows are resolved through `data.Subset` before they are reported. Faceting
+  cuts each layer down to its panel's rows with `data.Rows`, and a row number
+  relative to a cut nobody holds is not an answer — so what comes out is a row
+  of the table that was handed in.
+- Not every mark has a row. A boxplot's box aggregates many, a density raster
+  is not a mark, an interpolated point across a gap was never measured, and a
+  third-party geom that does not implement `geom.Rows` reports none. All of
+  those leave `Hit.Row` at -1 rather than guessing a nearby one.
+
+It is opt-in because it keeps a position and a row number per mark. It turned
+out **not** to cost per-frame allocations — the buffers are pooled like every
+other per-frame buffer, and `BenchmarkWatchedFrame` against
+`BenchmarkWatchedFrameRows` is pinned flat in the allocation gate — so the
+thing being opted into is memory proportional to the marks on screen, not
+speed.
 
 ## Consequences
 
@@ -68,11 +104,10 @@ renderer announces which panel and which layer is drawing.**
   the hits are the rows that survived — which is right, because those are the
   rows on screen, and a tooltip for a row that was reduced away would be a
   tooltip for something invisible.
-- A hit reports data values rather than a row number. For a tooltip, an
-  annotation or a readout that is the useful half; for "open the record behind
-  this point", the caller has the x value and a lookup of its own to do. Adding
-  row identity would mean carrying it through decimation, which is the
-  bookkeeping this design avoids.
+- A hit reports data values always, and a source row when row tracking is on.
+  Decimation does not get in the way of either: LTTB and MinMax keep *real
+  rows*, so a surviving mark is a measurement and the row it reports is the
+  row that measurement came from.
 - A watched render allocates: the index copies the points a layer draws. That
   is proportional to the marks on screen, not to the rows in the table — a
   decimated million-row line indexes a couple of thousand points — but it is

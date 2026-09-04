@@ -46,16 +46,21 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 
-	sc := acquire()
+	sc := acquire(f)
 	defer sc.release()
 
 	mode, budget := g.cfg.reduction(shapePath, g.s, f)
 	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
-		pts := sc.marks(x, y, sc.reduce(mode, budget, x, y, nil))
+		keep := sc.reduce(mode, budget, x, y, nil)
+		pts := sc.marks(x, y, keep)
 		if len(pts) < 2 {
 			continue
 		}
+		// The vertices are the rows, whether the path drawn through them is
+		// straight or a curve — which is why this is reported here rather than
+		// left to be read off the drawing call.
+		f.Marks(pts, sc.rowsOf(seg, keep, len(x)))
 		if g.cfg.tension <= 0 {
 			b.Polyline(pts, stroke)
 			continue
@@ -113,12 +118,15 @@ func (sc *scratch) segments(s series, ok []bool, m Missing) []series {
 
 // slice returns the rows [lo, hi) as a series, borrowing rather than copying.
 func (s series) slice(lo, hi int) series {
-	out := series{x: s.x[lo:hi], y: s.y[lo:hi]}
+	out := series{x: s.x[lo:hi], y: s.y[lo:hi], off: s.off + lo, origin: s.origin}
 	if s.y2 != nil {
 		out.y2 = s.y2[lo:hi]
 	}
 	if s.c != nil {
 		out.c = s.c[lo:hi]
+	}
+	if s.rows != nil {
+		out.rows = s.rows[lo:hi]
 	}
 	return out
 }
@@ -147,12 +155,22 @@ func (sc *scratch) interpolate(s series, ok []bool) series {
 	if s.y2 != nil {
 		out.y2 = grow(sc.fz, last-first+1)[:0]
 	}
+	// An interpolated series is not a contiguous run of the source: some of
+	// its elements are values that were never measured. It therefore carries a
+	// row per element, with -1 for the invented ones — but only when someone
+	// asked, because otherwise this is a per-row buffer nobody reads.
+	if sc.wantRows {
+		out.rows = grow(sc.irows, last-first+1)[:0]
+	}
 	// The interpolated columns live in the scratch, so the next frame fills
 	// the same memory instead of asking for more.
 	defer func() {
 		sc.fx, sc.fy = out.x, out.y
 		if out.y2 != nil {
 			sc.fz = out.y2
+		}
+		if out.rows != nil {
+			sc.irows = out.rows
 		}
 	}()
 	prev := first
@@ -176,6 +194,9 @@ func (sc *scratch) interpolate(s series, ok []bool) series {
 		if s.y2 != nil {
 			out.y2 = append(out.y2, lerp(s.y2[prev], s.y2[next], t))
 		}
+		if out.rows != nil {
+			out.rows = append(out.rows, -1)
+		}
 	}
 	return out
 }
@@ -186,6 +207,9 @@ func (s *series) append(src series, i int) {
 	s.y = append(s.y, src.y[i])
 	if s.y2 != nil {
 		s.y2 = append(s.y2, src.y2[i])
+	}
+	if s.rows != nil {
+		s.rows = append(s.rows, src.rowAt(i))
 	}
 }
 

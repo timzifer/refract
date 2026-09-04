@@ -88,6 +88,40 @@ func (r *rowsSource) StringColumn(name string) ([]string, bool) {
 	return out, true
 }
 
+// Subset is implemented by a Source that is a selection of another source's
+// rows, so that a row number can be traced back to the table it came from.
+//
+// It exists because faceting makes such a source without the caller ever
+// seeing it: [github.com/timzifer/refract.Plot.Facet] cuts each layer down to
+// its panel's rows with [Rows], and a row number relative to that cut is a row
+// number in a table nobody holds. A geom reporting where its rows landed
+// resolves them through this first, so what comes out is a row of the table
+// that was handed in.
+//
+// It is an optional interface. A Source that is not a selection of another
+// does not implement it, and its rows are already its own.
+type Subset interface {
+	// SourceRows returns, for each of this source's rows, the row it came from
+	// in the source it selects from. The result is read-only.
+	SourceRows() []int
+}
+
+// SourceRows implements [Subset].
+func (r *rowsSource) SourceRows() []int { return r.idx }
+
+// Origins returns the mapping from src's rows to the rows of the table it was
+// cut from, or nil if src is not a cut of anything.
+//
+// One level, not the whole chain: faceting cuts once, and a caller that has
+// composed cuts of cuts knows it has and can compose the mappings the same
+// way.
+func Origins(src Source) []int {
+	if sub, ok := src.(Subset); ok {
+		return sub.SourceRows()
+	}
+	return nil
+}
+
 func gather[T any](src []T, idx []int) []T {
 	out := make([]T, 0, len(idx))
 	for _, i := range idx {

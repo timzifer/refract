@@ -147,13 +147,13 @@ func TestWheelRejectsANonPositiveFactor(t *testing.T) {
 
 func TestRebuildPicksUpANewLayer(t *testing.T) {
 	p, live, _ := livePlot(t)
-	before := live.Index().Marks()
+	before := live.Index().MarkCount()
 
 	p.Add(geom.Scatter(points(), geom.X("x"), geom.Y("y"), geom.Shape(ir.MarkerSquare)))
 	if err := live.Draw(); err != nil {
 		t.Fatal(err)
 	}
-	if live.Index().Marks() != before {
+	if live.Index().MarkCount() != before {
 		t.Error("a layer added after Live was drawn without a Rebuild")
 	}
 
@@ -163,8 +163,8 @@ func TestRebuildPicksUpANewLayer(t *testing.T) {
 	if err := live.Draw(); err != nil {
 		t.Fatal(err)
 	}
-	if live.Index().Marks() <= before {
-		t.Errorf("after Rebuild the index holds %d marks, want more than %d", live.Index().Marks(), before)
+	if live.Index().MarkCount() <= before {
+		t.Errorf("after Rebuild the index holds %d marks, want more than %d", live.Index().MarkCount(), before)
 	}
 }
 

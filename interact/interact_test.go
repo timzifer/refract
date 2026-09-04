@@ -67,7 +67,7 @@ func TestOnlyDataMarksAreIndexed(t *testing.T) {
 
 	// The chart draws a background, a plot fill, a grid, two axes and a title
 	// as well as the line; only the line is a mark a reader can point at.
-	if got := ix.Marks(); got != 1 {
+	if got := ix.MarkCount(); got != 1 {
 		t.Errorf("indexed %d marks, want 1 — the furniture must not be indexed", got)
 	}
 	if len(rec.Calls) < 10 {
@@ -163,12 +163,12 @@ func TestPanelAtFindsThePanel(t *testing.T) {
 
 func TestResetEmptiesTheIndex(t *testing.T) {
 	ix, _ := indexed(t, geom.Line(src(), geom.X("x"), geom.Y("y")))
-	if ix.Marks() == 0 {
+	if ix.MarkCount() == 0 {
 		t.Fatal("nothing indexed")
 	}
 	ix.Reset()
-	if ix.Marks() != 0 || len(ix.Panels()) != 0 {
-		t.Errorf("after Reset: %d marks, %d panels", ix.Marks(), len(ix.Panels()))
+	if ix.MarkCount() != 0 || len(ix.Panels()) != 0 {
+		t.Errorf("after Reset: %d marks, %d panels", ix.MarkCount(), len(ix.Panels()))
 	}
 	if _, ok := ix.At(ir.Point{X: 100, Y: 100}, 0); ok {
 		t.Error("an empty index found something")
@@ -237,5 +237,85 @@ func TestTheProbeForwardsEverything(t *testing.T) {
 	}
 	if got := b.Measure(ir.TextRun{Text: "x", Font: ir.FontRef{Size: 10}}); got.Advance == 0 {
 		t.Error("Measure did not reach the backend")
+	}
+}
+
+func TestRowIdentityIsOffUntilAskedFor(t *testing.T) {
+	ix := interact.New()
+	if ix.TrackingRows() {
+		t.Error("a new index tracks rows")
+	}
+	if ix.TrackRows(true) != ix {
+		t.Error("TrackRows does not return the index it was called on")
+	}
+	if !ix.TrackingRows() {
+		t.Error("TrackRows(true) did not turn tracking on")
+	}
+	// Marks outside a layer are furniture and carry no row, tracking or not.
+	ix.Marks([]ir.Point{{X: 1, Y: 2}}, []int{7})
+	if ix.RowCount() != 0 {
+		t.Errorf("a mark reported outside a layer was kept: %d", ix.RowCount())
+	}
+}
+
+func TestMismatchedRowReportsAreDropped(t *testing.T) {
+	// A geom handing over two slices of different lengths has a bug; taking
+	// the shorter of the two would turn it into wrong rows rather than none.
+	ix := interact.New().TrackRows(true)
+	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear())
+	ix.Layer(0, "s")
+	ix.Marks([]ir.Point{{X: 1}, {X: 2}}, []int{0})
+	if ix.RowCount() != 0 {
+		t.Errorf("a mismatched report was kept: %d rows", ix.RowCount())
+	}
+}
+
+func TestResetForgetsRows(t *testing.T) {
+	ix := interact.New().TrackRows(true)
+	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear())
+	ix.Layer(0, "s")
+	ix.Marks([]ir.Point{{X: 1, Y: 1}}, []int{4})
+	if ix.RowCount() != 1 {
+		t.Fatalf("rows = %d", ix.RowCount())
+	}
+	ix.Reset()
+	if ix.RowCount() != 0 {
+		t.Errorf("after Reset: %d rows", ix.RowCount())
+	}
+	if !ix.TrackingRows() {
+		t.Error("Reset turned tracking off; it is a setting, not frame state")
+	}
+}
+
+func TestARowIsNotTakenFromAnotherLayer(t *testing.T) {
+	// Two series crossing at a point: the hit belongs to one of them, and so
+	// must the row.
+	a := data.Float64Columns(map[string][]float64{"x": {0, 1, 2}, "y": {0, 5, 0}})
+	b := data.Float64Columns(map[string][]float64{"x": {0, 1, 2}, "y": {5, 5, 5}})
+
+	ix := interact.New().TrackRows(true)
+	rec := irtest.New()
+	c := render.Chart{
+		Width: 400, Height: 300, DPR: 1, Theme: theme.Light,
+		X: scale.Linear(scale.Nice()), Y: scale.Linear(scale.Nice()),
+		Layers: []geom.Geom{
+			geom.Scatter(a, geom.X("x"), geom.Y("y"), geom.Label("a")),
+			geom.Scatter(b, geom.X("x"), geom.Y("y"), geom.Label("b")),
+		},
+		Observer: ix, RowSink: ix,
+	}
+	if err := render.Draw(ix.Watch(rec), c); err != nil {
+		t.Fatal(err)
+	}
+	p := ix.Panels()[0]
+	hit, ok := ix.At(ir.Point{X: p.X.Map(1), Y: p.Y.Map(5)}, 0)
+	if !ok {
+		t.Fatal("no hit where the two series meet")
+	}
+	if hit.Series != "b" {
+		t.Fatalf("the hit belongs to %q, want the layer drawn last", hit.Series)
+	}
+	if hit.Row != 1 {
+		t.Errorf("row = %d, want 1", hit.Row)
 	}
 }

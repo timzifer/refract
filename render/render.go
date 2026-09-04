@@ -48,6 +48,14 @@ type Chart struct {
 	// path: the observer is told things in order, and two panels drawing at
 	// once have no order to be told in.
 	Observer Observer
+
+	// RowSink, when non-nil, collects which source row is behind each mark. It
+	// is separate from Observer because it is a separate cost: a layer does
+	// the bookkeeping only when someone is listening, so this is what turns it
+	// on. See [geom.Rows].
+	//
+	// It is not called Rows because that name is already the facet grid's.
+	RowSink geom.Rows
 }
 
 // Observer is told the structure a render is drawing, as it draws it.
@@ -514,7 +522,7 @@ func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 // rotation of -90 degrees in screen coordinates.
 const halfPi = 1.5707963267948966
 
-func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer) error {
+func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer, rows geom.Rows) error {
 	if plot.Empty() || len(p.Layers) == 0 {
 		return nil
 	}
@@ -524,7 +532,7 @@ func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observe
 	defer b.Pop()
 
 	for i, g := range p.Layers {
-		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Theme: th, Index: i}
+		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Theme: th, Index: i, Rows: rows}
 		if obs != nil {
 			obs.Layer(i, layerLabel(g, f))
 		}

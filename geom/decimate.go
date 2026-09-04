@@ -204,6 +204,8 @@ type scratch struct {
 	dz    []float32
 	keep  []int
 	rows  []int
+	mrows []int // source rows behind the marks, when someone asked
+	irows []int // source rows of an interpolated series
 	pts   []ir.Point
 	rects []ir.Rect
 	edge  []ir.Point
@@ -214,15 +216,28 @@ type scratch struct {
 	line  ir.Path
 	grid  stat.Grid
 	img   *image.NRGBA
+
+	// wantRows is whether this Build's caller asked which source row is behind
+	// each mark. It is a field rather than a parameter because the answer is
+	// needed several calls deep — segmenting an interpolated series has to
+	// know — and it is false for every ordinary render.
+	wantRows bool
 }
 
 var scratchPool = sync.Pool{New: func() any { return new(scratch) }}
 
-func acquire() *scratch { return scratchPool.Get().(*scratch) }
+// acquire takes a scratch for one Build pass, told whether the frame's caller
+// wants row identity.
+func acquire(f Frame) *scratch {
+	sc := scratchPool.Get().(*scratch)
+	sc.wantRows = f.tracking()
+	return sc
+}
 
 func (sc *scratch) release() {
 	sc.fill.Reset()
 	sc.line.Reset()
+	sc.wantRows = false
 	scratchPool.Put(sc)
 }
 

@@ -235,6 +235,29 @@ mark per call would make the row of bars one shape, so pointing at the fourth
 bar would report whichever corner of whichever bar happened to be nearest.
 There is a test.
 
+**A geom reports its rows separately from what it draws, and that is the
+whole point.** `geom.Rows` takes the positions a row landed at, not the points
+of a drawing call — a smoothed line is a Bézier path whose control points are
+not measurements, a staircase draws two points per row, a bar is four corners
+around one value. Attributing rows to a call's points would attribute them to
+whichever encoding the geom happened to use, and would be wrong for three of
+the six geoms that have rows. There is a test per geom.
+
+**Row reporting is gated on `Frame.Rows != nil` at every step.** `acquire(f)`
+records it on the scratch as `wantRows`, and `rowsOf`, `sourceRows` and the
+interpolated series' row list all check it. An ordinary render must keep
+costing exactly what it did — `BenchmarkFrame1k` is still 76 allocations, and
+`BenchmarkWatchedFrame` against `BenchmarkWatchedFrameRows` is pinned flat.
+
+**A row is reported in the caller's table, not in the cut refract made.**
+Faceting cuts each layer with `data.Rows`, and a row number relative to that
+cut is a row number in a table nobody holds. `series.origin` comes from
+`data.Origins` and `series.rowAt` resolves through it. A geom that collects its
+own element list — a scatter, a bar, both for per-mark colour — must report
+through `scratch.sourceRows` rather than handing over the element numbers: the
+two lists look identical and mean different things, and a faceted chart is
+where that shows.
+
 **A pinned scale domain skips nicing, and that is not an oversight.**
 `scale.Zoomer.SetDomain` sets `pinned` as well as `fixed`, and `effective()`
 returns the pinned domain before nicing or zero-forcing get a chance. An axis

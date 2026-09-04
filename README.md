@@ -178,7 +178,8 @@ picture here cannot drift away from the code that produced it.
 - **Interaction** — `Plot.On` registers handlers for hover, click, zoom and
   pan; `Plot.Live` draws into a surface that can be redrawn; `Live.Bind` wires a
   DOM element to it. Hit-testing runs over the marks a render emitted rather
-  than over a second copy of every geom's projection
+  than over a second copy of every geom's projection, and `Live.TrackRows`
+  makes a hit name the source row behind the mark
   ([ADR 0015](docs/adr/0015-hit-testing.md)).
 - **Live data** — `data.Stream` is appended to from any goroutine and frozen
   between frames, and a redraw repaints only what changed
@@ -301,6 +302,26 @@ every geom — including a decimated one, where the rows you can point at are
 exactly the rows on screen ([ADR 0015](docs/adr/0015-hit-testing.md)). Zoom and
 pan are arithmetic on the scales, so the value under the pointer stays under the
 pointer on a log or a time axis as much as on a linear one.
+
+Turn on row identity when a hit has to name a row rather than describe a point —
+highlighting the matching row of a table beside the chart is the case:
+
+```go
+live.TrackRows(true)
+
+p.On(refract.Hover, func(ev refract.Event) {
+	if ev.Found && ev.Hit.Row >= 0 {
+		highlightTableRow(ev.Hit.Row)   // a row of the table you handed in
+	}
+})
+```
+
+It is off by default and costs a position and a row number per mark; it does not
+cost per-frame allocations, and CI pins that. Decimation is not in the way —
+LTTB and min/max keep *real* rows — and neither is faceting, whose per-panel
+cuts are resolved back to the table you passed. A mark that no single row is
+behind — a boxplot's box, a density raster, an interpolated point across a
+gap — reports `-1` rather than a plausible neighbour.
 
 A runnable version is in [`examples/web`](examples/web):
 

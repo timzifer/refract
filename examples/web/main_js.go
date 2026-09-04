@@ -41,9 +41,16 @@ func main() {
 			readout.Set("textContent", "—")
 			return
 		}
-		readout.Set("textContent", ev.Series()+": "+
-			strconv.FormatFloat(ev.Hit.X, 'f', 2, 64)+", "+
-			strconv.FormatFloat(ev.Hit.Y, 'f', 2, 64))
+		text := ev.Series() + ": " +
+			strconv.FormatFloat(ev.Hit.X, 'f', 2, 64) + ", " +
+			strconv.FormatFloat(ev.Hit.Y, 'f', 2, 64)
+		// Row identity is what a table beside the chart would highlight. It is
+		// -1 for a mark no single row is behind, and off unless asked for —
+		// see live.TrackRows below.
+		if ev.Hit.Row >= 0 {
+			text += "  (row " + strconv.Itoa(ev.Hit.Row) + ")"
+		}
+		readout.Set("textContent", text)
 	})
 	p.On(refract.Leave, func(refract.Event) { readout.Set("textContent", "—") })
 
@@ -53,6 +60,7 @@ func main() {
 		return
 	}
 	defer live.Close()
+	live.TrackRows(true)
 
 	if err := live.Draw(); err != nil {
 		js.Global().Get("console").Call("error", err.Error())
