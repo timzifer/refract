@@ -90,8 +90,21 @@ and coordinates may differ by a hundredth of a pixel. PNG is compared with a
 small per-channel tolerance. Both are orders of magnitude below anything visible
 and orders of magnitude above the noise they exist to absorb.
 
+A figure that embeds a raster — a density chart is an `<image>` whose href is a
+base64 PNG — has that payload compared as an image rather than as the deflate
+stream it is written as. Deflate output belongs to the standard library, and two
+Go releases produce two streams for identical pixels; pinning it would be a
+golden test of `compress/flate`. The vector half, including where the raster is
+drawn and how large it is, is still compared exactly. See
+`backend/gg/cmd/gallery/embedded.go`.
+
 Do not widen either tolerance to make a failure go away. Narrowing one is an
 improvement; widening one hides the thing the test is for.
+
+The same reasoning applies inside tests: device coordinates are float32 and
+arm64 contracts `a*b + c` into an FMA where amd64 does not, so comparing them
+with `==` fails on one architecture and passes on the other. `geom`'s annotation
+tests use `sameRect`/`samePoint` at `svgdiff.DefaultTolerance` instead.
 
 ## Documentation figures
 

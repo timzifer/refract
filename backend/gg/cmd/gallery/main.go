@@ -103,12 +103,22 @@ func verify(dir string) error {
 // compareSVG checks a freshly rendered figure against the committed one.
 // "got" is what the code produces now, "want" is what is on disk — the same
 // convention the golden tests use, so the failure messages read the same way.
+//
+// A figure carrying an embedded raster has that raster compared as an image
+// rather than as the base64 deflate stream it is written as; see embedded.go
+// for why. Everything else — the vector half, and the <image> element's own
+// position and size — is compared exactly, as before.
 func compareSVG(path string, got []byte) string {
 	want, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Sprintf("%s: %v", path, err)
 	}
-	if ok, why := svgdiff.Equal(got, want, svgdiff.DefaultTolerance); !ok {
+	gotDoc, gotRasters := splitEmbedded(got)
+	wantDoc, wantRasters := splitEmbedded(want)
+	if msg := compareEmbedded(path, gotRasters, wantRasters); msg != "" {
+		return msg
+	}
+	if ok, why := svgdiff.Equal(gotDoc, wantDoc, svgdiff.DefaultTolerance); !ok {
 		return fmt.Sprintf("%s: %s", path, why)
 	}
 	return ""

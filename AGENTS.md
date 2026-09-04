@@ -158,12 +158,26 @@ not, because it is for a free facet axis. They are opposites and neither is a
 substitute for the other. A scale implementing neither still works — the chart
 is drawn serially.
 
-**A density-raster figure embeds a PNG inside its SVG.** `docs/images/density.svg`
-therefore contains a base64 deflate stream, and `svgdiff` compares non-numeric
-tokens exactly. If the standard library's compressor ever changes its output,
-that figure will fail `-check`. Regenerate it; do not widen a tolerance. That
-is also why there is no golden SVG for a density chart in `testdata/golden` —
-pinning the standard library's deflate output is not a test of refract.
+**A density-raster figure embeds a PNG inside its SVG, and that payload is
+compared as pixels.** `docs/images/density.svg` carries a base64 deflate stream,
+and deflate output is the standard library's business rather than refract's —
+the same chart on two Go releases produces two different streams, which is
+exactly how this first went red. So the gallery lifts embedded payloads out of
+both documents and compares them with the same per-channel tolerance the PNG
+half already uses; the vector half, including the `<image>` element's own
+position and size, is still compared exactly. See
+`backend/gg/cmd/gallery/embedded.go`, and note this is not a widened tolerance
+but the same one applied to pixels rather than to an encoding of them. It is
+also why there is no golden SVG for a density chart in `testdata/golden`:
+pinning `compress/flate` is not a test of refract.
+
+**Do not compare device coordinates with `==` in a test.** They come out of a
+float32 mapping, and arm64 contracts `a*b + c` into an FMA where amd64 does not,
+so a value that is 20 on one is 19.999998 on the other. `geom`'s annotation
+tests carry `sameRect`/`samePoint` with `svgdiff.DefaultTolerance` for this;
+`TestTheCoordinateSlackIsTheRightWidth` pins the slack at wide enough for an
+ulp and narrow enough to catch a tenth of a pixel. Exact comparisons were green
+on amd64 for three milestones and red on every macOS run.
 
 **A geom that holds data implements `geom.Faceter`; one that does not, must
 not.** Faceting splits the layers that have rows and replicates the ones that
