@@ -1,7 +1,8 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws eight data-bearing marks today — `Line`, `Scatter`, `Bar`, `Area`,
-`Step`, `Boxplot`, `Rect`, and the annotations in `geom/annotate.go`. This
+refract draws fifteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
+`Area`, `Step`, `Boxplot`, `Rect`, `Histogram`, `Violin`, `Ridgeline`, `Hexbin`,
+`Beeswarm`, `ECDF` and `Trend`, plus the annotations in `geom/annotate.go`. This
 document is
 the catalogue of what it does not draw yet, sorted **by the machinery each form
 needs** rather than by how popular it is. Sorted that way the list stops being a
@@ -21,8 +22,8 @@ mark that does not exist yet, and the catalogue says which.
 | Multi-entry legends (`geom.Legender`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | pie, stacks, treemap, waffle, sankey |
 | Position adjustments (stack / dodge / fill / wiggle) | **shipped in v0.7** — [ADR 0019](adr/0019-position-adjustments.md) | stacked and grouped bars, stacked area, streamgraph, funnel, marimekko, ridgeline, **and pie** |
 | Coordinate systems (`coord.Polar`) | **shipped in v0.8** — [ADR 0018](adr/0018-coordinate-systems.md) | pie, donut, radar, rose, wind rose, gauge |
-| A size channel (`geom.SizeBy` + a size scale) | missing | bubble |
-| Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | missing | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
+| A size channel (`geom.SizeBy` + a size scale) | **shipped in v0.9** — [ADR 0027](adr/0027-size-channel-and-the-guide-column.md) | bubble |
+| Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
 
 ## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
@@ -113,15 +114,26 @@ switches that turn the furniture off. The third of them is new in v0.8, and
 [ADR 0018](adr/0018-coordinate-systems.md) is why: "suppress the furniture" had
 no home before the coord gave it one.
 
-## D — needs a new aesthetic channel
+## D — needs a new aesthetic channel — **shipped in v0.9**
 
-**Bubble** needs a size scale. `geom.Size` is a scalar today and
-`spec.Encoding` carries `x, y, x2, y2, color, detail` and `width` and nothing
-else. The scale must map by **area**, not radius —
-doubling a value multiplies the diameter by √2 — because a reader compares
-bubbles by how much ink they occupy. It also needs a third guide kind beside the
-legend and the colourbar, which is the moment `layout`'s guide column should be
-generalised once rather than extended twice.
+**Bubble** is `geom.SizeBy(col, scale.Size())`. The scale maps by **area**, not
+radius — doubling a value multiplies the diameter by √2 — because a reader
+compares bubbles by how much ink they occupy, and there is a test asserting that
+for every pair in the domain rather than only for the extremes. The layer
+contributes a third guide kind beside the legend and the colourbar, and
+`layout`'s guide column was generalised once rather than extended twice:
+`layout.Guide` carries what the solver needs of any kind, `GridResult.Guides` is
+the boxes, and a fourth kind is a constant and two functions
+([ADR 0027](adr/0027-size-channel-and-the-guide-column.md)).
+
+**Two things fell out of it that were not asked for.** A sized layer draws
+circles as subpaths of one path per colour rather than markers, because
+`ir.Backend.Markers` carries one style per call — so a bubble chart is one
+drawing call per colour, and a pointer lands on the bubble it is inside rather
+than on the nearest centre. And the size scale's *range* belongs to the theme
+rather than to the chart: `render` sets it while it collects the guides, because
+panels are built concurrently and a geom writing a shared scale in `Build` would
+be a data race.
 
 **Parallel coordinates** needs no new channel but does need per-axis scales
 inside one panel, which makes it a near-relative of radar: both draw their own
@@ -154,25 +166,46 @@ iteration, and any relaxation loop runs a fixed number of sweeps rather than to
 convergence — so the result is a pure function of its input and a parallel render
 stays byte-identical to a serial one.
 
-## F — needs new stats
+## F — needs new stats — **shipped in v0.9**, except contour
 
-`CONCEPT §8` has promised `Bin`, `Density` and `Smooth` since v0.1; `stat/`
-carries the decimation family and a 2-D density grid, and none of the three.
+`CONCEPT §8` promised `Bin`, `Density` and `Smooth` from v0.1 and `stat/` did not
+carry them until v0.9. It does now, and each is a pure function with an `Append`
+form and a determinism test, per CONTRIBUTING's rule for reductions.
 
-| Chart | Stat |
-|---|---|
-| Histogram | `stat.Bin` — a 1-D binner. `stat.Bin` today bins into the 2-D density `Grid` (`stat/density.go:107`) and is a different function |
-| Violin | `stat.KDE` + `stat.Bandwidth` (Silverman) |
-| Ridgeline | KDE + groups (B) + a per-group offset |
-| Hexbin | `stat.Hexbin`, a hex lattice beside `stat.Grid` |
-| Beeswarm | `stat.Beeswarm` — a deterministic 1-D dodge, and **no `math/rand`** |
-| ECDF / QQ | `stat.ECDF` |
-| Trend line | `stat.Loess` |
-| Contour | `stat.Contour` |
+| Chart | Stat | Mark |
+|---|---|---|
+| Histogram | `stat.Bin`, with `stat.Sturges` and `stat.FreedmanDiaconis` | `geom.Histogram` |
+| Violin | `stat.KDE` + `stat.Silverman` | `geom.Violin` |
+| Ridgeline | KDE + a categorical axis + a per-row offset | `geom.Ridgeline` |
+| Hexbin | `stat.Hex` and `stat.BinHex`, a hex lattice beside `stat.Grid` | `geom.Hexbin` |
+| Beeswarm | a deterministic 1-D dodge in the geom, and **no `math/rand`** | `geom.Beeswarm` |
+| ECDF | `stat.ECDF` | `geom.ECDF` |
+| Trend line | `stat.Loess` | `geom.Trend` |
+| QQ | `stat.ECDF` against a theoretical quantile function | missing |
+| Contour | `stat.Contour` | missing |
 
-Every one of these is a pure function with an `Append` form, per CONTRIBUTING's
-rule for reductions, and every one needs a determinism test in the shape of
-`TestDecimationIsAPureFunctionOfItsInput`.
+**`stat.Bin` changed meaning.** It is the 1-D histogram now, because that is what
+"bin" means without a qualifier; the 2-D binner it used to name is
+`stat.BinGrid`, beside `stat.BinHex`. The three are named after what they fill.
+
+**Where a stat runs is the decision that took the argument**
+([ADR 0028](adr/0028-distribution-stats.md)). ADR 0011 puts decimation in
+`Build`, in device space, so that what a chart's axis reports does not depend on
+how wide the chart is. A distribution stat is the same rule pointing the other
+way — its output *is* what the axis describes — so it runs in `Train`. Two marks
+are the exception because what they compute is a length on screen: a hexbin bins
+over the plot rectangle, and a beeswarm places its marks against a marker
+diameter.
+
+**The beeswarm's offsets stayed out of `stat`.** They are defined in device units
+against a marker width, so the function would take pixels and return pixels,
+which is a geom wearing a stat's coat. What is genuinely numbers-in-numbers-out
+there is the sorting, and `sort.Float64s` already exists.
+
+**`stat` does no sorting.** `Quantile`, `ECDF` and `Loess` take ordered columns
+and `Silverman` takes two spread measures, because sorting means a buffer and the
+geoms already keep one — one per layer, for the reason `barGeom.gaps` is on the
+layer rather than in the frame's pool.
 
 ## Already possible today
 
@@ -194,11 +227,15 @@ The dependency order is not a preference:
 3. ~~**Position adjustments**~~ — shipped in v0.7
    ([ADR 0019](adr/0019-position-adjustments.md)): B, and the second half of
    what a pie needs.
-4. **`coord/`** ([ADR 0018](adr/0018-coordinate-systems.md)) — C, and the reason
-   the whole sequence has to finish before the v1.0 API freeze.
-5. **The size channel** — D.
-6. **The stat family** — F, large by count but each item small and independent.
-7. **Relational layouts** — E, the only bucket that shares nothing with the
+4. ~~**Position adjustments**~~ — see 3.
+5. ~~**`coord/`**~~ — shipped in v0.8
+   ([ADR 0018](adr/0018-coordinate-systems.md)): C.
+6. ~~**The size channel**~~ — shipped in v0.9
+   ([ADR 0027](adr/0027-size-channel-and-the-guide-column.md)): D, and the guide
+   column generalised.
+7. ~~**The stat family**~~ — shipped in v0.9
+   ([ADR 0028](adr/0028-distribution-stats.md)): F, less contour and QQ.
+8. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this

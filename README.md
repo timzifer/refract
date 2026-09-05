@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.7**, "marks, groups and adjustments".
+> **Status: pre-alpha.** This is milestone **v0.9**, "distributions, density and size".
 > The API is not
 > stable; every release below `v1.0.0` may contain breaking changes without a
 > deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
@@ -151,6 +151,13 @@ picture here cannot drift away from the code that produced it.
   outliers), and **`Rect`** — one box per row, bounded by the row rather than by
   a baseline, which is what a heatmap, a gantt bar, a candle and a waterfall
   step all are.
+- **Distribution marks** — **`Histogram`**, **`Violin`**, **`Ridgeline`**,
+  **`Hexbin`**, **`Beeswarm`**, **`ECDF`** and **`Trend`**. Each is a pure
+  function in [`stat/`](stat) — a 1-D binner, a Gaussian KDE with Silverman's
+  bandwidth rule, a hexagonal lattice, an empirical CDF, locally weighted
+  regression — with a determinism test, drawn by a mark that trains its axis on
+  the summary rather than on the rows
+  ([ADR 0028](docs/adr/0028-distribution-stats.md)).
 - **Series in one layer** — `geom.GroupBy` splits a long table into N series
   drawn by one layer, each with its own colour and its own legend entry.
 - **Position adjustments** — `geom.Stack` (from zero, to 100 %, about a
@@ -176,6 +183,12 @@ picture here cannot drift away from the code that produced it.
   radius are columns like its share is (`geom.X` and `geom.X2`), and
   `geom.ExplodeBy` breaks one out of the ring without changing what it says
   ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
+- **Size** — `geom.SizeBy` reads a column through `scale.Size`: the bubble
+  chart. The mapping is by **area**, not radius, so doubling a value multiplies
+  the diameter by √2 and two bubbles compare the way a reader already reads
+  them. The layer contributes a third guide kind — a ladder of sample marks —
+  beside the legend and the colourbar
+  ([ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md)).
 - **Missing data** — one explicit policy per layer (gap, interpolate, error),
   covering both `NaN`/`Inf` and values a scale has no position for, such as zero
   on a log axis.
@@ -188,7 +201,8 @@ picture here cannot drift away from the code that produced it.
   go through one constraint solver, so panels are the same size and their axes
   line up ([ADR 0010](docs/adr/0010-panel-layout.md)).
 - **Chart furniture** — axes, grid, tick labels with collision avoidance, chart
-  and axis titles, and a guide column carrying a legend and **colourbars**.
+  and axis titles, and one guide column carrying a legend, **colourbars** and
+  **size keys**, stacked in that order and measured by one solver.
 - **Themes** — light and dark, built from a dozen
   [tokens](theme/tokens.go) rather than fifty fields, with a colourblind-safe
   ([Okabe-Ito](https://jfly.uni-koeln.de/color/)) default palette and
@@ -196,7 +210,8 @@ picture here cannot drift away from the code that produced it.
   edits one; `theme.Register` and `theme.ByName` resolve one from a config file.
 - **Big data** — a layer with more rows than the plot has pixels reduces itself
   before it draws: `stat.LTTB` for a line, min/max per pixel column for a
-  staircase or a band, density binning to an image for a point cloud. It happens
+  staircase or a band, density binning to an image for a point cloud, or a
+  `geom.Hexbin` when the counts themselves are the answer. It happens
   when the chart is drawn, never when the scales are trained, so the axes still
   report the data rather than the subset that survived
   ([ADR 0011](docs/adr/0011-decimation.md)).
@@ -404,6 +419,93 @@ Candlestick, waterfall, waffle and calendar are the same mark with different
 columns — see [docs/chart-types.md](docs/chart-types.md).
 
 A runnable version of all four charts is in [`examples/groups`](examples/groups).
+
+## Distributions
+
+Seven marks that summarise a column rather than plotting it. Each is a pure
+function in [`stat/`](stat) with a determinism test, and each trains its axis on
+the summary — a histogram's Y axis holds counts that appear nowhere in the
+table, an ECDF's holds a fraction it computed
+([ADR 0028](docs/adr/0028-distribution-stats.md)).
+
+```go
+p.Add(geom.Histogram(src, geom.X("latency")))              // bins chosen by Freedman–Diaconis
+p.Add(geom.Histogram(src, geom.X("latency"), geom.Bins(40), geom.BinRange(0, 500)))
+```
+
+A violin draws the shape a boxplot summarises away, one per slot and — given a
+series column — one per series within it:
+
+```go
+p.X(scale.Ordinal())
+p.Add(geom.Violin(src, geom.X("service"), geom.Y("latency"), geom.GroupBy("region")))
+```
+
+A ridgeline is the same estimate laid out down a categorical axis, overlapping
+on purpose: twenty little density panels are twenty comparisons a reader has to
+carry between them, and twenty ridges are one picture.
+
+```go
+p.Y(scale.Ordinal())
+p.Add(geom.Ridgeline(src, geom.X("temperature"), geom.Y("month"), geom.Overlap(2)))
+```
+
+A swarm shows every observation and hides none of them, deterministically — no
+jitter, so the same data draws the same picture on every machine and every
+frame. An ECDF shows a distribution with no parameter in it at all, and takes a
+series column so several can be compared without overplotting:
+
+```go
+p.Add(geom.Beeswarm(src, geom.X("cohort"), geom.Y("score")))
+p.Add(geom.ECDF(src, geom.X("score"), geom.GroupBy("cohort")))
+```
+
+A hexbin is the third answer to overplotting, beside decimation and the density
+raster: a hexagon has six neighbours all the same distance away, so a cloud
+binned into one grows none of the crosses and seams a square grid does.
+
+```go
+p.Add(geom.Hexbin(src, geom.X("x"), geom.Y("y"), geom.DensityCells(8)))
+```
+
+And a trend line goes on top of a scatter — locally weighted by default, so it
+follows the data rather than assuming a shape:
+
+```go
+p.Add(
+    geom.Scatter(src, geom.X("x"), geom.Y("y")),
+    geom.Trend(src, geom.X("x"), geom.Y("y"), geom.Span(0.4)),
+    geom.Trend(src, geom.X("x"), geom.Y("y"), geom.Smooth(geom.LinearFit)),
+)
+```
+
+All seven, over samples that make the point, are in
+[`examples/distributions`](examples/distributions).
+
+## Bubbles: a third channel
+
+`geom.SizeBy` gives every mark its size from a column. The scale maps by
+**area** rather than by radius, because a reader compares two circles by how
+much ink is in them — so a value twice another's is drawn with twice the ink and
+√2 times the diameter, and the layer contributes a key of sample marks beside
+the legend and the colourbar:
+
+```go
+p.Add(geom.Scatter(src,
+    geom.X("gdp_per_capita"), geom.Y("life_expectancy"),
+    geom.SizeBy("population", scale.Size()),
+    geom.ColorBy("continent", scale.Qualitative(palette.OkabeIto)),
+))
+```
+
+A sized layer draws circles rather than markers, and that is the IR's doing
+rather than a preference: `ir.Backend.Markers` carries one style per drawing
+call, so a per-row size would be a call per row. One path per colour with a
+circle per subpath is one call per colour — and it gives a pointer the bubble it
+is actually inside rather than the nearest centre
+([ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md)).
+
+The chart is in [`examples/distributions`](examples/distributions) too.
 
 ## Small multiples
 

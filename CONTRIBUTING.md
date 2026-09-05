@@ -225,11 +225,34 @@ Wiring one into a geom means adding a case to `geom.config.reduction`, not a new
 option namespace — `geom.Decimate` and `geom.Budget` are shared like every other
 option. Reduce in `Build`, never in `Train`.
 
+**A distribution stat** — a binner, a density, a fit — goes in `stat/` under the
+same rules and runs on the *other* side of that line: in `Train`, in data space,
+with the scales trained on its output. Its answer is what the axis has to
+describe — a histogram's counts are nowhere in the table — so computing it at
+draw time would leave the mark drawing outside an axis trained on something else
+([ADR 0028](docs/adr/0028-distribution-stats.md)). The exception is a stat whose
+answer is a length on screen: a hexagonal lattice and a beeswarm's offsets are
+both measured in device units, and both belong in `Build` for the reason
+decimation does.
+
+Take ordered input rather than sorting: sorting means either mutating the
+caller's column or allocating a copy of it per frame, and the geom already keeps
+a buffer. Keep that buffer on the layer, not in the frame's pool — `Train` runs
+outside a `Build`, where there is no scratch to take.
+
 **An option** on a geom goes in the shared `geom.Option` set, and then in three
 more places or the JSON spec silently drops it: a field on `geom.Desc`, a line
 in `config.describe`, and a case in `spec.writeMarkProps` for the marks that
 use it. `geom`'s `TestDescribeAndRebuildAgree` and `spec`'s round-trip test are
 what catch forgetting.
+
+**A guide** — a third kind beside the legend and the colourbar — is a
+`layout.GuideKind` constant, a measuring function in `layout`, and a drawing
+function in `render`. It is not a field on `layout.Grid`: the guide column is
+one list with one stacking rule, generalised once in v0.9 rather than extended
+twice ([ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md)). The
+layer contributes it through an optional interface — `geom.Guided`,
+`geom.Sized` — never through a method on `Geom`.
 
 **A scale option** is the same shape: a field on `scale.Desc`, a line in that
 scale's `Describe`, and a case in `scale.FromDesc`. If the option changes the

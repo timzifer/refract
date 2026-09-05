@@ -224,6 +224,14 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Steps:     stepPos(l.Mark.Interpolate),
 		HAlign:    hAlignOf(l.Mark.Align),
 		VAlign:    vAlignOf(l.Mark.Baseline),
+		Bins:      l.Mark.Bins,
+		Bandwidth: l.Mark.Bandwidth,
+		Span:      l.Mark.Span,
+		Smooth:    smoothing(l.Mark.Method),
+		Overlap:   l.Mark.Overlap,
+	}
+	if l.Mark.BinStart != nil && l.Mark.BinEnd != nil {
+		d.BinLo, d.BinHi = *l.Mark.BinStart, *l.Mark.BinEnd
 	}
 	if l.Mark.Extent == 0 {
 		d.Whisker = 1.5
@@ -313,6 +321,13 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 		d.Datum.X1 = datumOf(enc.X2)
 	}
 
+	if enc.Size != nil && enc.Size.Field != "" {
+		ss, err := decodeSizeScale(enc.Size.Scale)
+		if err != nil {
+			return err
+		}
+		d.SizeCol, d.SizeScale = enc.Size.Field, ss
+	}
 	if enc.Color != nil && enc.Color.Field != "" {
 		if enc.Color.Scale == nil {
 			return fmt.Errorf("the colour encoding on %q needs a scale", enc.Color.Field)
@@ -344,6 +359,33 @@ func datumOf(ch *Channel) float64 {
 		return 0
 	}
 	return v
+}
+
+// decodeSizeScale reads a size channel's scale. A channel with no scale still
+// gets one: a size encoding without a scale is a size encoding, and the
+// defaults are the ones that make the area proportional to the value.
+func decodeSizeScale(s *Scale) (scale.SizeScale, error) {
+	var d scale.SizeDesc
+	if s != nil {
+		if len(s.Domain) == 2 {
+			lo, hi := asNumber(s.Domain[0]), asNumber(s.Domain[1])
+			if math.IsNaN(lo) || math.IsNaN(hi) {
+				return nil, fmt.Errorf("refract/spec: a size domain needs two numbers")
+			}
+			d.Min, d.Max, d.Fixed = lo, hi, true
+		} else if len(s.Domain) != 0 {
+			return nil, fmt.Errorf("refract/spec: a size domain needs two bounds, got %d", len(s.Domain))
+		}
+		if len(s.SizeRange) == 2 {
+			d.MinSize, d.MaxSize, d.RangeSet = s.SizeRange[0], s.SizeRange[1], true
+		} else if len(s.SizeRange) != 0 {
+			return nil, fmt.Errorf("refract/spec: a size range needs two diameters, got %d", len(s.SizeRange))
+		}
+		if s.SizeZero != nil {
+			d.Zero, d.ZeroSet = *s.SizeZero, true
+		}
+	}
+	return scale.SizeFromDesc(d)
 }
 
 func decodeColorScale(s Scale) (scale.ColorScale, error) {

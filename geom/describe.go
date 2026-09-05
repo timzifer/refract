@@ -24,6 +24,19 @@ const (
 	MarkBoxplot Mark = "boxplot"
 	MarkRect    Mark = "rect"
 
+	// The distribution marks. Each of them replaces the rows with a summary of
+	// where they are, so each of them decides one of its own axes: a histogram
+	// and a hexbin count, a violin and a ridgeline estimate a density, an ECDF
+	// accumulates, a trend fits. See package
+	// github.com/timzifer/refract/stat.
+	MarkHistogram Mark = "histogram"
+	MarkViolin    Mark = "violin"
+	MarkRidgeline Mark = "ridgeline"
+	MarkHexbin    Mark = "hexbin"
+	MarkBeeswarm  Mark = "beeswarm"
+	MarkECDF      Mark = "ecdf"
+	MarkTrend     Mark = "trend"
+
 	MarkHLine   Mark = "hline"
 	MarkVLine   Mark = "vline"
 	MarkHBand   Mark = "hband"
@@ -84,6 +97,24 @@ type Desc struct {
 	DodgePad float64
 	Order    Ordering
 	WidthCol string
+
+	// SizeCol and SizeScale are [SizeBy]'s two halves: the column each mark
+	// takes its size from, and the scale that turns a value into a diameter.
+	SizeCol   string
+	SizeScale scale.SizeScale
+
+	// Bins, BinLo and BinHi configure a [Histogram]: how many bins and over
+	// what interval. Zero and an empty interval mean the layer chooses.
+	Bins         int
+	BinLo, BinHi float64
+	// Bandwidth is the kernel width a [Violin] or a [Ridgeline] estimates with,
+	// Span the fraction of the rows one local fit of a [Trend] sees, Smooth how
+	// it fits, and Overlap how far a ridge rises. Each carries the value the
+	// layer is actually using.
+	Bandwidth float64
+	Span      float64
+	Smooth    Smoothing
+	Overlap   float64
 
 	// Explode is how far the layer's marks are broken out of the middle of the
 	// coord, as a fraction of its outer radius, and ExplodeCol the column that
@@ -201,6 +232,20 @@ func FromDesc(d Desc) (Geom, error) {
 		return Boxplot(d.Source, opts...), nil
 	case MarkRect:
 		return Rect(d.Source, opts...), nil
+	case MarkHistogram:
+		return Histogram(d.Source, opts...), nil
+	case MarkViolin:
+		return Violin(d.Source, opts...), nil
+	case MarkRidgeline:
+		return Ridgeline(d.Source, opts...), nil
+	case MarkHexbin:
+		return Hexbin(d.Source, opts...), nil
+	case MarkBeeswarm:
+		return Beeswarm(d.Source, opts...), nil
+	case MarkECDF:
+		return ECDF(d.Source, opts...), nil
+	case MarkTrend:
+		return Trend(d.Source, opts...), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownMark, d.Mark)
 }
@@ -231,6 +276,12 @@ func (d Desc) options() []Option {
 		Extend(d.Extend),
 		Order(d.Order),
 		Closed(d.Closed),
+		Bins(d.Bins),
+		BinRange(d.BinLo, d.BinHi),
+		Bandwidth(d.Bandwidth),
+		Span(d.Span),
+		Smooth(d.Smooth),
+		Overlap(d.Overlap),
 	}
 	if d.StackSet {
 		opts = append(opts, Stack(d.Stack))
@@ -280,6 +331,9 @@ func (d Desc) options() []Option {
 	if d.ColorCol != "" && d.ColorScale != nil {
 		opts = append(opts, ColorBy(d.ColorCol, d.ColorScale))
 	}
+	if d.SizeCol != "" && d.SizeScale != nil {
+		opts = append(opts, SizeBy(d.SizeCol, d.SizeScale))
+	}
 	return opts
 }
 
@@ -303,6 +357,15 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Y2:         c.y2col,
 		ColorCol:   c.colorCol,
 		ColorScale: c.colorScale,
+		SizeCol:    c.sizeCol,
+		SizeScale:  c.sizeScale,
+		Bins:       c.bins,
+		BinLo:      c.binLo,
+		BinHi:      c.binHi,
+		Bandwidth:  c.bandwidth,
+		Span:       c.span,
+		Smooth:     c.smooth,
+		Overlap:    c.overlap,
 		Group:      c.groupCol,
 		Stack:      c.stackFor(def),
 		StackSet:   c.stackSet,

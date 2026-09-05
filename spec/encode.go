@@ -188,6 +188,31 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 	return out, nil
 }
 
+// encodeSizeScale writes a size scale down.
+//
+// Its type is spelled out — "size" — because the mapping is by area rather than
+// by radius and a document that left the type off would read as a plain linear
+// range. What is *not* written is a range the theme decided: that is a property
+// of how the chart was drawn rather than of the chart, and pinning it here would
+// stop a spec drawn at another size from scaling its bubbles.
+func encodeSizeScale(ss scale.SizeScale) (*Scale, error) {
+	d, ok := scale.DescribeSize(ss)
+	if !ok {
+		return nil, fmt.Errorf("%T cannot describe itself: it does not implement scale.SizeDescriber", ss)
+	}
+	out := &Scale{Type: "size"}
+	if d.Fixed {
+		out.Domain = []any{d.Min, d.Max}
+	}
+	if d.RangeSet {
+		out.SizeRange = []float32{d.MinSize, d.MaxSize}
+	}
+	if d.ZeroSet {
+		out.SizeZero = float64Ptr(d.Zero)
+	}
+	return out, nil
+}
+
 // colorChannelType is the measurement type of a colour encoding: a category
 // for a discrete scale, a quantity for a ramp. Vega-Lite draws the same
 // distinction with the same two words.
@@ -307,6 +332,19 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 			m.Order = orderName(d.Order)
 		}
 	}
+	// The distribution marks' own numbers. Each is written by the marks that
+	// read it and by no others, the same rule the rest of this function follows:
+	// a document listing a trend's bandwidth would read as though that meant
+	// something.
+	binning := func() {
+		m.Bins = d.Bins
+		if d.BinLo < d.BinHi {
+			m.BinStart, m.BinEnd = float64Ptr(d.BinLo), float64Ptr(d.BinHi)
+		}
+	}
+	density := func() {
+		m.Bandwidth = d.Bandwidth
+	}
 
 	// A contour that joins back to its start is a property of the connected
 	// marks and of nothing else, so it is written by those three and not by
@@ -371,6 +409,43 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		rows()
 		m.BarWidth = float64Ptr(d.BarWidth)
 		m.Extent, m.Outliers = d.Whisker, boolPtr(d.Outliers)
+	case geom.MarkHistogram:
+		stroke()
+		fill()
+		binning()
+		m.Origin = d.Baseline
+	case geom.MarkViolin:
+		stroke()
+		fill()
+		adjust()
+		density()
+		m.BarWidth = float64Ptr(d.BarWidth)
+	case geom.MarkRidgeline:
+		stroke()
+		fill()
+		density()
+		m.Overlap = d.Overlap
+	case geom.MarkHexbin:
+		fill()
+		m.DensityCells = d.CellSize
+	case geom.MarkBeeswarm:
+		stroke()
+		fill()
+		group()
+		m.Size, m.BarWidth = d.Size, float64Ptr(d.BarWidth)
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
+	case geom.MarkECDF:
+		stroke()
+		group()
+	case geom.MarkTrend:
+		stroke()
+		group()
+		m.Span, m.Method = d.Span, smoothName(d.Smooth)
+		if d.Tension > 0 {
+			m.Interpolate, m.Tension = "cardinal", d.Tension
+		}
 	case geom.MarkHLine, geom.MarkVLine, geom.MarkSegment:
 		stroke()
 		m.Extend = boolPtr(d.Extend)
@@ -415,6 +490,13 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.ExplodeCol != "" {
 			enc.Explode = &Channel{Field: d.ExplodeCol}
+		}
+		if d.SizeCol != "" && d.SizeScale != nil {
+			ss, err := encodeSizeScale(d.SizeScale)
+			if err != nil {
+				return nil, err
+			}
+			enc.Size = &Channel{Field: d.SizeCol, Type: "quantitative", Scale: ss}
 		}
 		// The stack is a property of the axis the groups are stacked along,
 		// which is the Y axis for every mark that has one — so it goes on the

@@ -72,6 +72,34 @@ func (p *Path) Rect(r Rect) *Path {
 		Close()
 }
 
+// Circle appends a closed circular subpath centred on c.
+//
+// Four cubics, because [OpCubicTo] is the only curve the IR has and ADR 0002
+// froze it there on the claim that every curve a chart needs is expressible as
+// one. The control points sit kappa·r along the tangents, where kappa is
+// 4(√2-1)/3 — the constant that makes the maximum radial error about one part
+// in ten thousand, which is a hundredth of a pixel on a circle the width of a
+// plot.
+//
+// A radius of zero or less appends nothing: a mark with no area is a mark that
+// is not drawn, which is what a size channel's smallest value asks for.
+func (p *Path) Circle(c Point, r float32) *Path {
+	if !(r > 0) {
+		return p
+	}
+	k := r * kappa
+	return p.MoveTo(c.X, c.Y-r).
+		CubicTo(c.X+k, c.Y-r, c.X+r, c.Y-k, c.X+r, c.Y).
+		CubicTo(c.X+r, c.Y+k, c.X+k, c.Y+r, c.X, c.Y+r).
+		CubicTo(c.X-k, c.Y+r, c.X-r, c.Y+k, c.X-r, c.Y).
+		CubicTo(c.X-r, c.Y-k, c.X-k, c.Y-r, c.X, c.Y-r).
+		Close()
+}
+
+// kappa is 4(√2-1)/3: how far along the tangent a cubic's control point goes
+// to approximate a quarter circle.
+const kappa = 0.5522847498307936
+
 // Polyline appends pts as one open subpath. It is a no-op for fewer than two
 // points.
 func (p *Path) Polyline(pts []Point) *Path {
@@ -84,6 +112,39 @@ func (p *Path) Polyline(pts []Point) *Path {
 	}
 	return p
 }
+
+// Grow reserves room for ops verbs and pts points, keeping whatever the path
+// already holds.
+//
+// It exists for the one caller that knows in advance how much it will append: a
+// layer emitting a shape per row. Appending a hundred thousand circles into an
+// empty path walks the doubling ladder twenty times, and a path held in a pool
+// that a garbage collection has emptied walks it again on the next frame — so a
+// chart redrawn over a large table pays a cost that is logarithmic in its rows
+// rather than none. Reserving once makes it two allocations, and none at all
+// once the buffers are warm.
+func (p *Path) Grow(ops, pts int) *Path {
+	if n := len(p.Ops) + ops; n > cap(p.Ops) {
+		next := make([]PathOp, len(p.Ops), n)
+		copy(next, p.Ops)
+		p.Ops = next
+	}
+	if n := len(p.Pts) + pts; n > cap(p.Pts) {
+		next := make([]Point, len(p.Pts), n)
+		copy(next, p.Pts)
+		p.Pts = next
+	}
+	return p
+}
+
+// CircleOps and CirclePts are how much [Path.Circle] appends: one MoveTo, four
+// CubicTo and a Close, and the thirteen points those consume. They are named so
+// that a caller can reserve room for a known number of circles with [Path.Grow]
+// rather than rediscovering the arithmetic.
+const (
+	CircleOps = 6
+	CirclePts = 13
+)
 
 // Empty reports whether p contains no ops.
 func (p *Path) Empty() bool { return len(p.Ops) == 0 }

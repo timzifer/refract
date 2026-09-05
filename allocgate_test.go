@@ -136,6 +136,23 @@ func TestABrokenOutLayerDoesNotAllocatePerPoint(t *testing.T) {
 	}
 }
 
+// A sized layer is the v0.9 data path, and the only one on which a frame
+// *sorts*: the bubbles are ordered largest first so that a small one inside a
+// large one is still visible. The ordering runs in place over the scratch's own
+// index list, and the circles are appended into a path reserved once rather
+// than grown per mark — so two hundred thousand bubbles cost what a thousand
+// cost. A sort that allocated its own permutation, or a path grown a rung at a
+// time, would show up here and nowhere else.
+func TestASizedLayerDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, bubbleCloud(1_000))
+	large := allocsPerFrame(t, bubbleCloud(200_000))
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("200k bubbles allocate %.0f times per frame against %.0f for 1k: "+
+			"the size channel is allocating per mark", large, small)
+	}
+}
+
 // A layer coloured from a column is the other data path: one colour per mark,
 // batched into one drawing call per distinct colour. Its buffers are pooled
 // too, and this is the assertion that they stay that way.

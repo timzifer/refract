@@ -17,6 +17,7 @@ import (
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
+	"github.com/timzifer/refract/stat"
 	"github.com/timzifer/refract/theme"
 )
 
@@ -127,6 +128,9 @@ type config struct {
 	dodgePad   float64
 	order      Ordering
 
+	sizeCol   string
+	sizeScale scale.SizeScale
+
 	color      *ir.Color
 	width      float32
 	dash       []float32
@@ -146,6 +150,14 @@ type config struct {
 	decimate   Decimation
 	budget     int
 	cellSize   float64
+
+	bins      int
+	binLo     float64
+	binHi     float64
+	bandwidth float64
+	span      float64
+	smooth    Smoothing
+	overlap   float64
 
 	closed    bool
 	dashSet   bool
@@ -289,6 +301,103 @@ func ColorBy(col string, s scale.ColorScale) Option {
 	return func(c *config) { c.colorCol, c.colorScale = col, s }
 }
 
+// SizeBy maps a column through a size scale, giving every mark its own size.
+// It applies to [Scatter]; geoms whose mark has a width the axes decide ignore
+// it.
+//
+// It is the bubble chart, and it is a channel rather than a mark for the same
+// reason a pie is not a geom: what changes is which column decides a mark's
+// size, not what the mark is. The layer contributes a third guide kind beside
+// the legend and the colourbar — a ladder of sample marks with the values they
+// stand for — because a size is a continuum a single swatch cannot represent.
+// See [scale.Size] for why the mapping is by area.
+//
+// A sized layer draws circles rather than markers, and that is a consequence of
+// the IR rather than a preference: [ir.Backend.Markers] carries one style per
+// call, so a layer whose size varied per row would be one drawing call per row.
+// A circle per subpath of one path is one call per colour, and it gives a
+// pointer the mark it is actually inside rather than the nearest centre.
+func SizeBy(col string, s scale.SizeScale) Option {
+	return func(c *config) { c.sizeCol, c.sizeScale = col, s }
+}
+
+// Bins sets how many bins a [Histogram] divides its column into. The default,
+// 0, lets the layer choose: the Freedman-Diaconis rule where the data has an
+// interquartile range to measure, and Sturges's rule where it does not.
+func Bins(n int) Option { return func(c *config) { c.bins = n } }
+
+// BinRange pins the interval a [Histogram] covers. The default is the extent of
+// the data.
+//
+// Pinning it is what makes two histograms comparable: bins chosen from each
+// column's own extent put the same value in different places, and a reader
+// comparing two panels is then comparing the axes rather than the data.
+func BinRange(lo, hi float64) Option {
+	return func(c *config) { c.binLo, c.binHi = lo, hi }
+}
+
+// Bandwidth sets the kernel width a [Violin] or a [Ridgeline] estimates its
+// density with, in the data's own units. The default, 0, lets
+// [github.com/timzifer/refract/stat.Silverman] choose it from each group's own
+// spread.
+//
+// It is the one number that decides what a density looks like, so pinning it is
+// how several groups are made comparable: a bandwidth chosen per group means
+// each group is smoothed by a different amount, and a difference in shape can
+// then be a difference in sample size rather than in distribution.
+func Bandwidth(bw float64) Option { return func(c *config) { c.bandwidth = bw } }
+
+// Span sets the fraction of the rows one local fit of a [Trend] sees, in
+// (0, 1]. The default is stat.DefaultSpan. It has no effect on a straight fit,
+// which sees all of them.
+func Span(f float64) Option {
+	return func(c *config) {
+		if f > 0 {
+			c.span = f
+		}
+	}
+}
+
+// Smoothing is how a [Trend] fits its line.
+type Smoothing uint8
+
+// The smoothings. Loess is the default: a trend line's job is to show what the
+// data is doing, and a straight line shows what a straight line would do.
+const (
+	// Loess fits a locally weighted line through the neighbours of each
+	// abscissa. See stat.Loess.
+	Loess Smoothing = iota
+
+	// LinearFit is ordinary least squares over the whole column: one straight
+	// line, which is the right answer when the claim being made is that the
+	// relationship *is* linear.
+	LinearFit
+)
+
+// Smooth sets how a [Trend] fits.
+func Smooth(m Smoothing) Option { return func(c *config) { c.smooth = m } }
+
+// Overlap sets how far a [Ridgeline]'s tallest ridge rises, in slots of its
+// categorical axis. The default is 1.6.
+//
+// Overlapping is the point of the chart rather than a defect of it: the ridges
+// are read against each other, and separating them into a grid of little
+// densities is the small multiple this chart exists to compress. Values below 1
+// keep each ridge inside its own slot.
+func Overlap(f float64) Option {
+	return func(c *config) {
+		if f > 0 {
+			c.overlap = f
+		}
+	}
+}
+
+// defaultOverlap is how far a ridge rises by default: a little over one and a
+// half slots, which is enough that the ridges interleave and read as one
+// distribution changing, and little enough that a tall one does not reach the
+// label of the row two above it.
+const defaultOverlap = 1.6
+
 // Whisker sets how far a boxplot whisker reaches, as a multiple of the
 // interquartile range. The default is 1.5, Tukey's original choice.
 func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
@@ -319,7 +428,10 @@ func Rotate(radians float64) Option { return func(c *config) { c.rotation = radi
 func Extend(on bool) Option { return func(c *config) { c.extend = on } }
 
 func newConfig(opts []Option) config {
-	c := config{barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1, extend: true}
+	c := config{
+		barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1, extend: true,
+		span: stat.DefaultSpan, overlap: defaultOverlap,
+	}
 	for _, o := range opts {
 		o(&c)
 	}
@@ -369,10 +481,21 @@ func (c config) labelFor() string {
 	return c.ycol
 }
 
+// labelForX is labelFor for a layer whose subject is its X column: a
+// histogram, an ECDF and a ridgeline all summarise one column, and it is on X.
+// Falling back to the Y column would name them after an axis they compute.
+func (c config) labelForX() string {
+	if c.label != "" {
+		return c.label
+	}
+	return c.xcol
+}
+
 // series is a resolved set of columns, already converted to float64.
 //
-// y2 and c are optional: y2 carries the second bound of a band, c the values a
-// colour scale is read from. Both are nil when the geom was not given one.
+// y2, c and sz are optional: y2 carries the second bound of a band, c the
+// values a colour scale is read from, sz the values a size scale is read from.
+// Each is nil when the geom was not given one.
 //
 // off and rows say where the elements came from, for the caller that asked to
 // know — see [Rows]. A segment cut out of the source is contiguous, so off
@@ -380,6 +503,7 @@ func (c config) labelFor() string {
 type series struct {
 	x, y  []float64
 	y2, c []float64
+	sz    []float64
 	off   int
 	rows  []int
 
@@ -441,7 +565,36 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 		}
 		s.c = v
 	}
+	if c.sizeCol != "" && c.sizeScale != nil {
+		v, err := column(src, c.sizeCol, nil)
+		if err != nil {
+			return series{}, err
+		}
+		if len(v) != len(xs) {
+			return series{}, fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", c.xcol, c.sizeCol, len(xs), len(v))
+		}
+		s.sz = v
+	}
 	return s, nil
+}
+
+// resolveOne reads a layer that summarises a single column.
+//
+// A [Histogram] and an [ECDF] read X and compute what goes on Y, so [resolve]'s
+// insistence on both columns would refuse them for not naming a column they do
+// not have. The Y column of the series is the X column again rather than nil,
+// so that every traversal written over a series — plottable, the missing-data
+// policy, the group index — reads the observation on both axes and answers the
+// one question there is: does this value have a position.
+func resolveOne(src data.Source, c config, x scale.Scale) (series, error) {
+	if src == nil {
+		return series{}, errors.New("refract/geom: nil data source")
+	}
+	xs, err := column(src, c.xcol, x)
+	if err != nil {
+		return series{}, err
+	}
+	return series{x: xs, y: xs, origin: data.Origins(src)}, nil
 }
 
 // colorColumn reads the column a colour scale paints from.
@@ -648,6 +801,43 @@ func (sc *scratch) groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
 	return sc.runs[:n]
 }
 
+// indexRun is a set of marks that share a colour, listed by their position in
+// the layer's own arrays rather than by their points.
+//
+// It is [colorRun] for a mark that carries more than a position. A bubble has a
+// centre *and* a diameter, and a run of points alone would lose which diameter
+// belongs to which centre — so the run carries the indices and the caller reads
+// both arrays through them.
+type indexRun struct {
+	color ir.Color
+	idx   []int
+}
+
+// groupByColorAt batches marks by colour, in order of first appearance,
+// reporting each run as a list of indices into cols.
+func (sc *scratch) groupByColorAt(cols []ir.Color) []indexRun {
+	if sc.at == nil {
+		sc.at = make(map[ir.Color]int, 8)
+	}
+	clear(sc.at)
+	n := 0
+	for i, c := range cols {
+		j, ok := sc.at[c]
+		if !ok {
+			j = n
+			n++
+			if j == len(sc.iruns) {
+				sc.iruns = append(sc.iruns, indexRun{})
+			}
+			sc.iruns[j].color = c
+			sc.iruns[j].idx = sc.iruns[j].idx[:0]
+			sc.at[c] = j
+		}
+		sc.iruns[j].idx = append(sc.iruns[j].idx, i)
+	}
+	return sc.iruns[:n]
+}
+
 // rectRun is a set of cells that share a colour. It is [colorRun] for a mark
 // that is a box rather than a point, and it exists for the same reason: the IR
 // carries one style per drawing call, so a layer of a thousand differently
@@ -719,6 +909,19 @@ func (sc *scratch) colorsFor(c config, s series, idx []int) []ir.Color {
 // varying reports whether this layer paints each mark from a colour scale.
 func (c config) varying(s series) bool { return c.colorScale != nil && s.c != nil }
 
+// trainSizes feeds the size column into the size scale, for the same reason
+// [config.trainColors] exists: a size scale is not a Scale, it maps to ink
+// rather than to a position.
+func (c config) trainSizes(s series) {
+	if c.sizeScale == nil || s.sz == nil {
+		return
+	}
+	c.sizeScale.Train(s.sz...)
+}
+
+// sizing reports whether this layer takes each mark's size from a column.
+func (c config) sizing(s series) bool { return c.sizeScale != nil && s.sz != nil }
+
 // errLength reports two columns of a layer that disagree about how many rows
 // there are.
 func errLength(a, b string, na, nb int) error {
@@ -779,15 +982,21 @@ func smallestGap(buf, vs []float64) (float64, []float64) {
 // axis the width is halfWidth in data units on each side, mapped through the
 // scale — so a bar on a log axis is narrower on its high side, as it must be.
 func markSpan(f Frame, x, halfWidth float64) (float32, float32) {
-	if band, ok := f.X.(scale.Band); ok {
-		c, w := f.X.Map(x), band.Bandwidth()
+	return slotOn(f.X, x, halfWidth)
+}
+
+// slotOn is markSpan against a named scale, which is what a mark with width on
+// the *vertical* axis needs — a ridgeline's slot is a row rather than a column.
+func slotOn(s scale.Scale, v, halfWidth float64) (float32, float32) {
+	if band, ok := s.(scale.Band); ok {
+		c, w := s.Map(v), band.Bandwidth()
 		return c - w/2, c + w/2
 	}
-	x0, x1 := f.X.Map(x-halfWidth), f.X.Map(x+halfWidth)
-	if x1 < x0 {
-		x0, x1 = x1, x0
+	a, b := s.Map(v-halfWidth), s.Map(v+halfWidth)
+	if b < a {
+		a, b = b, a
 	}
-	return x0, x1
+	return a, b
 }
 
 // baselinePos maps the value a bar or area grows from.

@@ -574,6 +574,70 @@ one each for the same reason. The buffer lives on the layer rather than in the
 frame's pool because `Train` runs outside a `Build`, where there is no scratch
 to take; that is the same argument the group index already makes.
 
+**A distribution stat runs in `Train`; a device-space one runs in `Build`.**
+ADR 0011 puts decimation in `Build` on the rule that what a chart's axis reports
+must not depend on how wide the chart is. A histogram, a violin, an ECDF and a
+trend are the same rule pointing the other way: their output *is* what the axis
+has to describe — counts, a fraction, a fit — so they are computed in `Train`
+and the scales are trained on the answer. Two marks are the exception because
+what they compute is a length on screen: `geom.Hexbin` bins over the plot
+rectangle, and `geom.Beeswarm` places its marks against a marker diameter. See
+[ADR 0028](docs/adr/0028-distribution-stats.md).
+
+**A hexbin has no colourbar, and that is the price of regular hexagons.** Its
+counts are not known until the plot rectangle is, and the guide column is
+measured before that. Adding one means either binning in data space — cells that
+are hexagons in the data and something else on screen — or measuring the guides
+twice. Both are worse than shading from a faded colour to the full one.
+
+**`stat` does no sorting, and the geoms keep the buffers.** `Quantile`, `ECDF`
+and `Loess` take ordered columns; `Silverman` takes two spread measures rather
+than computing an IQR. Sorting inside a stat means either mutating the caller's
+column or allocating a copy of it per frame, and a chart redrawn every frame
+already keeps a buffer. Every distribution geom therefore carries its own sort
+buffer on the layer, for the reason `barGeom.gaps` does: `Train` runs outside a
+`Build`, where there is no scratch to take.
+
+**`stat.Bin` is the 1-D histogram now.** The 2-D binner that used to be called
+`Bin` is `stat.BinGrid`, beside `stat.BinHex`. The three are named after what
+they fill, and "bin" without a qualifier means the histogram.
+
+**A hexagonal lattice is not d3-hexbin's.** `Hex.Cell` follows its structure and
+corrects its metric: both work in lattice coordinates where a column step is 1
+and a row step is 1, but on screen those are √3·r and 1.5·r, so comparing
+`px² + py²` there mixes units and misplaces points near the interlocking band.
+The vertical term carries `(dy/dx)² = 3/4`, and
+`TestEveryHexPointLandsInItsNearestCell` checks the defining property directly.
+Without it the picture grows seams along every second row.
+
+**A sized layer draws circles, not markers, and that is the IR's doing.**
+`ir.Backend.Markers` carries one `MarkerStyle` per call, so a per-row size would
+be a drawing call per row — the cost ADR 0007 refused for colour. `geom.SizeBy`
+therefore emits one path per colour with a circle per subpath, which also gives
+a pointer the bubble it is inside rather than the nearest centre. Do not
+"restore" marker shapes there: it would be a call per row again.
+
+**A size scale's range is set by `render`, not by the geom.** A geom cannot set
+it in `Build` — panels are built on separate goroutines and a shared scale
+written from two of them is a data race with no `Snapshotter` to fix it — and
+`Geom.Train` has no theme. So `sizeGuides` sets it once per scale on the serial
+path, before the guides are measured and before any mark reads it. A range the
+caller pinned with `scale.SizeRange` outranks it, exactly as a pinned domain
+outranks training.
+
+**The guide column is one list, and a fourth kind must not make it four.**
+`layout.Guide` carries what the solver needs of any guide and `GridResult.Guides`
+is the boxes, parallel and in order. v0.9 generalised it once rather than
+extending it twice — see
+[ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md). Adding a kind is
+a `GuideKind` constant, a measuring function and a drawing function; adding a
+field to `Grid` is the thing that arrangement exists to refuse.
+
+**A histogram ignores `GroupBy` on purpose.** Two overlapping histograms hide
+each other exactly where the comparison is. `Violin`, `Ridgeline` and `ECDF` are
+the three marks that answer that question without overplotting, and each takes
+the series column. Do not "fix" it by stacking or dodging bins.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it
@@ -593,9 +657,10 @@ Optional interfaces are how this codebase extends a type without breaking
 everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
 `scale.Describer`, `scale.ColorDescriber`, `scale.DiscreteColorScale`,
-`scale.Temporal`, `geom.Faceter`, `geom.Guided`, `geom.Legender`,
-`geom.Describer`, `coord.Describer`, `coord.Exploder`, `ir.Partial`, `ir.Semantics`,
-`ir.Resizer`, `mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
+`scale.SizeDescriber`, `scale.Temporal`, `geom.Faceter`, `geom.Guided`,
+`geom.Sized`, `geom.Legender`, `geom.Describer`, `coord.Describer`,
+`coord.Exploder`, `ir.Partial`, `ir.Semantics`, `ir.Resizer`,
+`mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
 `Backend`. `geom.Legender` is the newest and the argument is worth keeping in
 view: a pie, a stack and a waffle contribute N legend entries from one layer,
 and adding a second method to `Geom` for them would have broken every
@@ -609,11 +674,23 @@ scale in place for a pan or a zoom.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. Everything through v0.8 has shipped; next
-are the stats in v0.9 — a 1-D `Bin`, KDE, hexbin, ECDF and loess, and the size
-channel the bubble chart needs — and then the extension API, the docs and a
-public benchmark suite for v1.0. Adding a stub for one of those is not progress
-towards it — the seams exist, that is enough.
+project is doing and in what order. Everything through v0.9 has shipped; next
+are the extension API, the docs, the gallery and a public benchmark suite for
+v1.0. Adding a stub for one of those is not progress towards it — the seams
+exist, that is enough.
+
+Things v0.9 deliberately did not do. A **hexbin has no colourbar**, for the
+ordering reason above. A **histogram ignores `GroupBy`**. A **sized layer draws
+circles** and ignores `geom.Shape`: a marker ladder is a redundant encoding for
+telling series apart, and a bubble cloud is one series. A **violin's widths are
+normalised against the widest density in the layer**, so the violins are compared
+by shape rather than by sample size — `geom.Bandwidth` is what makes two groups
+strictly comparable, and without it each group is smoothed by its own spread.
+There is **no contour and no QQ plot**: the first needs a marching-squares stat
+that nothing else shares, and the second is an ECDF against a theoretical
+quantile function, which is a distribution library rather than a chart. And
+`geom.Ridgeline` is the **first geom that refuses a scale outright** — it errors
+on a continuous Y axis rather than drawing every ridge on top of the last.
 
 Things v0.8 deliberately did not do. There is no **geographic projection**: a
 projection transforms every point with no linear interval underneath it, which
