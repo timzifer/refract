@@ -9,8 +9,8 @@ import (
 
 	ggbackend "github.com/timzifer/refract/backend/gg"
 	"github.com/timzifer/refract/backend/svg"
+	"github.com/timzifer/refract/internal/layout"
 	"github.com/timzifer/refract/ir"
-	"github.com/timzifer/refract/layout"
 	"github.com/timzifer/refract/theme"
 	"golang.org/x/image/font/gofont/goregular"
 )

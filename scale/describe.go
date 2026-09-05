@@ -94,7 +94,9 @@ func Describe(s Scale) (Desc, bool) {
 // ErrUnknownKind reports a Desc naming a scale this package does not have.
 var ErrUnknownKind = fmt.Errorf("refract/scale: unknown scale kind")
 
-// FromDesc builds the scale d describes.
+// FromDesc builds the scale d describes. A kind this package does not define
+// is built by whoever registered it — see [Register] — and one nobody did is
+// [ErrUnknownKind].
 func FromDesc(d Desc) (Scale, error) {
 	switch d.Kind {
 	case KindLinear, "":
@@ -160,6 +162,9 @@ func FromDesc(d Desc) (Scale, error) {
 			opts = append(opts, Categories(d.Categories...))
 		}
 		return Ordinal(opts...), nil
+	}
+	if build, ok := registered(d.Kind); ok {
+		return build(d)
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownKind, d.Kind)
 }
@@ -282,7 +287,8 @@ func DescribeColor(s ColorScale) (ColorDesc, bool) {
 	return d.DescribeColor(), true
 }
 
-// ColorFromDesc builds the colour scale d describes.
+// ColorFromDesc builds the colour scale d describes. A kind this package does
+// not define is built by whoever registered it — see [RegisterColor].
 func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 	if d.Kind == KindQualitative {
 		q := palette.Qualitative(d.Colors)
@@ -320,6 +326,9 @@ func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 		return Diverging(ramp, append(opts, ColorCenter(d.Center))...), nil
 	case KindSequential, "":
 		return Sequential(ramp, opts...), nil
+	}
+	if build, ok := registeredColor(d.Kind); ok {
+		return build(d)
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownKind, d.Kind)
 }

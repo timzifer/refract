@@ -845,7 +845,7 @@ is a test per mark and per scale that renders both and compares the primitives
 
 ```json
 {
-  "$schema": "https://github.com/timzifer/refract/spec/v0.7",
+  "$schema": "https://github.com/timzifer/refract/spec/v1",
   "width": 640,
   "height": 400,
   "title": "Throughput",

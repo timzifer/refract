@@ -27,6 +27,8 @@ positioning rests on — see [ADR 0001](docs/adr/0001-module-layout.md).
 ```
 data, stat                                    →  rows in, rows out
 geom, scale, coord, facet, layout, render     →  produce IR
+                                                 (layout is internal/layout:
+                                                 render is its one caller)
 ir                                            →  the interface
 interact                                      →  reads IR back
 spec, a11y                                    →  write the model down

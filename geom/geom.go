@@ -93,6 +93,16 @@ type LegendEntry struct {
 }
 
 // Geom is a layer of marks.
+//
+// # Stability
+//
+// Geom is implemented outside this module, so it never gains a method: three
+// is the whole contract. Everything else a layer can do is an optional
+// interface beside it — [Faceter], [Guided], [Sized], [Legender], [Describer]
+// — and a layer that implements none of them still draws. A layer defined
+// outside this package reads the shared options through [Configure], takes
+// its own through [Extra], and is written down and read back through
+// [Describer] and [Register].
 type Geom interface {
 	// Train feeds the geom's data into the scales so they can establish their
 	// domains. It runs before layout, because layout needs tick labels and
@@ -109,7 +119,9 @@ type Geom interface {
 
 // Option configures a geom. Options are shared across geom constructors: an
 // option a given geom has no use for is accepted and ignored, which keeps the
-// API one namespace instead of six.
+// API one namespace instead of six — including for a geom defined outside this
+// package, which reads what an option set through [Configure] and adds a knob
+// of its own through [Extra].
 type Option func(*config)
 
 type config struct {
@@ -167,6 +179,10 @@ type config struct {
 	halign    ir.HAlign
 	valign    ir.VAlign
 	rotation  float64
+
+	// extra holds what a third-party option set — see [Extra]. It is nil for
+	// every layer built from this package's own options.
+	extra map[string]any
 }
 
 // X selects the column mapped to the horizontal axis.

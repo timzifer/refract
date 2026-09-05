@@ -4,6 +4,16 @@
 // grid, axes, data, guides — and the one place that turns a layout rectangle
 // and a set of scales into actual primitives. Geoms emit their own marks;
 // everything around them is built here.
+//
+// # Who it is for
+//
+// The root package is the supported way to draw a chart: it resolves a Plot
+// into the [Chart] this package takes and handles the parts that are
+// plumbing — [Chart.Serial], [Chart.Observer], [Chart.RowSink]. This package
+// is public for the caller that has no Plot: a tool that assembles a chart
+// from the model packages directly, or that wraps a backend to watch what a
+// render emits through [Observer]. [Chart] and [Panel] grow by gaining fields,
+// and a zero field always means what it meant.
 package render
 
 import (
@@ -11,8 +21,8 @@ import (
 
 	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/geom"
+	"github.com/timzifer/refract/internal/layout"
 	"github.com/timzifer/refract/ir"
-	"github.com/timzifer/refract/layout"
 	"github.com/timzifer/refract/mathtext"
 	"github.com/timzifer/refract/scale"
 	"github.com/timzifer/refract/theme"
@@ -93,6 +103,8 @@ type Chart struct {
 // layers, then the next Panel. Only the data pass is announced — the grid, the
 // axes and the guides are furniture, and a pointer landing on a grid line has
 // not landed on anything.
+//
+// An Observer is implemented outside this package, so it never gains a method.
 type Observer interface {
 	// Panel opens a panel: its index in the chart, the rectangle it occupies,
 	// the scales that place values in it, and the coord that turns a pair of

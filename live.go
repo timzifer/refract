@@ -90,6 +90,15 @@ func (p *Plot) emit(ev Event) {
 // again from the plot as it now stands — and, like any fresh start, forgets
 // where the view was zoomed to.
 //
+// # Two kinds of method
+//
+// [Live.Move], [Live.Click] and [Live.Leave] return the [Event] they fired and
+// no error, because they do not draw: a hover reads the index and reports.
+// [Live.Wheel], [Live.PanBy], [Live.ZoomTo] and [Live.Autoscale] return an
+// error and no event, because each changes the view and redraws it, and a
+// redraw can fail. The split is the difference between asking the chart
+// something and changing it.
+//
 // A Live is not safe for concurrent use.
 type Live struct {
 	p *Plot

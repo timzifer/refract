@@ -6,6 +6,19 @@
 // a time axis label itself in calendar units while a linear axis labels itself
 // with round numbers, without either the geom or the layout knowing which is
 // which.
+//
+// # How the options are named
+//
+// Each constructor has its own option type — [LinearOption], [LogOption],
+// [SymLogOption], [TimeOption], [OrdinalOption], [SizeOption], [ColorOption] —
+// because the choices differ: a log axis has a base and a linear one does not.
+// The bare names belong to the default scale: [Domain], [Nice], [Zero] and
+// [Format] configure [Linear], which is what a plot has when nobody chose, and
+// every other family carries its constructor's name as a prefix — [LogDomain],
+// [SymLogNice], [SizeRange], [ColorReverse] — with [Time]'s [In] and [Origin]
+// the exceptions that read as English. A name that does not compile against
+// the scale it was meant for is the intended failure: the option types are
+// what keep [Nice] from being silently accepted and ignored by a log axis.
 package scale
 
 import "math"
@@ -28,6 +41,15 @@ type Tick struct {
 // A scale is trained on data, given a device range, and then queried. The
 // order matters: Map and Ticks are only meaningful once both the domain and
 // the range are set.
+//
+// # Stability
+//
+// Scale is implemented outside this module, so it never gains a method. What a
+// scale can additionally do is an optional interface beside it — [Definite],
+// [Categorical], [Band], [Temporal], [Zoomer], [Snapshotter], [Cloner] are the
+// seven that exist — and a caller asks with a type assertion and falls back
+// when the answer is no. A scale this package does not define is written down
+// and read back through [Describer] and [Register].
 type Scale interface {
 	// Train extends the scale's data domain to include vs. Values that are
 	// NaN or infinite are ignored. Calling Train repeatedly accumulates.

@@ -242,7 +242,7 @@ func (p *parser) macro(depth int) (*node, error) {
 		return &node{kind: nSpace, width: 2 * quadSpace}, nil
 	}
 
-	if r, ok := Symbols[name]; ok {
+	if r, ok := Symbol(name); ok {
 		return &node{kind: nText, text: string(r), upright: true}, nil
 	}
 	return nil, fmt.Errorf("%w: unknown command \\%s", errSyntax, name)

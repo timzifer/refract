@@ -25,6 +25,30 @@ That is the blocker, and it is the only one. Beside it sit a handful of cheap
 renames and one package to pull under `internal/`, all of which cost nothing
 today and a major version tomorrow.
 
+## Status
+
+The audit was taken at `5d6f7c9`. Everything it asked for under CHANGE BEFORE
+V1 landed on the same branch, recorded in
+[ADR 0029](adr/0029-extension-model.md):
+
+| # | Change | Done |
+|---|---|---|
+| 1 | `geom.Configure(opts...) Desc` and `Desc.Options()` — a third-party geom reads the shared options; `geom.Extra(key, v)` gives it a knob of its own | yes |
+| 2 | `geom.Register`, `scale.Register`, `scale.RegisterColor`, `coord.Register`; every `FromDesc` falls through to its registry; `spec.Mark.Extra` carries a registered mark's own properties on the mark object | yes |
+| 3 | `coord.Option` → `coord.PolarOption` | yes |
+| 4 | The scale option-family naming is decided and written in the `scale` package doc: the bare names belong to the default scale | yes |
+| 5 | `layout` → `internal/layout` | yes |
+| 6 | `mathtext.Symbols` → `RegisterSymbol` and `Symbol` over a locked table | yes |
+| 7 | `spec.Schema` is `…/spec/v1`, its comment states the additive-field policy, the README example agrees | yes |
+| 8 | The growth rule is in the doc comment of every interface a third party implements, and `stat`'s package doc says why there is no `Stat` interface | yes |
+| 9 | CONCEPT §15 says which nested modules tag with the core | yes |
+
+One decision differs from the sketch below: the audit proposed a new `Config`
+type with accessors, and the ADR chose to return the existing `Desc` instead.
+The package-by-package tables that follow are the findings as taken; the
+verdicts are what the tag rests on, and the changes above are what turned the
+CHANGE BEFORE V1 rows into FREEZE.
+
 ## The rules the audit applied
 
 Go's compatibility rules decide what is expensive to freeze, so the verdicts

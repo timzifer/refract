@@ -25,6 +25,9 @@ import "github.com/timzifer/refract/ir"
 // Nothing, unless someone is listening: [Frame.Rows] is nil for an ordinary
 // render, and every geom checks it before doing the bookkeeping. See
 // [Frame.Marks].
+//
+// Rows is implemented outside the geom — by whoever wants the answer — so it
+// never gains a method.
 type Rows interface {
 	// Marks attributes device positions to source rows: rows[i] is the row
 	// behind at[i], and a row of -1 marks a position that is not a row.

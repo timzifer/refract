@@ -159,6 +159,16 @@ regenerates and commits them for you.
 reference a backend. Reuse the shared `geom.Option` set rather than inventing
 per-geom options; an option a geom has no use for is accepted and ignored.
 
+**A geom outside this module** does the same with three calls
+([ADR 0029](docs/adr/0029-extension-model.md)): its constructor keeps
+`geom.Configure(opts...)` as its configuration and reads `X`, `Color`, `Label`
+from it; a knob of its own is `geom.Extra("stem", 3)` and comes back from
+`Desc.Extra`; and `geom.Register(mark, build)` is what lets a JSON document
+name it. Return the `Desc` from `Describe` with `Mark` and `Source` filled in,
+and the round trip through `spec` is the same one every built-in mark gets. A
+scale or a coord registers with `scale.Register`, `scale.RegisterColor` and
+`coord.Register`.
+
 **A scale** goes in `scale/`, implements `scale.Scale`, and owns both its
 mapping and its tick generation. That pairing is why a time axis can label
 itself in calendar units without anything above it knowing. If it cannot place

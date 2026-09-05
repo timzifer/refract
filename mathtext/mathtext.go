@@ -53,6 +53,8 @@ type Measurer interface {
 // A typesetter never fails a render. Notation it cannot parse comes back as
 // ok false too, so the label is drawn exactly as it was written — which is what
 // a reader needs in order to see what is wrong with it.
+//
+// A Typesetter is implemented outside this module, so it never gains a method.
 type Typesetter interface {
 	Typeset(src string, font ir.FontRef, m Measurer) (l Layout, ok bool)
 }

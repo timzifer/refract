@@ -38,6 +38,7 @@ depends on.
 | [0026](0026-breaking-a-mark-out.md) | A mark is broken out by displacing it, and the coord answers how far | Accepted | — |
 | [0027](0027-size-channel-and-the-guide-column.md) | A size channel maps by area, and the guide column is generalised once | Accepted | — |
 | [0028](0028-distribution-stats.md) | A distribution stat runs in `Train`, and decides one of its own axes | Accepted | — |
+| [0029](0029-extension-model.md) | A third party's geom, scale or coord is a first-class citizen of the spec | Accepted | §17.7 |
 
 Still open, deliberately: **§17.7** (the third-party geom and backend extension
 API). It freezes at v1.0, and freezing it well is what makes the "last plotting

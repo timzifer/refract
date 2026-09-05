@@ -18,8 +18,9 @@ import (
 //     `x_i^2` sets both about one base.
 //   - `\frac{a}{b}` stacks two expressions with a rule between them.
 //   - `\sqrt{x}` sets a radical with a bar over its argument.
-//   - `\alpha`, `\Omega`, `\times`, `\leq`, `\infty` and the rest of
-//     [Symbols] name characters that are hard to type.
+//   - `\alpha`, `\Omega`, `\times`, `\leq`, `\infty` and the rest of the
+//     symbol table name characters that are hard to type; [RegisterSymbol]
+//     adds to it.
 //   - `\mathrm{...}` and `\text{...}` set their argument upright, which is how
 //     a unit or a word inside notation is kept from looking like a product of
 //     variables.
