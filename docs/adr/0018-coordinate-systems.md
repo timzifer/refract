@@ -1,6 +1,6 @@
 # 0018 — Coordinates are a stage between the scales and the IR
 
-**Status:** Accepted · **Date:** 2026-09-04
+**Status:** Accepted · **Date:** 2026-09-04 · **Implemented:** v0.8, with the amendments below
 
 ## Context
 
@@ -198,6 +198,56 @@ The IR does not change. That is the load-bearing consequence: ADR 0002 froze the
 primitive set for the v0.1 cycle on the argument that every curve a chart needs is
 expressible as cubics, and a polar coordinate system is the first serious test of
 that claim. It passes.
+
+## Amendments made while implementing it
+
+The interface above is a sketch written before anything was drawn through it,
+and two of its signatures did not survive contact. Neither changes the decision;
+both are recorded here rather than left as a silent difference between the
+record and the code.
+
+**`Frame` returns the positioned coord instead of moving the receiver.**
+
+```go
+Frame(area ir.Rect, x, y scale.Scale) Coord
+```
+
+A coord belongs to a chart and a chart has panels, and since ADR 0012 those
+panels are built concurrently. A `Frame` that wrote the centre and the radii
+onto the receiver would be two goroutines writing one struct — the same problem
+`scale.Snapshotter` exists for, and answered here without a second interface,
+because a coord positioned in a panel is a value rather than a thing that has to
+be copied. `Cartesian` returns an empty struct and allocates nothing on the
+default path.
+
+**`Furniture` fills a struct the caller owns instead of returning one.**
+
+```go
+Furniture(dst *Furniture, area ir.Rect, m Metrics, xTicks, yTicks []scale.Tick)
+```
+
+A Cartesian panel's furniture is two dozen small slices — a grid line, a tick
+mark and a label anchor per tick on each axis — and returning them by value
+means allocating all of them every frame. `render` keeps one `Furniture` in a
+pool and resets it between panels, which is the same arrangement `geom.scratch`
+already has and for the same reason. Measured: the frame this replaced allocated
+its furniture 76 times, and the pooled one brings a steady-state frame to 55.
+
+`Metrics` is the other half of that signature and is new. A coord must not know
+what a theme is, so the three lengths it needs to place a tick mark and a label
+travel as numbers rather than as a `theme.Theme`.
+
+**`Clip` fills a path rather than returning one**, for the same reason and with
+much less at stake: `Clip(p *ir.Path, area ir.Rect)`.
+
+**Two things landed beside the coord rather than in it.** `geom.Closed` joins a
+connected layer's last mark back to its first, which is what makes a radar a
+contour; it is an option because whether a series wraps is a fact about the
+series and not about the transform, and a polar time series spiralling through
+three revolutions does not. And `theme.Ticks(x, y bool)` turns an axis's tick
+marks and labels off — the third furniture switch beside `theme.Grid` and
+`theme.AxisLines`, and the one this record complained had no home. It has one
+now, and it is where the other two already were.
 
 ## Revisit if
 

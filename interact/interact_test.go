@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/interact"
@@ -262,7 +263,7 @@ func TestMismatchedRowReportsAreDropped(t *testing.T) {
 	// A geom handing over two slices of different lengths has a bug; taking
 	// the shorter of the two would turn it into wrong rows rather than none.
 	ix := interact.New().TrackRows(true)
-	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear())
+	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear(), coord.Cartesian())
 	ix.Layer(0, "s")
 	ix.Marks([]ir.Point{{X: 1}, {X: 2}}, []int{0})
 	if ix.RowCount() != 0 {
@@ -272,7 +273,7 @@ func TestMismatchedRowReportsAreDropped(t *testing.T) {
 
 func TestResetForgetsRows(t *testing.T) {
 	ix := interact.New().TrackRows(true)
-	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear())
+	ix.Panel(0, ir.R(0, 0, 10, 10), scale.Linear(), scale.Linear(), coord.Cartesian())
 	ix.Layer(0, "s")
 	ix.Marks([]ir.Point{{X: 1, Y: 1}}, []int{4})
 	if ix.RowCount() != 1 {

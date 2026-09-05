@@ -19,7 +19,7 @@
 // # Shape
 //
 //	{
-//	  "$schema": "https://github.com/timzifer/refract/spec/v0.7",
+//	  "$schema": "https://github.com/timzifer/refract/spec/v0.8",
 //	  "width": 800, "height": 500,
 //	  "title": "Signal",
 //	  "data": {"values": [{"t": 0, "y": 1}], "format": {"parse": {"t": "number", "y": "number"}}},
@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/scale"
@@ -51,13 +52,14 @@ import (
 // version of it; nothing fetches it, and a Vega-Lite consumer that checks the
 // field will refuse the document, which is the honest outcome.
 //
-// It moves when the dialect gains or changes a field: v0.7 added the series
+// It moves when the dialect gains or changes a field: v0.8 added the top-level
+// `coord`, v0.7 added the series
 // channel (`detail`), the position adjustments (`stack`, `dodge`, `order`) and
 // the data-driven rect, and v0.6 added a time scale's `origin`. Reading is not
 // gated on it — a document written by an
 // older refract reads fine, and refusing one because of a version string would
 // make the field a trap rather than a label.
-const Schema = "https://github.com/timzifer/refract/spec/v0.7"
+const Schema = "https://github.com/timzifer/refract/spec/v0.8"
 
 // Chart is the part of a plot that survives being written down: everything
 // [Of] reads and everything [Spec.Chart] returns.
@@ -73,6 +75,7 @@ type Chart struct {
 	XTitle        string
 	YTitle        string
 	X, Y          scale.Scale
+	Coord         coord.Coord
 	Layers        []geom.Geom
 	Facet         *facet.Spec
 
@@ -89,6 +92,7 @@ type Spec struct {
 	Title    string    `json:"title,omitempty"`
 	Data     *Data     `json:"data,omitempty"`
 	Encoding *Encoding `json:"encoding,omitempty"`
+	Coord    *Coord    `json:"coord,omitempty"`
 	Layer    []Layer   `json:"layer,omitempty"`
 	Facet    *Facet    `json:"facet,omitempty"`
 	Columns  int       `json:"columns,omitempty"`
@@ -157,7 +161,57 @@ type Mark struct {
 	// Order is the order the groups are stacked and listed in: "appearance",
 	// "value" or "inside-out".
 	Order string `json:"order,omitempty"`
+	// Closed joins a connected mark's last point back to its first, which is
+	// what makes a radar a contour. Vega-Lite has no equivalent, so no name is
+	// borrowed for it.
+	Closed bool `json:"closed,omitempty"`
 }
+
+// Coord is the coordinate system the chart is drawn in.
+//
+// It is refract's own field, named plainly rather than smuggled through a
+// borrowed one. Vega-Lite has no coordinate stage: it reaches a pie with an
+// `arc` mark, and a document that wrote one would round-trip into a mark
+// refract cannot rebuild — so a pie here is `mark: "bar"` with
+// `coord: {"type": "polar"}`, which is exactly what it is. See
+// docs/adr/0014-json-spec.md for why a difference is spelled out rather than
+// disguised.
+//
+// The field is absent for a Cartesian chart, which is every chart written
+// before there was a coord to write.
+type Coord struct {
+	// Type is "cartesian" or "polar".
+	Type string `json:"type"`
+	// Theta is the axis a polar coord sweeps around the circle: "x" or "y".
+	Theta string `json:"theta,omitempty"`
+	// Hole is the inner radius as a fraction of the outer one: a donut.
+	Hole float64 `json:"hole,omitempty"`
+	// Radius is how much of the panel's shorter half-side the circle fills.
+	Radius float64 `json:"radius,omitempty"`
+	// Start is where the angular scale begins, in radians clockwise from
+	// twelve o'clock, and Sweep how much of the circle it covers. Sweep is a
+	// pointer because a chart that never asked writes no field, while one that
+	// asked for a full turn should keep saying so.
+	Start float64  `json:"start,omitempty"`
+	Sweep *float64 `json:"sweep,omitempty"`
+	// Counterclockwise reverses the direction the angular scale runs in.
+	Counterclockwise bool `json:"counterclockwise,omitempty"`
+	// Edge is how an edge between two marks is drawn: "arc", the default, or
+	// "chord", which is what a radar wants.
+	Edge string `json:"edge,omitempty"`
+}
+
+// The coord edge policies.
+const (
+	EdgeArc   = "arc"
+	EdgeChord = "chord"
+)
+
+// The angular axes.
+const (
+	ThetaX = "x"
+	ThetaY = "y"
+)
 
 // Encoding maps channels onto columns, values and scales.
 type Encoding struct {

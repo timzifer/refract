@@ -109,6 +109,8 @@ func Build(t Tokens) Theme {
 		ShowGridY:      true,
 		ShowAxisLineX:  true,
 		ShowAxisLineY:  true,
+		ShowTicksX:     true,
+		ShowTicksY:     true,
 		TickCountHintX: 6,
 		TickCountHintY: 5,
 

@@ -30,6 +30,7 @@ import (
 	"image"
 	"math"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
 )
@@ -83,6 +84,25 @@ type Panel struct {
 	Area ir.Rect
 	// X and Y are the panel's scales, ranged to Area.
 	X, Y scale.Scale
+	// Coord is the coordinate system the panel was drawn in, framed to Area.
+	// It is what turns a device position back into the pair the scales speak
+	// in — without it a pointer over a pie slice would be inverted as though
+	// the wedge were a rectangle, and would report a value nothing was drawn
+	// at. It is [coord.Cartesian] for a chart that named no coord.
+	Coord coord.Coord
+}
+
+// Coords is the panel's coordinate system, or [coord.Cartesian] for a panel
+// recorded before there was one to record.
+//
+// It is what a caller steering the chart needs as well as what a tooltip does:
+// a wheel or a drag is a device position, and turning that into a change of
+// domain means going back through the coord before the scales see it.
+func (p *Panel) Coords() coord.Coord {
+	if p.Coord == nil {
+		return coord.Cartesian()
+	}
+	return p.Coord
 }
 
 // Index is a spatial index over one render.
@@ -178,11 +198,11 @@ func (ix *Index) Marks(at []ir.Point, rows []int) {
 func (ix *Index) RowCount() int { return len(ix.rows) }
 
 // Panel implements the render package's Observer.
-func (ix *Index) Panel(i int, area ir.Rect, x, y scale.Scale) {
+func (ix *Index) Panel(i int, area ir.Rect, x, y scale.Scale, cd coord.Coord) {
 	for len(ix.panels) <= i {
 		ix.panels = append(ix.panels, Panel{})
 	}
-	ix.panels[i] = Panel{Area: area, X: x, Y: y}
+	ix.panels[i] = Panel{Area: area, X: x, Y: y, Coord: cd}
 	ix.panel, ix.layer, ix.label, ix.open = i, -1, "", false
 }
 
@@ -261,24 +281,32 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 		return Hit{}, false
 	}
 	if p := ix.panelOf(best.Panel); p != nil && p.X != nil && p.Y != nil {
-		best.X, best.Y = p.X.Invert(best.At.X), p.Y.Invert(best.At.Y)
+		// Two inversions, not one. The coord undoes the transform that placed
+		// the mark and hands back the pair the scales mapped into; the scales
+		// then say what those numbers were. Reading the device position
+		// straight through the scales would be right only where the coord is
+		// the identity, and would name a pixel rather than a value anywhere
+		// else.
+		mx, my := p.Coords().Invert(best.At)
+		best.X, best.Y = p.X.Invert(mx), p.Y.Invert(my)
 	}
-	best.Row = ix.rowAt(best, bestBounds)
+	best.Row = ix.rowAt(best, pt, bestBounds)
 	return best, true
 }
 
-// rowAt finds the source row behind a hit: the nearest position its own layer
-// reported, which for every geom that reports one mark per row is the hit's
-// own position.
+// rawRowAt finds the source row behind a hit: the nearest position its own
+// layer reported to at, within tol and — where within is given — within that
+// box as well.
 //
-// The search is confined to the hit's layer, so two series crossing cannot
-// take each other's rows, and it is bounded by the tolerance a hit already
-// passed — a bar reports the middle of its end rather than the corner the
-// pointer landed on, and that is the largest gap this has to cross.
-func (ix *Index) rawRowAt(panel, layer int, at ir.Point, tol float32) int {
+// The search is confined to the hit's layer, so two series crossing cannot take
+// each other's rows.
+func (ix *Index) rawRowAt(panel, layer int, at ir.Point, tol float32, within *ir.Rect) int {
 	best, bestD := -1, tol*tol
 	for _, r := range ix.rows {
 		if r.panel != panel || r.layer != layer {
+			continue
+		}
+		if within != nil && !within.Contains(r.at) {
 			continue
 		}
 		dx, dy := r.at.X-at.X, r.at.Y-at.Y
@@ -289,19 +317,29 @@ func (ix *Index) rawRowAt(panel, layer int, at ir.Point, tol float32) int {
 	return best
 }
 
-func (ix *Index) rowAt(h Hit, bounds ir.Rect) int {
+// rowAt resolves the row behind a hit, given where the pointer actually was.
+//
+// A vertex is measured from the mark: the position a row was reported at and
+// the position it was drawn at are the same point for every geom that draws
+// one mark per row, and the tolerance the hit already passed is the right
+// bound.
+//
+// An area is measured from the pointer, among the positions that lie inside
+// the shape it landed on. That is not a refinement, it is what makes the
+// answer right: an area is hit by containment, so the pointer is *in* the
+// shape while the position the hit reports is a corner of it — and a corner of
+// a tall bar is nearer to the neighbouring bar's row than to its own. Bounding
+// the search by the shape is what excludes that neighbour, and a pie is where
+// the difference is unmissable: every slice's row sits the same distance from
+// the middle, which is the corner every wedge shares.
+func (ix *Index) rowAt(h Hit, pt ir.Point, bounds ir.Rect) int {
 	if !ix.track || len(ix.rows) == 0 {
 		return -1
 	}
-	// An area is hit by containment rather than by proximity, so the position
-	// its row was reported at may be as far away as the shape is large — a bar
-	// reports the middle of its end and can be hit at the far corner.
-	// Everything else was already within the tolerance the caller asked for.
-	tol := float32(DefaultTolerance)
-	if h.Kind != Vertex {
-		tol = max(bounds.Dx(), bounds.Dy(), tol)
+	if h.Kind == Vertex {
+		return ix.rawRowAt(h.Panel, h.Layer, h.At, DefaultTolerance, nil)
 	}
-	return ix.rawRowAt(h.Panel, h.Layer, h.At, tol)
+	return ix.rawRowAt(h.Panel, h.Layer, pt, float32(math.Inf(1)), &bounds)
 }
 
 // ranked orders the kinds from most specific to least. A vertex is a row; an
@@ -333,7 +371,7 @@ func (ix *Index) panelOf(i int) *Panel {
 func (m mark) nearest(pts []ir.Point, pt ir.Point, tol float32) (ir.Point, float32, bool) {
 	switch m.kind {
 	case Area, Label:
-		if !m.bounds.Contains(pt) {
+		if !m.bounds.Contains(pt) || !inside(pts[m.lo:m.hi], pt) {
 			return ir.Point{}, 0, false
 		}
 		at, _ := closest(pts[m.lo:m.hi], pt)
@@ -344,6 +382,43 @@ func (m mark) nearest(pts []ir.Point, pt ir.Point, tol float32) (ir.Point, float
 		return ir.Point{}, 0, false
 	}
 	return at, d, true
+}
+
+// inside reports whether pt lies within the outline the subpath's points
+// describe, by casting a ray and counting crossings.
+//
+// The bounding box is the cheap first question and this is the second, and
+// until v0.8 there was no second: every filled mark refract drew was a
+// rectangle, so its box *was* its shape. A pie's slices are wedges whose boxes
+// overlap almost completely — the box of a slice at one o'clock contains the
+// middle of the chart and half of every other slice — so a hit decided on the
+// box alone would name whichever wedge happened to be indexed last.
+//
+// A mark of fewer than three points has no outline to be inside of: an image
+// and a text run are each recorded as two opposite corners, and for those the
+// box is the shape and the answer is yes.
+//
+// The outline tested is the one the drawing call carried, so a curve is tested
+// as its control polygon rather than as the curve. That is the convex hull of
+// the curve, so a shape can be hit a little way outside its ink at a bulge —
+// which is the same slack [Index.At] already allows a vertex, and the opposite
+// error from missing a slice the pointer is plainly inside.
+func inside(pts []ir.Point, pt ir.Point) bool {
+	if len(pts) < 3 {
+		return true
+	}
+	in := false
+	j := len(pts) - 1
+	for i, p := range pts {
+		q := pts[j]
+		if (p.Y > pt.Y) != (q.Y > pt.Y) {
+			if pt.X < (q.X-p.X)*(pt.Y-p.Y)/(q.Y-p.Y)+p.X {
+				in = !in
+			}
+		}
+		j = i
+	}
+	return in
 }
 
 func closest(pts []ir.Point, pt ir.Point) (ir.Point, float32) {

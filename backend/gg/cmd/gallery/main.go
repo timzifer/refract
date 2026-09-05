@@ -24,6 +24,7 @@ import (
 
 	"github.com/timzifer/refract"
 	ggbackend "github.com/timzifer/refract/backend/gg"
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/svgdiff"
@@ -485,6 +486,59 @@ func figures() []figure {
 			},
 		},
 		{
+			// A pie is not a new mark. It is the stacked bar of the figure
+			// above, drawn in a polar coord that takes theta from the Y axis —
+			// so the stacked total becomes a whole turn and each segment
+			// becomes a slice. A hole makes it a donut, and the hole is an
+			// annulus: the radial scale starts there, so nothing is drawn
+			// inside it and nothing can be pointed at there either.
+			name: "pie", width: 620, high: 400, title: "Browser share",
+			theme: theme.Light.With(
+				theme.Grid(false, false),
+				theme.AxisLines(false, false),
+				theme.Ticks(false, false),
+			),
+			opts: []refract.Option{
+				refract.Coord(coord.Polar(coord.Theta(coord.FromY), coord.Hole(0.45))),
+			},
+			build: func(p *refract.Plot) {
+				names, share := browserShare()
+				src := refract.NewTable().
+					Float64("all", make([]float64, len(names))).
+					Float64("share", share).
+					String("browser", names)
+				// Neither scale is niced: the ring closes because the stacked
+				// domain ends at the total, and a domain rounded up to the next
+				// round number would leave a wedge of nothing at twelve
+				// o'clock. The X scale is one slot wide and fills the radius.
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Bar(src, geom.X("all"), geom.Y("share"),
+					geom.GroupBy("browser"),
+					geom.ColorBy("browser", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
+			// A radar is not a new mark either: it is a line over an ordinal
+			// angular axis. Two things make it read as one — its edges are
+			// chords rather than arcs, and the contour closes back to the
+			// first axis.
+			name: "radar", width: 620, high: 440, theme: theme.Dark, title: "Two designs",
+			opts: []refract.Option{refract.Coord(coord.Polar(coord.Chord()))},
+			build: func(p *refract.Plot) {
+				axes, designs, scores := designScores()
+				src := refract.NewTable().
+					String("axis", axes).
+					String("design", designs).
+					Float64("score", scores)
+				p.X(scale.Ordinal(scale.OrdinalPadding(0)))
+				p.Y(scale.Linear(scale.Domain(0, 10)))
+				p.Add(geom.Area(src, geom.X("axis"), geom.Y("score"),
+					geom.GroupBy("design"), geom.Stack(geom.NoStack), geom.Closed(true),
+					geom.ColorBy("design", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -504,6 +558,31 @@ func figures() []figure {
 			},
 		},
 	}
+}
+
+// browserShare is a market share that adds to a hundred, so the ring closes on
+// itself rather than on a rounding error.
+func browserShare() (names []string, share []float64) {
+	return []string{"chrome", "safari", "firefox", "edge", "other"},
+		[]float64{46, 24, 14, 11, 5}
+}
+
+// designScores is two designs rated on five axes: the long-table shape a
+// grouped layer draws from, which is what makes a radar one layer rather than
+// two.
+func designScores() (axes, designs []string, scores []float64) {
+	byDesign := map[string][]float64{
+		"prism": {8, 6, 9, 4, 7},
+		"lens":  {5, 9, 6, 8, 5},
+	}
+	for _, design := range []string{"prism", "lens"} {
+		for i, axis := range []string{"speed", "clarity", "range", "cost", "weight"} {
+			axes = append(axes, axis)
+			designs = append(designs, design)
+			scores = append(scores, byDesign[design][i])
+		}
+	}
+	return axes, designs, scores
 }
 
 // ledger builds four quarters of revenue for three products: one row per

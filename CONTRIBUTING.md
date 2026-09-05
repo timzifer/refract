@@ -175,7 +175,17 @@ and `render` strokes them. `Cartesian` is the identity and the default, so a geo
 that goes through the stage draws exactly what it drew before, and the golden
 files are what proves it. Give every per-point method a batch form and use it on
 the hot path; a per-row interface call is how `scale.Scale.Train` once allocated a
-million times. See [ADR 0018](docs/adr/0018-coordinate-systems.md).
+million times.
+
+Two shapes in that interface are the way they are for reasons worth knowing
+before changing them. `Frame` **returns** the coord positioned in a panel rather
+than moving the receiver into it, because panels are built on separate
+goroutines and a coord that remembered which panel it was in would be a data
+race. And `Furniture` **fills** a struct the caller owns rather than returning
+one, because a panel's furniture is a few dozen small slices and a chart redrawn
+every frame would otherwise allocate all of them every frame; `render` keeps one
+in a pool, exactly as it does a `geom.scratch`. See
+[ADR 0018](docs/adr/0018-coordinate-systems.md), whose amendments record both.
 
 **A backend** implements `ir.Backend` and `ir.Target`. Whatever a drawing call
 hands it — a point slice, a path, an image — is lent for that call only: refract

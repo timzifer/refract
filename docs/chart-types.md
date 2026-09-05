@@ -20,7 +20,7 @@ mark that does not exist yet, and the catalogue says which.
 | Groups in one layer (`geom.GroupBy`) + discrete colour (`scale.Qualitative`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | every multi-series form; prerequisite for stacking |
 | Multi-entry legends (`geom.Legender`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | pie, stacks, treemap, waffle, sankey |
 | Position adjustments (stack / dodge / fill / wiggle) | **shipped in v0.7** — [ADR 0019](adr/0019-position-adjustments.md) | stacked and grouped bars, stacked area, streamgraph, funnel, marimekko, ridgeline, **and pie** |
-| Coordinate systems (`coord.Polar`) | missing — [ADR 0018](adr/0018-coordinate-systems.md) | pie, donut, radar, rose, wind rose, gauge |
+| Coordinate systems (`coord.Polar`) | **shipped in v0.8** — [ADR 0018](adr/0018-coordinate-systems.md) | pie, donut, radar, rose, wind rose, gauge |
 | A size channel (`geom.SizeBy` + a size scale) | missing | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | missing | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
@@ -68,17 +68,40 @@ deliberately does not move the slots, because unequal slots that label
 themselves are an axis question rather than an adjustment one. A **ridgeline**
 still waits on the KDE in F.
 
-## C — needs polar coordinates
+## C — needs polar coordinates — **shipped in v0.8**
 
-See [ADR 0018](adr/0018-coordinate-systems.md). **Pie** and **donut** are a
-stacked bar in `coord.Polar`; **radar/spider** is a line or area over an ordinal
-angular axis; **rose/coxcomb** (Nightingale) and the **wind rose** are bars in
-polar with a radial value; a **gauge** is a partial ring. A polar boxplot falls
-out for free once boxplot's rectangle goes through the coord.
+See [ADR 0018](adr/0018-coordinate-systems.md). `coord.Polar` wraps one axis
+around a circle and reads the other as a radius; nothing in this family is a new
+geom, which is why the plumbing in A and B landed first. Each of them needed
+stacking (B) and multi-entry legends before the coordinate system was any use —
+a pie has N slices inside *one* layer, and one legend entry per layer cannot
+name them.
 
-Each of these needs stacking (B) and multi-entry legends before the coordinate
-system is any use — a pie has N slices inside one layer, and one legend entry per
-layer cannot name them.
+| Chart | Recipe |
+|---|---|
+| Pie | `Bar` + `GroupBy` in `coord.Polar(coord.Theta(coord.FromY))`, over one X slot |
+| Donut | the same, plus `coord.Hole(f)` — the hole is where the radial scale starts |
+| Radar / spider | `Line` or `Area` over an ordinal angular axis, with `coord.Chord()` and `geom.Closed(true)` |
+| Rose / coxcomb, wind rose | `Bar` with the direction on the angular axis and the count on the radial one |
+| Gauge | `Bar` over `coord.Sweep(math.Pi)` — a partial ring — usually with a hole |
+| Polar boxplot | `Boxplot`, unchanged: its box goes through the coord like every other rectangle |
+
+Three things are worth knowing before drawing one.
+
+**Do not nice the angular scale.** A pie's ring closes because the stacked
+domain ends at the total and starts at zero; a domain rounded up to the next
+round number leaves a wedge of nothing at twelve o'clock. `scale.Linear()`
+without `scale.Nice()` is the recipe, and `refract.Coord`'s doc comment says so.
+
+**An edge is an arc by default and a chord on request.** That is
+`coord.Chord()`, and it is what tells a radar's sides apart from a rose petal's.
+Without it a spider chart comes out with bowed sides.
+
+**A pie has no axis worth labelling**, so `theme.Grid(false, false)`,
+`theme.AxisLines(false, false)` and `theme.Ticks(false, false)` are the three
+switches that turn the furniture off. The third of them is new in v0.8, and
+[ADR 0018](adr/0018-coordinate-systems.md) is why: "suppress the furniture" had
+no home before the coord gave it one.
 
 ## D — needs a new aesthetic channel
 
@@ -92,7 +115,10 @@ generalised once rather than extended twice.
 
 **Parallel coordinates** needs no new channel but does need per-axis scales
 inside one panel, which makes it a near-relative of radar: both draw their own
-axes inside the plot area. The axis helper is worth writing once for both.
+axes inside the plot area. Radar got its axes from `coord.Polar`'s furniture in
+v0.8 — spokes and rings the coord reports and `render` strokes — and parallel
+coordinates would want the same shape of answer from a coord of its own rather
+than a second one drawn by a geom.
 
 ## E — needs a relational layout
 

@@ -30,11 +30,11 @@ import (
 func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.Theme) error {
 	if !concurrent(c, panels) {
 		for i, p := range panels {
-			p.setRange(areas[i])
+			cd := p.setRange(c.coordOf(p), areas[i])
 			if c.Observer != nil {
-				c.Observer.Panel(i, areas[i], p.X, p.Y)
+				c.Observer.Panel(i, areas[i], p.X, p.Y, cd)
 			}
-			if err := drawLayers(b, p, areas[i], th, c.Observer, c.RowSink); err != nil {
+			if err := drawLayers(b, p, areas[i], th, c.Observer, c.RowSink, cd); err != nil {
 				return err
 			}
 		}
@@ -52,11 +52,15 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 			defer wg.Done()
 			// A snapshot per goroutine: panels that share an axis share one
 			// scale object, and setting its device range is a write.
+			// The coord is framed per goroutine as well, and for the same
+			// reason: Frame hands back the coord positioned in this panel
+			// rather than moving the chart's own, so two panels never share
+			// one centre.
 			p := panels[i].snapshot()
-			p.setRange(areas[i])
+			cd := p.setRange(c.coordOf(p), areas[i])
 			rec := acquireRecorder(m)
 			recs[i] = rec
-			errs[i] = drawLayers(rec, p, areas[i], th, nil, nil)
+			errs[i] = drawLayers(rec, p, areas[i], th, nil, nil, cd)
 		}()
 	}
 	wg.Wait()
@@ -81,7 +85,7 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 	// Leave the real scales ranged as a serial pass would have left them, so
 	// that nothing downstream can tell which path ran.
 	for i, p := range panels {
-		p.setRange(areas[i])
+		p.setRange(c.coordOf(p), areas[i])
 	}
 	return nil
 }

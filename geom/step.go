@@ -70,19 +70,21 @@ func (g *stepGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Co
 
 	// A staircase is its transitions, so the reduction that keeps its extremes
 	// per column is the one that keeps the picture. See [Decimate].
+	cd := f.Coords()
 	mode, budget := g.cfg.reduction(shapeStair, s, f)
 	for _, seg := range sc.segments(s, sc.plottable(s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
 		keep := sc.reduce(mode, budget, x, y, nil)
-		marks := sc.marks(x, y, keep)
+		marks := sc.marks(cd, x, y, keep)
 		// Reported before the staircase is expanded: a step draws two points
 		// per row, and only one of them is where the row is.
 		f.Marks(marks, sc.rowsOf(seg, keep, len(x)))
-		pts := sc.stepPoints(marks, g.cfg.steps)
-		if len(pts) < 2 {
+		sx, sy := sc.stepColumns(x, y, keep, g.cfg.steps)
+		if len(sx) < 2 {
 			continue
 		}
-		b.Polyline(pts, stroke)
+		sc.edge = cd.Points(grow(sc.edge, len(sx))[:0], sx, sy)
+		strokeRun(b, cd, &sc.line, sc.edge, stroke, g.cfg.closed)
 	}
 	return nil
 }
@@ -107,34 +109,55 @@ func (g *stepGeom) Legend(f Frame) (LegendEntry, bool) {
 	}, true
 }
 
-// stepPoints expands a polyline into a staircase.
+// stepColumns expands a projected segment into a staircase, in the mapped
+// space the scales speak rather than in device space.
+//
+// Where the corner goes is the whole content of a step, and it is a statement
+// about the *data*: the value held until here and then changed. Turning the
+// rows into points first and inserting corners between them afterwards would
+// put the corner wherever the coord happened to place the midpoint of two
+// device positions, which under anything but a Cartesian coord is not where
+// the change happened.
 //
 // A right angle is a corner in the stroke, not a data point, so the geom
 // strokes with a butt cap and a miter join: rounding the corners would round
 // the very thing the step is drawn to show.
-func (sc *scratch) stepPoints(pts []ir.Point, where StepPos) []ir.Point {
-	if len(pts) < 2 {
-		return pts
+func (sc *scratch) stepColumns(x, y []float32, keep []int, where StepPos) (sx, sy []float32) {
+	n := len(x)
+	if keep != nil {
+		n = len(keep)
 	}
-	n := 2*len(pts) - 1
+	if n < 2 {
+		return nil, nil
+	}
+	at := func(i int) (float32, float32) {
+		if keep != nil {
+			return x[keep[i]], y[keep[i]]
+		}
+		return x[i], y[i]
+	}
+	m := 2*n - 1
 	if where == StepMid {
-		n = 3*len(pts) - 2
+		m = 3*n - 2
 	}
-	out := grow(sc.edge, n)[:0]
-	defer func() { sc.edge = out }()
-	out = append(out, pts[0])
-	for i := 1; i < len(pts); i++ {
-		a, c := pts[i-1], pts[i]
+	sx, sy = grow(sc.sx, m)[:0], grow(sc.sy, m)[:0]
+	defer func() { sc.sx, sc.sy = sx, sy }()
+
+	px, py := at(0)
+	sx, sy = append(sx, px), append(sy, py)
+	for i := 1; i < n; i++ {
+		cx, cy := at(i)
 		switch where {
 		case StepPre:
-			out = append(out, ir.Point{X: a.X, Y: c.Y})
+			sx, sy = append(sx, px), append(sy, cy)
 		case StepMid:
-			mid := (a.X + c.X) / 2
-			out = append(out, ir.Point{X: mid, Y: a.Y}, ir.Point{X: mid, Y: c.Y})
+			mid := (px + cx) / 2
+			sx, sy = append(sx, mid, mid), append(sy, py, cy)
 		default: // StepPost
-			out = append(out, ir.Point{X: c.X, Y: a.Y})
+			sx, sy = append(sx, cx), append(sy, py)
 		}
-		out = append(out, c)
+		sx, sy = append(sx, cx), append(sy, cy)
+		px, py = cx, cy
 	}
-	return out
+	return sx, sy
 }

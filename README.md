@@ -133,6 +133,7 @@ picture here cannot drift away from the code that produced it.
 | ![A quarter of a million samples drawn as a clean line](docs/images/decimation.png) | ![A million points drawn as a density raster](docs/images/density.png) |
 | ![Standard error curves labelled with typeset notation](docs/images/notation.png) | ![Revenue stacked by product, one layer over a long table](docs/images/stacked.png) |
 | ![Traffic by channel as a streamgraph](docs/images/stream.png) | ![Calls per hour as a heatmap of coloured cells](docs/images/heatmap.png) |
+| ![Browser share as a donut](docs/images/pie.png) | ![Two designs compared on five axes as a radar chart](docs/images/radar.png) |
 
 ## What it does
 
@@ -164,6 +165,13 @@ picture here cannot drift away from the code that produced it.
   ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
   Ramps interpolate in linear light, so a gradient has no dark band through its
   middle.
+- **Coordinate systems** — `coord.Cartesian` is the identity and the default;
+  `coord.Polar` wraps one axis around a circle and reads the other as a radius,
+  which turns the marks that already exist into pie, donut, radar, rose, wind
+  rose and gauge. A scale still maps a value into an interval — the coord
+  decides what the interval means — so no geom and no scale changed shape for
+  it, and the arcs are cubics because the IR has always had those
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
 - **Missing data** — one explicit policy per layer (gap, interpolate, error),
   covering both `NaN`/`Inf` and values a scale has no position for, such as zero
   on a log axis.
@@ -279,6 +287,58 @@ segment and `Live.TrackRows` names the row behind it.
 The legend names every series. One swatch per layer could not, which is why a
 layer contributes as many entries as it has to
 ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
+
+## A pie is a stacked bar in a different coordinate system
+
+A scale maps a value into an interval; a **coord** decides what that interval
+means. `coord.Cartesian` — the default — says it is a distance along an edge of
+the plot. `coord.Polar` says one of the two intervals is an angle and the other
+a radius, and the marks that were already there draw the family that was
+missing:
+
+```go
+p := refract.New(
+    refract.Coord(coord.Polar(coord.Theta(coord.FromY), coord.Hole(0.45))),
+    refract.Theme(theme.Light.With(
+        theme.Grid(false, false), theme.AxisLines(false, false), theme.Ticks(false, false))),
+)
+p.X(scale.Linear())          // one slot, filling the radius
+p.Y(scale.Linear())          // the stacked total, filling the circle
+p.Add(geom.Bar(src, geom.X("all"), geom.Y("share"),
+    geom.GroupBy("browser"),
+    geom.ColorBy("browser", scale.Qualitative(palette.OkabeIto))))
+```
+
+That is the whole of the donut above: the same `geom.Bar` layer that draws a
+stacked bar chart in Cartesian, with θ taken from the Y axis instead. The ring
+closes into a full circle because a stacked domain ends at the total — which is
+why neither scale is niced — and the hole is where the radial scale starts, so
+it is an annulus rather than a circle of background painted over the middle.
+
+A radar is `geom.Line` or `geom.Area` over an ordinal angular axis, with
+`coord.Chord()` for sides that are straight and `geom.Closed(true)` for a
+contour that comes back to the first axis. A rose, a wind rose and a gauge are
+bars; a polar boxplot is a boxplot. None of them is a new geom, which is the
+point of having a stage rather than a shape
+([ADR 0018](docs/adr/0018-coordinate-systems.md)).
+
+The stage costs an existing chart nothing: `Cartesian` is the identity, and
+every golden file and every figure in this README is unchanged by it. What it
+does change is what a pointer can be told — a hit is inverted back through the
+coord before the scales see it, so a pointer over a slice reports the value the
+slice stands for rather than a pixel, and `Live.TrackRows` names the row.
+Concentric rings replace horizontal grid lines and the tick labels go round the
+outside; the coord reports that geometry and `render` still strokes it, because
+`render` is the only package that knows the drawing order of a chart.
+
+Decimation is deliberately off under a polar coord. `stat.LTTB` buckets by pixel
+column and a bucket of equal angle is not a bucket of equal width, so the coord
+reports that it does not decimate rather than have a reduction measure something
+it was not designed for. Nothing polar is a big-data chart, so this costs
+nothing real.
+
+A runnable version of the donut, the radar, a wind rose and a gauge is in
+[`examples/polar`](examples/polar).
 
 ## Boxes bounded by their own row
 
@@ -691,10 +751,10 @@ missing-data policy you already set covers it
    Your spec  ──►  Model  ──►  IR  ──►  Backend  ──►  output
    ─────────      ─────      ────      ───────       ──────
    geoms          scales     ~8        backend/svg     SVG
-   scales         layout     drawing   backend/pdf     PDF
-   theme          ticks      ops       backend/canvas  browser canvas
-   facets         panels               backend/gg      PNG / JPEG / a surface
-                                       backend/window  a native window
+   scales         coords     drawing   backend/pdf     PDF
+   coords         layout     ops       backend/canvas  browser canvas
+   theme          ticks                backend/gg      PNG / JPEG / a surface
+   facets         panels               backend/window  a native window
 ```
 
 The `ir.Backend` interface is the seam. Geoms never touch a renderer; a renderer

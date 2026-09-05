@@ -108,6 +108,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	sc := acquire(f)
 	defer sc.release()
 
+	cd := f.Coords()
 	base := baselinePos(f, g.cfg.baseline)
 	// A stacked layer draws the bounds the adjustment gave it rather than the
 	// column, and every traversal below — including which rows are holes —
@@ -137,6 +138,9 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 		if y1 < y0 {
 			y0, y1 = y1, y0
 		}
+		// The pair is the mark's extent in the space the scales map into. Under
+		// a Cartesian coord that is the rectangle it draws; under a polar one
+		// it is the angles and radii the coord turns into an annular sector.
 		rects = append(rects, ir.R(x0, y0, x1, y1))
 		rows = append(rows, i)
 	}
@@ -156,7 +160,10 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 			if s.y2 != nil {
 				at = (r.Min.Y + r.Max.Y) / 2
 			}
-			sc.pts[i] = ir.Point{X: (r.Min.X + r.Max.X) / 2, Y: at}
+			// The position is worked out in the space the scales map into and
+			// placed by the coord, so a slice of a pie reports the middle of
+			// its arc rather than a point the transform never visited.
+			sc.pts[i] = cd.Point((r.Min.X+r.Max.X)/2, at)
 		}
 		f.Marks(sc.pts, sc.sourceRows(g.s, rows))
 	}
@@ -171,7 +178,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 			}
 			sc.fill.Reset()
 			for _, r := range run.rects {
-				sc.fill.Rect(r)
+				area(&sc.fill, cd, r)
 			}
 			b.FillPath(&sc.fill, ir.Solid(col), ir.NonZero)
 		}
@@ -184,7 +191,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 				continue
 			}
 			sc.fill.Reset()
-			sc.fill.Rect(r)
+			area(&sc.fill, cd, r)
 			b.FillPath(&sc.fill, ir.Solid(cols[i]), ir.NonZero)
 		}
 		return nil
@@ -192,7 +199,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 
 	sc.fill.Reset()
 	for _, r := range rects {
-		sc.fill.Rect(r)
+		area(&sc.fill, cd, r)
 	}
 	b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 

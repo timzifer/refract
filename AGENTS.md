@@ -26,7 +26,7 @@ positioning rests on — see [ADR 0001](docs/adr/0001-module-layout.md).
 
 ```
 data, stat                                    →  rows in, rows out
-geom, scale, facet, layout, render            →  produce IR
+geom, scale, coord, facet, layout, render     →  produce IR
 ir                                            →  the interface
 interact                                      →  reads IR back
 spec, a11y                                    →  write the model down
@@ -42,7 +42,13 @@ backend/gg, backend/window
 - A backend must not import `geom`, `scale`, `theme` or `render`. That is why
   `Live.Bind` — which turns a wheel event into a zoom — is in the root package
   under a js build tag and not in `backend/canvas`: wiring input is not drawing.
-- `render` is the only package that knows the drawing order of a chart.
+- `render` is the only package that knows the drawing order of a chart. A coord
+  reports where a grid line, an axis line and a tick label go; `render` strokes
+  them, in the order it always did. A coord that drew its own rings would be a
+  second drawing order — see [ADR 0018](docs/adr/0018-coordinate-systems.md).
+- `coord` knows about scales, points and paths, and nothing else. It must not
+  import `theme`: the lengths it needs to place a tick mark travel as
+  `coord.Metrics`.
 - `spec` may read every model package and must never be read by one. A geom
   that knew about JSON would be a geom in the wrong package; `geom.Desc`,
   `scale.Desc` and `facet.Desc` are how a model type says what it is without
@@ -469,6 +475,61 @@ that one reason: a rect with a *field* is data, a rect with a *datum* is an
 annotation. Dropping the parameter compiles and turns every heatmap into a
 four-literal annotation.
 
+**A coord is a value, and `Frame` hands one back rather than moving the
+receiver.** `coord.Coord.Frame(area, x, y)` returns the coord positioned in that
+panel; the chart's own coord is never written to. That is not style — panels are
+built on separate goroutines (ADR 0012), and a coord that remembered which panel
+it was in would be a data race with no `Snapshotter` to fix it. `render.Panel`
+may carry a coord of its own; a facet's panels do not, because the panels of a
+facet are one plot over different rows, and a grid's cells do, because they are
+separate plots sharing a canvas.
+
+**`Cartesian` is the identity, and the golden files are the proof.**
+`cartesian.Area` writes the same four corners in the same order as
+`ir.Path.Rect`, `Edge` is one `LineTo`, `Clip` is the rectangle, and a straight
+run still reaches the backend as a `Polyline` rather than as a stroked path.
+Every one of those is load-bearing: the argument that the coordinate stage
+changed nothing is that the committed golden files still match, and each of them
+is a way to break it silently. `geom.strokeRun` is where the polyline/path
+choice lives; do not "simplify" it into always building a path.
+
+**A geom works in mapped space and lets the coord place the point.** What
+`scale.Map` returns is a position in an interval, which under Cartesian happens
+to be a device coordinate and under Polar is an angle or a radius. So a geom
+that computes a midpoint, a corner or a staircase step computes it *before* the
+coord, never after: `geom.stepColumns` builds the staircase out of the mapped
+columns for exactly this reason, because the corner of a step is a statement
+about the data and not about where two device points happened to land.
+
+**The per-point call has a batch form and the geoms use it.**
+`coord.Coord.Points(dst, xs, ys)` is called once per run, not once per row: a
+per-row interface method is the shape that cost a million allocations on a
+million-row column once already, and `scratch.marks` gathers the surviving rows
+into a contiguous pair so there is one call. `BenchmarkPolar1k` against
+`BenchmarkPolar100k` in `.github/scripts/allocgate.awk` and
+`TestAPolarRenderDoesNotAllocatePerPoint` are the gates, and a polar coord does
+not decimate — so those benchmarks really do draw every row.
+
+**Furniture is filled, not returned, and `Reset` reaches past the length.**
+`render` keeps one `coord.Furniture` in a pool for the whole furniture pass and
+resets it between panels. `coord.resetShapes` empties every shape the slice has
+*ever* held rather than only the ones inside its current length, because
+`side.next` hands those back out on the next frame — a shape still holding last
+frame's points would draw them again, on a chart with fewer ticks than the last
+one. Returning the struct by value instead costs a steady-state frame about
+twenty allocations; that was measured, and it is why the signature differs from
+the one ADR 0018 sketched.
+
+**A hit on a filled mark is decided against the outline, not the box.**
+`interact.inside` ray-casts the subpath the drawing call carried. Until v0.8
+every filled mark refract drew was a rectangle, so its bounding box *was* its
+shape; a pie's wedges have boxes that overlap almost completely, and a hit
+decided on the box alone names whichever wedge was indexed last. The row behind
+an area hit is then the nearest reported position *inside that shape's box*,
+measured from the pointer rather than from the corner the hit reports — a corner
+of a tall bar is nearer to the neighbouring bar's row than to its own, and every
+slice of a pie shares the corner in the middle.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it
@@ -489,8 +550,8 @@ everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
 `scale.Describer`, `scale.ColorDescriber`, `scale.DiscreteColorScale`,
 `scale.Temporal`, `geom.Faceter`, `geom.Guided`, `geom.Legender`,
-`geom.Describer`, `ir.Partial`, `ir.Semantics`, `ir.Resizer`,
-`mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
+`geom.Describer`, `coord.Describer`, `ir.Partial`, `ir.Semantics`,
+`ir.Resizer`, `mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
 `Backend`. `geom.Legender` is the newest and the argument is worth keeping in
 view: a pie, a stack and a waffle contribute N legend entries from one layer,
 and adding a second method to `Geom` for them would have broken every
@@ -504,12 +565,24 @@ scale in place for a pan or a zoom.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. Everything through v0.7 has shipped; next is
-`coord/` in v0.8 — which is why the groups and the adjustments landed first, a
-pie being a stacked bar with θ from the Y axis — then the stats in v0.9, and
-then the extension API, the docs and a public benchmark suite for v1.0. Adding a
-stub for one of those is not progress towards it — the seams exist, that is
-enough.
+project is doing and in what order. Everything through v0.8 has shipped; next
+are the stats in v0.9 — a 1-D `Bin`, KDE, hexbin, ECDF and loess, and the size
+channel the bubble chart needs — and then the extension API, the docs and a
+public benchmark suite for v1.0. Adding a stub for one of those is not progress
+towards it — the seams exist, that is enough.
+
+Things v0.8 deliberately did not do. There is no **geographic projection**: a
+projection transforms every point with no linear interval underneath it, which
+is a wider seam than this one, and ADR 0018 says it is argued on its own
+evidence rather than smuggled in as a third `Coord`. A polar coord **does not
+decimate**, per that record's fourth property. `layout` is **untouched** — a
+polar coord inscribes itself in whatever rectangle the solver gives it, and
+gutter rules that understand a radial axis are a later milestone. A radar's
+contour closes because `geom.Closed` says so, not because the coord guessed:
+whether a series wraps is a fact about the series, and a polar time series
+spiralling through three revolutions does not wrap. And a curve is hit-tested as
+its control polygon, so a filled shape can be pointed at a little way outside
+its ink at a bulge.
 
 Things v0.7 deliberately did not do. A grouped **line, step and scatter do not
 stack**: two series drawn over one another are two readings, and adding them

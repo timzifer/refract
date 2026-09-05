@@ -405,8 +405,17 @@ func (l *Live) Wheel(x, y, factor float64) error {
 	if !ok {
 		return nil
 	}
-	zoomAxis(p.X, p.Area.Min.X, p.Area.Max.X, pt.X, factor)
-	zoomAxis(p.Y, p.Area.Max.Y, p.Area.Min.Y, pt.Y, factor)
+	// The interval each scale maps into is the coord's answer, and so is where
+	// the pointer sits within it: under a Cartesian coord those are the
+	// rectangle's edges and the pointer's own coordinates, and under a polar
+	// one they are an angle range, a radius range, and the angle and radius
+	// the pointer landed at. Reading the rectangle here instead would scale a
+	// polar chart's domains by numbers that mean nothing on its axes.
+	cd := p.Coords()
+	x0, x1, y0, y1 := cd.Extent()
+	mx, my := cd.Invert(pt)
+	zoomAxis(p.X, x0, x1, mx, factor)
+	zoomAxis(p.Y, y0, y1, my, factor)
 	l.fire(Event{Kind: Zoom, Point: pt, Panel: l.panelIndex(pt), Factor: factor})
 	return l.Draw()
 }
@@ -422,8 +431,11 @@ func (l *Live) ZoomTo(r ir.Rect) error {
 	if !ok {
 		return nil
 	}
-	setDomain(p.X, r.Min.X, r.Max.X)
-	setDomain(p.Y, r.Min.Y, r.Max.Y)
+	cd := p.Coords()
+	ax, ay := cd.Invert(r.Min)
+	bx, by := cd.Invert(r.Max)
+	setDomain(p.X, ax, bx)
+	setDomain(p.Y, ay, by)
 	l.fire(Event{Kind: Zoom, Point: mid, Panel: l.panelIndex(mid), Rect: r})
 	return l.Draw()
 }
@@ -435,8 +447,16 @@ func (l *Live) PanBy(dx, dy float64) error {
 	if !ok {
 		return nil
 	}
-	panAxis(p.X, p.Area.Min.X, p.Area.Max.X, float32(dx))
-	panAxis(p.Y, p.Area.Max.Y, p.Area.Min.Y, float32(dy))
+	// The drag is a device delta and the scales speak in the interval the
+	// coord gave them, so the two ends of the drag are inverted and the
+	// difference between them is what moves the domain. Under a Cartesian
+	// coord that difference is dx and dy exactly.
+	cd := p.Coords()
+	x0, x1, y0, y1 := cd.Extent()
+	fromX, fromY := cd.Invert(l.last)
+	toX, toY := cd.Invert(ir.Point{X: l.last.X + float32(dx), Y: l.last.Y + float32(dy)})
+	panAxis(p.X, x0, x1, toX-fromX)
+	panAxis(p.Y, y0, y1, toY-fromY)
 	l.fire(Event{
 		Kind:  Pan,
 		Point: l.last,

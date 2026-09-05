@@ -24,6 +24,7 @@ func (p *Plot) Spec() (spec.Spec, error) {
 		YTitle: p.yTitle,
 		X:      p.scaleX(),
 		Y:      p.scaleY(),
+		Coord:  p.coord,
 		Layers: p.layers,
 		Facet:  p.facet,
 	}
@@ -48,6 +49,7 @@ func FromSpec(s spec.Spec) (*Plot, error) {
 	if c.Y != nil {
 		p.Y(c.Y)
 	}
+	p.coord = c.Coord
 	p.Add(c.Layers...)
 	p.Facet(c.Facet)
 	if c.Legend != nil {

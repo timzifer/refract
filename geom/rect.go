@@ -119,6 +119,7 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	sc := acquire(f)
 	defer sc.release()
 
+	cd := f.Coords()
 	ok := sc.plottable(g.s, f.X, f.Y)
 	halfX, halfY := g.halfWidth(g.s.x), g.halfWidth(g.s.y)
 
@@ -145,7 +146,7 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	if f.tracking() {
 		sc.pts = grow(sc.pts, len(rects))
 		for i, r := range rects {
-			sc.pts[i] = ir.Point{X: (r.Min.X + r.Max.X) / 2, Y: (r.Min.Y + r.Max.Y) / 2}
+			sc.pts[i] = cd.Point((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
 		}
 		f.Marks(sc.pts, sc.sourceRows(g.s, rows))
 	}
@@ -163,7 +164,7 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 			}
 			sc.fill.Reset()
 			for _, r := range run.rects {
-				sc.fill.Rect(r)
+				area(&sc.fill, cd, r)
 			}
 			b.FillPath(&sc.fill, ir.Solid(run.color), ir.NonZero)
 		}
@@ -174,7 +175,7 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	}
 	sc.fill.Reset()
 	for _, r := range rects {
-		sc.fill.Rect(r)
+		area(&sc.fill, cd, r)
 	}
 	b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 	if outline && stroke.Visible() {
