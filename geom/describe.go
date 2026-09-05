@@ -164,6 +164,12 @@ type Desc struct {
 	VAlign   ir.VAlign
 	Rotation float64
 	Extend   bool
+
+	// Extra is what a third-party mark's own options set — see [Extra]. It is
+	// nil for a layer configured entirely from this package's options, and
+	// what the JSON spec carries as the mark's own properties for a mark this
+	// package did not define.
+	Extra map[string]any
 }
 
 // Describer is implemented by a layer that can say what it is.
@@ -194,7 +200,9 @@ var ErrUnknownMark = fmt.Errorf("refract/geom: unknown mark")
 //
 // It is the inverse of [Describe] over every layer in this package: describing
 // a layer and rebuilding it produces one that draws the same marks. A layer
-// with data needs a Source; an annotation ignores one.
+// with data needs a Source; an annotation ignores one. A mark this package
+// does not define is built by whoever registered it — see [Register] — and
+// one nobody did is [ErrUnknownMark].
 func FromDesc(d Desc) (Geom, error) {
 	opts := d.options()
 	switch d.Mark {
@@ -212,6 +220,11 @@ func FromDesc(d Desc) (Geom, error) {
 		return Region(d.Datum.X0, d.Datum.Y0, d.Datum.X1, d.Datum.Y1, opts...), nil
 	case MarkNote:
 		return Note(d.Datum.X0, d.Datum.Y0, d.Text, opts...), nil
+	}
+
+	if build, ok := registered(d.Mark); ok {
+		// A registered mark decides for itself whether it needs a source.
+		return build(d)
 	}
 
 	if d.Source == nil {
@@ -334,6 +347,9 @@ func (d Desc) options() []Option {
 	if d.SizeCol != "" && d.SizeScale != nil {
 		opts = append(opts, SizeBy(d.SizeCol, d.SizeScale))
 	}
+	for _, k := range sortedKeys(d.Extra) {
+		opts = append(opts, Extra(k, d.Extra[k]))
+	}
 	return opts
 }
 
@@ -401,6 +417,7 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		VAlign:     c.valign,
 		Rotation:   c.rotation,
 		Extend:     c.extend,
+		Extra:      c.extra,
 	}
 }
 

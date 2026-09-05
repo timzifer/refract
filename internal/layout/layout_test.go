@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/timzifer/refract/internal/irtest"
+	"github.com/timzifer/refract/internal/layout"
 	"github.com/timzifer/refract/ir"
-	"github.com/timzifer/refract/layout"
 	"github.com/timzifer/refract/theme"
 )
 

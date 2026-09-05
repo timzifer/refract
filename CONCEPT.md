@@ -960,8 +960,13 @@ buffer and the geom already keeps one.
 
 ### v1.0 — Stable & complete enough
 
-- API freeze; semver; stable registration/extension model for third-party geoms
-  and backends.
+- API freeze; semver. The audit that precedes it is
+  [docs/v1-api-audit.md](docs/v1-api-audit.md): every exported identifier with
+  a verdict, and the changes it asked for are in.
+- Stable registration/extension model for third-party geoms and backends —
+  **done** ([ADR 0029](docs/adr/0029-extension-model.md)): `geom.Configure`,
+  `geom.Extra`, and `Register` in `geom`, `scale` and `coord`, with the JSON
+  spec carrying a registered mark's own properties.
 - Docs, gallery, public benchmark suite.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
@@ -995,6 +1000,23 @@ buffer and the geom already keeps one.
 - **1.0 onward:** standard Go semver. Public API, IR, `Backend` interface, and the
   JSON spec become stability surfaces. New geoms/backends arrive through the
   extension interface, not by changing existing signatures.
+- **The growth rule.** An interface a third party implements — `data.Source`,
+  `scale.Scale`, `coord.Coord`, `geom.Geom`, `ir.Backend`, `ir.Target`,
+  `render.Observer`, `mathtext.Typesetter` and the colour and size scales —
+  never gains a method. A new capability is an optional interface beside it,
+  asked for with a type assertion, the way `Resizer`, `Definite` and `Legender`
+  already are. A struct with exported fields gains fields and never loses one,
+  and its zero value keeps its meaning. A string-typed name (`geom.Mark`,
+  `scale.Kind`, `coord.Type`) is open to third-party values; an iota enum grows
+  at the end.
+- **The JSON dialect.** Within v1 a field is only ever added; a reader ignores a
+  field it does not know; `$schema` moves only with the module's major version.
+- **Nested modules.** `backend/gg` and `backend/window` tag `v1.0.0` with the
+  core: they are the supported raster and native paths, and their own APIs are
+  small. `backend/gg/gpu` stays `v0.x` for as long as the GPU tier is opt-in
+  beta — the tag says what the README says. `arrow` tracks its upstream: its
+  major version follows `apache/arrow-go`'s, which is the reason it is a module
+  of its own.
 - **License:** permissive (e.g. MIT), and the core links only permissive deps
   (gg is MIT). This is a requirement, not a preference: refract must be embeddable
   by downstream frameworks under any license — including dual-licensed ones such
@@ -1032,7 +1054,8 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
                              # + StackOffsets, the streamgraph baselines   (v0.7)
                              # + Bin, KDE, ECDF, Loess, Hex               (v0.9)
   coord/                     # cartesian + polar (the pluggable stage)   (v0.8)
-  layout/                    # panel-grid constraint solver               (v0.3)
+  internal/layout/           # panel-grid constraint solver; one importer,  (v0.3)
+                             # so not public — ADR 0029
   render/                    # model -> IR lowering, + Observer           (v0.1)
   facet/                     # faceting (wrap/grid)                       (v0.3)
   theme/  palette/           # tokens, colourblind-safe palettes          (v0.1)
@@ -1084,8 +1107,9 @@ originally proposed.
 ## 17. Open decisions
 
 Six of the seven were settled while building v0.1 and the seventh — spec
-fidelity — while building v0.5; each has a record in [docs/adr](docs/adr/). One
-remains genuinely open, and is marked so.
+fidelity — while building v0.5; the extension model, listed here as the one
+that stayed open, was settled before the v1 freeze. Each has a record in
+[docs/adr](docs/adr/).
 
 1. ~~**gg coupling surface**~~ — **settled:** pin gg to an exact version and
    import only `gg` and `gg/text`; never `gg/gpu`, `gg/scene` or `gg/recording`.
@@ -1119,8 +1143,12 @@ remains genuinely open, and is marked so.
    it became live at v0.6, where the GPU tier is a module a caller opts into
    rather than something on the supported path.
    → [ADR 0005](docs/adr/0005-go-version.md)
-7. **Geom/backend extension API** — the interfaces third parties implement.
-   **Still open**; it freezes at v1.0, and freezing it well is what makes the
+7. ~~**Geom/backend extension API**~~ — the interfaces third parties implement.
+   **Settled** by [ADR 0029](docs/adr/0029-extension-model.md): a third-party
+   geom reads the shared options through `geom.Configure`, takes its own through
+   `geom.Extra`, and is read back from a document through `geom.Register`;
+   `scale` and `coord` register the same way; the JSON spec carries a registered
+   mark's own properties on the mark object. Freezing it well is what makes the
    "last plotting library" claim survivable. What that costs in scheduling is
    now explicit: `geom.Frame` and the `Geom` interface are part of what freezes,
    so anything that has to widen them has to land first. The coordinate stage is

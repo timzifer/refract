@@ -7,9 +7,13 @@ import "image"
 //
 // # Stability
 //
-// This interface is frozen for the v0.1 cycle (docs/adr/0002). It exists so
-// that refract is insulated from any single rendering library: a change in a
-// backend's own API is contained to that backend's adapter.
+// This interface has not changed since v0.1 (docs/adr/0002) and does not
+// change from v1: it is implemented outside this module, so it never gains a
+// method. What a backend can additionally do is an optional interface beside
+// it — [Partial], [Resizer], [Semantics] are the three that exist — and refract
+// asks with a type assertion and does without when the answer is no. It exists
+// so that refract is insulated from any single rendering library: a change in
+// a backend's own API is contained to that backend's adapter.
 //
 // # State
 //
@@ -77,6 +81,9 @@ type Backend interface {
 // Splitting Target from Backend is what lets refract.Render take a destination
 // before the chart's pixel size is known to that destination, and lets the
 // same backend implementation serve a file, an io.Writer, or a window surface.
+//
+// Like [Backend], it is implemented outside this module and never gains a
+// method.
 type Target interface {
 	// Open returns a Backend drawing into a surface of widthPx by heightPx
 	// device pixels. dpr is the device pixel ratio: coordinates handed to the

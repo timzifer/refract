@@ -42,9 +42,9 @@ func bare() theme.Theme {
 	)
 }
 
-func pie(opts ...coord.Option) *refract.Plot {
+func pie(opts ...coord.PolarOption) *refract.Plot {
 	p := refract.New(refract.Size(400, 400), refract.Theme(bare()),
-		refract.Coord(coord.Polar(append([]coord.Option{coord.Theta(coord.FromY)}, opts...)...)),
+		refract.Coord(coord.Polar(append([]coord.PolarOption{coord.Theta(coord.FromY)}, opts...)...)),
 		refract.Legend(false))
 	// Neither scale is niced. A pie's ring closes because the stacked Y domain
 	// ends at the total; a domain rounded up to the next round number would

@@ -66,7 +66,9 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 	case geom.MarkNote:
 		return "text", "", nil
 	}
-	return "", "", fmt.Errorf("refract/spec: no mark type for %q", m)
+	// A mark this package did not define — one built by [geom.Register] —
+	// travels under its own name, which is what its Describer reports.
+	return string(m), "", nil
 }
 
 // geomMark is markType inverted. The interpolation decides between a line and
@@ -129,7 +131,12 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 	case "text":
 		return geom.MarkNote, nil
 	}
-	return "", fmt.Errorf("refract/spec: unknown mark type %q", m.Type)
+	if m.Type == "" {
+		return "", fmt.Errorf("refract/spec: a mark needs a type")
+	}
+	// Anything else is a mark refract did not define. geom.FromDesc knows
+	// whether anyone registered it, and says so if nobody did.
+	return geom.Mark(m.Type), nil
 }
 
 // hasField reports whether a layer's encoding names any column, which is what

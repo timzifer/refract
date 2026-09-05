@@ -15,6 +15,13 @@ import "time"
 // returned slice, and refract never does. An implementation that already holds
 // its data as a Go slice should return that slice directly rather than
 // copying.
+//
+// # Stability
+//
+// Source is implemented outside this module, so it never gains a method. A
+// fourth column kind — exact integers, booleans, durations — arrives as an
+// optional interface beside it, the way [Subset] did, and a caller that wants
+// one asks for it with a type assertion and falls back when it is absent.
 type Source interface {
 	// Len reports the number of rows. Every column has this length.
 	Len() int

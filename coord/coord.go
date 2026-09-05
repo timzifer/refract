@@ -39,6 +39,14 @@ import (
 // transform: what a straight edge is, what a data-space rectangle is, what a
 // panel clips to, and where a grid line runs are all answers only the coord
 // has.
+//
+// # Stability
+//
+// Coord is implemented outside this module, so it never gains a method. What a
+// coordinate system can additionally do — break a mark out of its middle, say
+// what it is — is an optional interface beside it, as [Exploder] and
+// [Describer] are, and a projection's own needs arrive the same way. A coord
+// this package does not define is read back through [Register].
 type Coord interface {
 	// Frame gives the coord a panel rectangle and that panel's scales, sets
 	// the interval each scale maps into, and returns the coord positioned in

@@ -18,6 +18,9 @@ import "math"
 // the ink and reads as four times the quantity. So this maps a value to an
 // *area* and reports the diameter that has it, which is what makes doubling a
 // value multiply the diameter by √2.
+//
+// Like [Scale], it is implemented outside this module and never gains a
+// method.
 type SizeScale interface {
 	// Train extends the scale's domain to include vs, ignoring NaN and
 	// infinities. Calling Train repeatedly accumulates.

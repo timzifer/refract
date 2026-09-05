@@ -31,6 +31,16 @@
 // The functions come in pairs: LTTB and AppendLTTB, Bin and AppendBin. The
 // Append forms write into a caller-owned slice, which is how a chart redrawn
 // every frame keeps its per-frame allocations flat.
+//
+// # There is no Stat interface
+//
+// Deliberately. A stat here is a function a geom calls in its Train, not a
+// stage between the data and the layer that a caller plugs a different one
+// into. A pluggable stat would have to know which axis it decides, how the
+// layer treats a missing value and what the theme wants — which is exactly
+// what this package must not know. A caller with a summary of their own writes
+// a geom that calls it (see docs/adr/0028-distribution-stats.md), and the
+// function itself belongs here only if it is numbers in and numbers out.
 package stat
 
 import "math"

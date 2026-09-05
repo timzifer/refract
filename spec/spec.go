@@ -52,15 +52,24 @@ import (
 // version of it; nothing fetches it, and a Vega-Lite consumer that checks the
 // field will refuse the document, which is the honest outcome.
 //
-// It moves when the dialect gains or changes a field: v0.9 added the
-// distribution marks with their own properties and the size channel, v0.8 added
-// the top-level `coord`, v0.7 added the series
-// channel (`detail`), the position adjustments (`stack`, `dodge`, `order`) and
-// the data-driven rect, and v0.6 added a time scale's `origin`. Reading is not
-// gated on it — a document written by an
-// older refract reads fine, and refusing one because of a version string would
-// make the field a trap rather than a label.
-const Schema = "https://github.com/timzifer/refract/spec/v0.9"
+// # Stability
+//
+// The dialect is a v1 stability surface. Within v1 a field is only ever added,
+// never removed, renamed or given a different meaning, and a reader ignores a
+// field it does not know — so a document written by any v1.x reads in any
+// other, and a document written by a v0.x refract reads too. The version in
+// the string moves only with the major version of the module, because that
+// is the only time the meaning of a field may change.
+//
+// Reading is not gated on it: refusing a chart because of a version string
+// would make the field a trap rather than a label. A document this package
+// cannot understand fails on the part it cannot understand, naming it.
+//
+// Before v1 the string moved with the dialect: v0.9 added the distribution
+// marks and the size channel, v0.8 the top-level `coord`, v0.7 the series
+// channel (`detail`), the position adjustments and the data-driven rect, and
+// v0.6 a time scale's `origin`.
+const Schema = "https://github.com/timzifer/refract/spec/v1"
 
 // Chart is the part of a plot that survives being written down: everything
 // [Of] reads and everything [Spec.Chart] returns.
@@ -195,6 +204,13 @@ type Mark struct {
 	// Overlap is how far a ridgeline's tallest ridge rises, in slots of its
 	// categorical axis.
 	Overlap float64 `json:"overlap,omitempty"`
+
+	// Extra is what a mark this package does not define carries as its own
+	// properties. They are written beside the fields above, at the same level
+	// of the mark object, and read back into [geom.Desc.Extra] for the builder
+	// the mark was registered with — see [geom.Register] and [geom.Extra]. A
+	// key that names one of the fields above is an error, not an override.
+	Extra map[string]any `json:"-"`
 }
 
 // Coord is the coordinate system the chart is drawn in.

@@ -1,6 +1,7 @@
 package coord
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
@@ -53,22 +54,30 @@ func Describe(c Coord) (Desc, bool) {
 	return d.Describe(), true
 }
 
-// FromDesc rebuilds a coord from its description.
+// FromDesc rebuilds a coord from its description. A type this package does not
+// define is built by whoever registered it — see [Register] — and one nobody
+// did is [ErrUnknownType].
 func FromDesc(d Desc) (Coord, error) {
 	switch d.Type {
 	case "", TypeCartesian:
 		return Cartesian(), nil
 	case TypePolar:
-		opts := []Option{Theta(d.Theta), Hole(d.Hole), Radius(d.Radius),
+		opts := []PolarOption{Theta(d.Theta), Hole(d.Hole), Radius(d.Radius),
 			Start(d.Start), Sweep(d.Sweep), Counterclockwise(d.Counterclockwise)}
 		if d.Chord {
 			opts = append(opts, Chord())
 		}
 		return Polar(opts...), nil
-	default:
-		return nil, fmt.Errorf("refract/coord: unknown coord type %q", d.Type)
 	}
+	if build, ok := registered(d.Type); ok {
+		return build(d)
+	}
+	return nil, fmt.Errorf("%w: %q", ErrUnknownType, d.Type)
 }
+
+// ErrUnknownType reports a Desc naming a coord this package does not have and
+// nobody registered.
+var ErrUnknownType = errors.New("refract/coord: unknown coord type")
 
 func (p *polar) Describe() Desc {
 	return Desc{

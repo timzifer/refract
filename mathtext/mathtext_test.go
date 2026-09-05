@@ -215,6 +215,23 @@ func TestSymbolsBecomeCharacters(t *testing.T) {
 	}
 }
 
+func TestARegisteredSymbolTypesets(t *testing.T) {
+	if _, ok := mathtext.Symbol("testsmiley"); ok {
+		t.Fatal("the test symbol exists before it is registered")
+	}
+	mathtext.RegisterSymbol("testsmiley", '☺')
+	if r, ok := mathtext.Symbol("testsmiley"); !ok || r != '☺' {
+		t.Fatalf("Symbol = %q, %v", r, ok)
+	}
+	l, ok := mathtext.TeX().Typeset(`$\alpha\testsmiley$`, font(), &metrics{})
+	if !ok {
+		t.Fatal("no notation found")
+	}
+	if got := text(l); got != "α☺" {
+		t.Errorf("laid out %q, want %q", got, "α☺")
+	}
+}
+
 func TestSpacesHaveWidthAndNoInk(t *testing.T) {
 	// The reference is an empty group rather than "$ab$", because two adjacent
 	// letters are one run and one name where a and b either side of anything

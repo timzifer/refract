@@ -157,7 +157,10 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 		}
 		return d, nil
 	default:
-		return scale.Desc{}, fmt.Errorf("unknown scale type %q", typ)
+		// A type this package did not define. scale.FromDesc knows whether
+		// anyone registered it, and says so if nobody did; what is read here
+		// is the shared part of the description, which is all a document has.
+		d.Kind = scale.Kind(typ)
 	}
 
 	if len(s.Domain) == 2 {
@@ -229,6 +232,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Span:      l.Mark.Span,
 		Smooth:    smoothing(l.Mark.Method),
 		Overlap:   l.Mark.Overlap,
+		Extra:     l.Mark.Extra,
 	}
 	if l.Mark.BinStart != nil && l.Mark.BinEnd != nil {
 		d.BinLo, d.BinHi = *l.Mark.BinStart, *l.Mark.BinEnd
@@ -397,6 +401,11 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		// "ordinal" is what Vega-Lite calls a scale from categories to a
 		// discrete range, so a hand-written document that says it means this.
 		d.Kind = scale.KindQualitative
+	case "", string(scale.KindSequential):
+	default:
+		// A kind this package did not define; scale.ColorFromDesc decides
+		// whether anyone registered it.
+		d.Kind = scale.ColorKind(s.Type)
 	}
 	if s.Center != nil {
 		d.Center = *s.Center

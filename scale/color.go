@@ -13,6 +13,10 @@ import (
 // It is a separate interface rather than a Scale because the two answer
 // different questions and are trained from different columns: a chart commonly
 // has two positional scales and one colour scale over a third column.
+//
+// Like [Scale], it is implemented outside this module and never gains a
+// method; [DiscreteColorScale] is the optional interface beside it, and
+// [RegisterColor] is how a kind this package does not define is read back.
 type ColorScale interface {
 	// Train extends the scale's domain to include vs, ignoring NaN and
 	// infinities. Calling Train repeatedly accumulates.

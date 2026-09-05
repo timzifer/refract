@@ -144,6 +144,10 @@ func encodeScale(d scale.Desc) *Scale {
 		for _, c := range d.Categories {
 			out.Domain = append(out.Domain, c)
 		}
+	default:
+		// A kind this package did not define — one built by [scale.Register] —
+		// travels under its own name.
+		out.Type = string(d.Kind)
 	}
 	if d.Fixed {
 		switch d.Kind {
@@ -257,7 +261,7 @@ func encodeLayer(g geom.Geom, hoisted bool, axes axisKinds) (Layer, error) {
 		return Layer{}, err
 	}
 
-	m := Mark{Type: typ, Orient: orient}
+	m := Mark{Type: typ, Orient: orient, Extra: d.Extra}
 	if d.Color != nil {
 		m.Color = colorHex(*d.Color)
 	}
@@ -457,6 +461,24 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		m.Text, m.FontSize, m.Angle = d.Text, d.FontSize, degrees(d.Rotation)
 		m.Align, m.Baseline = hAlignName(d.HAlign), vAlignName(d.VAlign)
 		m.Extend = boolPtr(d.Extend)
+	default:
+		// A mark this package did not define. Nobody here knows which of the
+		// shared options it reads, so the ones a mark most plausibly honours
+		// are written and the mark's own properties travel in Extra: a
+		// document listing a property the mark ignores draws nothing either
+		// way, which is the same bargain the option set makes.
+		stroke()
+		fill()
+		rows()
+		group()
+		loop()
+		m.Size = d.Size
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
+		if d.Tension > 0 {
+			m.Interpolate, m.Tension = "cardinal", d.Tension
+		}
 	}
 }
 
@@ -526,6 +548,13 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		enc.X2, enc.Y2 = axes.x.datum(d.Datum.X1), axes.y.datum(d.Datum.Y1)
 	case geom.MarkNote:
 		enc.X, enc.Y = axes.x.datum(d.Datum.X0), axes.y.datum(d.Datum.Y0)
+	default:
+		// A registered annotation carries whatever of its four values it set,
+		// the way a region does.
+		if d.Datum != (geom.Datum{}) {
+			enc.X, enc.Y = axes.x.datum(d.Datum.X0), axes.y.datum(d.Datum.Y0)
+			enc.X2, enc.Y2 = axes.x.datum(d.Datum.X1), axes.y.datum(d.Datum.Y1)
+		}
 	}
 	if *enc == (Encoding{}) {
 		return nil, nil

@@ -42,7 +42,7 @@ import (
 // that is straight in data space and it is what a rose petal and a polar band
 // need. A radar is the exception — its sides are chords, and drawing them as
 // arcs bows them outwards — so a radar asks for [Chord].
-func Polar(opts ...Option) Coord {
+func Polar(opts ...PolarOption) Coord {
 	p := &polar{
 		theta:  FromX,
 		sweep:  2 * math.Pi,
@@ -73,8 +73,8 @@ func Polar(opts ...Option) Coord {
 // Further options are applied after the default, so a half pie is
 // `Pie(Sweep(math.Pi))` and a pie that turns the other way is
 // `Pie(Counterclockwise(true))`.
-func Pie(opts ...Option) Coord {
-	return Polar(append([]Option{Theta(FromY)}, opts...)...)
+func Pie(opts ...PolarOption) Coord {
+	return Polar(append([]PolarOption{Theta(FromY)}, opts...)...)
 }
 
 // Donut is [Pie] with a hole of the given fraction: the same chart with its
@@ -88,12 +88,14 @@ func Pie(opts ...Option) Coord {
 // outer radius is that hole plus [github.com/timzifer/refract/geom.X2]: the
 // radial axis is a dimension like any other, and the ring is only the slot a
 // slice fills when the row does not say.
-func Donut(hole float64, opts ...Option) Coord {
-	return Pie(append([]Option{Hole(hole)}, opts...)...)
+func Donut(hole float64, opts ...PolarOption) Coord {
+	return Pie(append([]PolarOption{Hole(hole)}, opts...)...)
 }
 
-// Option configures a coord.
-type Option func(*polar)
+// PolarOption configures a polar coord. It is named for the coord it configures
+// rather than for the package, so that a coordinate system added later can have
+// options of its own without the two colliding.
+type PolarOption func(*polar)
 
 // Axis names one of a panel's two scales.
 type Axis uint8
@@ -107,14 +109,14 @@ const (
 )
 
 // Theta chooses which scale sweeps the circle. The default is [FromX].
-func Theta(a Axis) Option { return func(p *polar) { p.theta = a } }
+func Theta(a Axis) PolarOption { return func(p *polar) { p.theta = a } }
 
 // Hole leaves the middle of the circle empty, as a fraction of the outer
 // radius in [0, 1). It is what makes a donut out of a pie and a ring gauge out
 // of a gauge, and it is an explicit annulus rather than a white circle painted
 // over the middle: the hole is where the radial scale starts, so a mark never
 // enters it and a pointer in it hits nothing.
-func Hole(f float64) Option {
+func Hole(f float64) PolarOption {
 	return func(p *polar) {
 		if f > 0 && f < 1 {
 			p.hole = f
@@ -126,7 +128,7 @@ func Hole(f float64) Option {
 // its shorter side. The default leaves room outside the ring for the tick
 // labels that go round it; a chart with none — a pie usually has none — can
 // ask for the whole of it.
-func Radius(f float64) Option {
+func Radius(f float64) PolarOption {
 	return func(p *polar) {
 		if f > 0 && f <= 1 {
 			p.radius = f
@@ -137,11 +139,11 @@ func Radius(f float64) Option {
 // Start turns the whole coord about its centre, in radians clockwise from
 // twelve o'clock. The default is zero: the first slice of a pie and the first
 // axis of a radar both begin straight up, which is where a reader looks first.
-func Start(radians float64) Option { return func(p *polar) { p.start = radians } }
+func Start(radians float64) PolarOption { return func(p *polar) { p.start = radians } }
 
 // Sweep sets how much of the circle the angular scale covers, in radians. The
 // default is a full turn; a half turn is a gauge.
-func Sweep(radians float64) Option {
+func Sweep(radians float64) PolarOption {
 	return func(p *polar) {
 		if radians != 0 {
 			p.sweep = radians
@@ -151,7 +153,7 @@ func Sweep(radians float64) Option {
 
 // Counterclockwise runs the angular scale the other way round. The default is
 // clockwise, which is the direction a pie, a clock and a compass all read in.
-func Counterclockwise(on bool) Option {
+func Counterclockwise(on bool) PolarOption {
 	return func(p *polar) {
 		if on {
 			p.ccw = true
@@ -163,11 +165,11 @@ func Counterclockwise(on bool) Option {
 // rather than as the arc through data space. It is what a radar wants: the
 // sides of a spider chart are chords, and an arc between two axes bows the
 // outline outwards into something the data does not say.
-func Chord() Option { return func(p *polar) { p.edge = chordEdges } }
+func Chord() PolarOption { return func(p *polar) { p.edge = chordEdges } }
 
 // Arc is the default edge policy, spelled out for a chart that wants to say
 // so. See [Chord] for the other one.
-func Arc() Option { return func(p *polar) { p.edge = arcEdges } }
+func Arc() PolarOption { return func(p *polar) { p.edge = arcEdges } }
 
 // defaultRadius leaves a tenth of the panel's shorter half-side outside the
 // ring, which is about what a row of tick labels needs. [Radius] is how a

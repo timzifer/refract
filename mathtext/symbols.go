@@ -1,6 +1,8 @@
 package mathtext
 
-// Symbols maps a TeX command name, without its backslash, to the character it
+import "sync"
+
+// symbols maps a TeX command name, without its backslash, to the character it
 // sets.
 //
 // It is the notation a chart label actually reaches for: the Greek alphabet,
@@ -9,10 +11,12 @@ package mathtext
 // runs to thousands and would be a font problem rather than a typesetting one
 // — every character here is one a general-purpose font has.
 //
-// It is a plain map so that a caller can add to it. A command it does not know
-// is a parse error, and a label containing one is drawn as it was typed, which
-// is how the mistake becomes visible.
-var Symbols = map[string]rune{
+// A command it does not know is a parse error, and a label containing one is
+// drawn as it was typed, which is how the mistake becomes visible. A caller
+// adds to it through [RegisterSymbol], never by reaching into the map: the
+// table is read on every typeset, and a write racing a render is exactly the
+// bug a package-level map invites.
+var symbols = map[string]rune{
 	// Lower-case Greek.
 	"alpha": 'α', "beta": 'β', "gamma": 'γ', "delta": 'δ',
 	"epsilon": 'ε', "varepsilon": 'ϵ', "zeta": 'ζ', "eta": 'η',
@@ -58,3 +62,33 @@ var Symbols = map[string]rune{
 	// TeX itself makes awkward.
 	"percent": '%', "permil": '‰', "euro": '€', "pound": '£',
 }
+
+// RegisterSymbol adds a command to the symbol table, or replaces one: after
+// RegisterSymbol("degree", '°'), a label containing `\degree` sets the degree
+// sign. The name is written without its backslash. A caller may register from
+// an init function or at any later time; the table is guarded, so a
+// registration and a render on another goroutine do not race.
+//
+// A name this package defines may be replaced, which is how a caller with an
+// opinion about `\epsilon` gets the variant they want; there is no way to
+// remove one, because a label written against the built-in table has to keep
+// meaning what it meant.
+func RegisterSymbol(name string, r rune) {
+	if name == "" || r == 0 {
+		panic("refract/mathtext: RegisterSymbol: a symbol needs a name and a character")
+	}
+	symbolsMu.Lock()
+	defer symbolsMu.Unlock()
+	symbols[name] = r
+}
+
+// Symbol reports the character a command sets, and whether the command is
+// known. It is the read side of [RegisterSymbol].
+func Symbol(name string) (rune, bool) {
+	symbolsMu.RLock()
+	defer symbolsMu.RUnlock()
+	r, ok := symbols[name]
+	return r, ok
+}
+
+var symbolsMu sync.RWMutex
