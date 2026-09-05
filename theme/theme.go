@@ -84,6 +84,13 @@ type Theme struct {
 	ColorbarBorder    ir.Color
 	ColorbarTickCount int
 
+	// Size key: the ladder of sample marks a size channel is read off.
+	// BubbleSize is the diameter of the largest mark a size scale draws, and
+	// therefore the widest sample the key shows; SizeKeyCount is how many
+	// samples it shows.
+	BubbleSize   float32
+	SizeKeyCount int
+
 	// Annotations: reference lines, bands and labels that are not data.
 	AnnotationColor   ir.Color
 	AnnotationWidth   float32
@@ -429,6 +436,7 @@ func Scaled(f float64) Option {
 
 		t.LineWidth *= s
 		t.MarkerSize *= s
+		t.BubbleSize *= s
 
 		t.SeriesDashes = scaleDashes(t.SeriesDashes, s)
 	}

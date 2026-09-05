@@ -29,9 +29,23 @@
 //	err := p.Render(refract.SVG("signal.svg"))
 //
 // Scales cover linear, time, log, symlog and ordinal/categorical axes; geoms
-// cover lines, scatters, bars, areas, steps and boxplots. A mark's colour can
-// come from the data through [scale.Sequential] or [scale.Diverging] and
-// [geom.ColorBy], which contributes a colourbar beside the plot.
+// cover lines, scatters, bars, areas, steps, boxplots and rects. A mark's
+// colour can come from the data through [scale.Sequential] or [scale.Diverging]
+// and [geom.ColorBy], which contributes a colourbar beside the plot, and its
+// size through [scale.Size] and [geom.SizeBy], which contributes a key of
+// sample marks — the bubble chart.
+//
+// # Distributions
+//
+// [geom.Histogram], [geom.Violin], [geom.Ridgeline], [geom.Hexbin],
+// [geom.Beeswarm], [geom.ECDF] and [geom.Trend] summarise a column rather than
+// plotting it. Each is a pure function in package stat with a determinism test,
+// and each trains its axis on the summary: a histogram's Y axis holds counts
+// that are nowhere in the data.
+//
+//	p.X(scale.Ordinal())
+//	p.Add(geom.Violin(src, geom.X("service"), geom.Y("latency"),
+//	    geom.GroupBy("region")))
 //
 // # Annotations
 //

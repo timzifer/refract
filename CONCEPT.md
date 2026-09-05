@@ -269,17 +269,28 @@ The part refract actually builds. Building blocks:
   the golden files prove it ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
   Geographic projections are a wider seam — they transform every point with no
   linear interval underneath — and stay beyond v1.0.
-- **Geoms** — `Line`, `Scatter`, `Bar`, `Area`, `Step`, `Boxplot`, `Rect`, …
-  Geoms know *what* their shape is, never *how* it's rendered.
+- **Geoms** — `Line`, `Scatter`, `Bar`, `Area`, `Step`, `Boxplot`, `Rect`, and
+  the distribution marks `Histogram`, `Violin`, `Ridgeline`, `Hexbin`,
+  `Beeswarm`, `ECDF` and `Trend`. Geoms know *what* their shape is, never *how*
+  it's rendered.
 - **Groups and position adjustments** — a layer over a long table is N series,
   split by `geom.GroupBy` and painted from a discrete colour scale; `Stack`,
   `Dodge` and the streamgraph offsets are defined over those groups. The
   offsets are derived in `Train`, because the axis has to describe the totals
   ([ADR 0019](docs/adr/0019-position-adjustments.md)).
-- **Stats / transforms** — `Bin` (histogram), `Density` (KDE), `Smooth`
-  (regression/loess), aggregation. A histogram is `geom.Bar` + `stat.Bin`.
+- **Stats / transforms** — `Bin` (histogram), `KDE` (density with Silverman's
+  bandwidth rule), `Loess` (locally weighted regression), `ECDF`, `Hex`
+  (hexagonal binning) and the decimation family. Numbers in, numbers out, each
+  with an `Append` form and a determinism test. A distribution stat runs in
+  `Train` and the axis is trained on its output, because the summary is what the
+  axis has to describe ([ADR 0028](docs/adr/0028-distribution-stats.md)).
 - **Facets** — `facet.Wrap` / `facet.Grid`, shared or free scales.
-- **Guides** — legends, colorbars, axes as positionable elements.
+- **Aesthetic channels** — position, colour (`geom.ColorBy` through a
+  `ColorScale`) and size (`geom.SizeBy` through a `scale.SizeScale`, mapped by
+  area rather than by radius, which is the bubble chart).
+- **Guides** — legends, colorbars, size keys, axes as positionable elements. The
+  three keys are one ordered column with one stacking rule
+  ([ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md)).
 - **Annotations** — reference lines, spans, callouts, arrows.
 - **Theme** — global tokens (fonts, palettes, grid styling, dark/light), applied
   as a resolved layer.
@@ -903,22 +914,49 @@ stage made expressible and nothing spelled:
   coord are written down: that the angular scale must not be niced, and that
   the hole is where the radial scale starts.
 
-### v0.9 — Distributions, density and size
+### v0.9 — Distributions, density and size — **shipped**
 
 - The stats [§8](#8-model-layer-gog-lite) has promised since v0.1 and `stat/`
-  has never carried: a 1-D `Bin`, KDE with a bandwidth rule, hexbin, ECDF and
-  loess smoothing. Each a pure function with an `Append` form, each with a
-  determinism test — a reduction that reached for `math/rand` would make a
-  parallel render stop being byte-identical to a serial one.
-- The charts they carry: histogram, violin, hexbin, ridgeline, beeswarm, trend
-  lines.
-- A size channel, and the bubble chart. Mapped by **area**, not radius, and
-  guided by a third guide kind — which is the moment the guide column in
-  `layout` is generalised once rather than extended twice.
+  had never carried: a 1-D `Bin`, `KDE` with a bandwidth rule, `Hex`, `ECDF` and
+  `Loess`. Each a pure function with an `Append` form, each with a determinism
+  test — a reduction that reached for `math/rand` would make a parallel render
+  stop being byte-identical to a serial one.
+- The charts they carry: `geom.Histogram`, `geom.Violin`, `geom.Hexbin`,
+  `geom.Ridgeline`, `geom.Beeswarm`, `geom.ECDF` and `geom.Trend`.
+- A size channel, and the bubble chart. `geom.SizeBy` reads a column through
+  `scale.Size`, mapped by **area**, not radius, and guided by a third guide kind
+  — which was the moment the guide column in `layout` was generalised once
+  rather than extended twice ([ADR 0027](docs/adr/0027-size-channel-and-the-guide-column.md)).
 - *DoD:* every stat is a pure function of its input under test; violin and
   ridgeline compose with v0.7's groups; a bubble chart's size key sits beside a
   legend and a colourbar without overlap, and doubling a value multiplies the
-  diameter by the square root of two, under test.
+  diameter by the square root of two, under test. ✔
+
+The line that had to be drawn twice is where a stat runs
+([ADR 0028](docs/adr/0028-distribution-stats.md)). ADR 0011 puts decimation in
+`Build`, in device space, on the rule that what a chart's axis reports must not
+depend on how wide the chart is. A distribution stat is the same rule pointing
+the other way: a histogram's Y axis holds counts that appear nowhere in the
+table, an ECDF's holds a fraction it computed, and a trend's fit reaches values
+no row has — so the summary *is* what the axis has to describe, and it is
+computed in `Train`. Two marks are the exception because what they compute is a
+length on screen rather than a value: a hexbin bins over the plot rectangle,
+because a hexagon laid out in data space comes out stretched by the panel's
+aspect ratio, and a beeswarm places its marks against a marker's width.
+
+Not in v0.9, in case they look like oversights. A **hexbin has no colourbar**:
+its counts are not known until the plot rectangle is, and the guide column is
+measured before that — the same ordering ADR 0011 describes, reached from the
+other side. A **histogram ignores `GroupBy`**, because two overlapping
+histograms hide each other exactly where the comparison is; `Violin`,
+`Ridgeline` and `ECDF` are the three marks that answer that question without
+overplotting, and each of them takes the series column. A **sized layer draws
+circles rather than markers**, because `ir.Backend.Markers` carries one style per
+call and a per-row size would be a call per row — the same refusal
+[ADR 0007](docs/adr/0007-per-mark-colour.md) makes about colour, and the same
+answer, with better hit-testing as a bonus. And **`stat` still does no sorting**:
+`Quantile`, `ECDF` and `Loess` take ordered columns, because sorting means a
+buffer and the geom already keeps one.
 
 ### v1.0 — Stable & complete enough
 
@@ -942,7 +980,7 @@ stage made expressible and nothing spelled:
   hit-testing — and therefore the only one that moves without cost. The data
   layer does not change to accommodate it: an edge list is two string columns
   and a value column, which `data.Source` already returns.
-- More stats: contour, and whatever v0.9 left.
+- More stats: contour, and a QQ plot over the ECDF v0.9 shipped.
 - Animations / transitions (gg retained-scene + damage tracking make this cheap).
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.
@@ -985,11 +1023,14 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
                              # + Origin, for a time domain that keeps its
                              # nanoseconds at any zoom                    (v0.6)
                              # + Qualitative, the discrete colour scale   (v0.7)
+                             # + Size, the area-mapped size channel       (v0.9)
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
                              # + rect, groups and the position adjustments (v0.7)
+                             # + histogram, violin, ridgeline, hexbin,
+                             #   beeswarm, ecdf, trend, and SizeBy        (v0.9)
   stat/                      # LTTB, min/max, density binning              (v0.4)
                              # + StackOffsets, the streamgraph baselines   (v0.7)
-                             # (smooth and aggregate are still to come)
+                             # + Bin, KDE, ECDF, Loess, Hex               (v0.9)
   coord/                     # cartesian + polar (the pluggable stage)   (v0.8)
   layout/                    # panel-grid constraint solver               (v0.3)
   render/                    # model -> IR lowering, + Observer           (v0.1)

@@ -32,6 +32,23 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		return "area", "", nil
 	case geom.MarkBoxplot:
 		return "boxplot", "", nil
+	case geom.MarkHistogram:
+		// Vega-Lite reaches a histogram with a bar mark and a `bin` transform on
+		// the channel. refract bins in the layer, so the mark carries the name
+		// and the bin properties travel with it — see [Mark.Bins].
+		return "histogram", "", nil
+	case geom.MarkViolin:
+		return "violin", "", nil
+	case geom.MarkRidgeline:
+		return "ridgeline", "", nil
+	case geom.MarkHexbin:
+		return "hexbin", "", nil
+	case geom.MarkBeeswarm:
+		return "beeswarm", "", nil
+	case geom.MarkECDF:
+		return "ecdf", "", nil
+	case geom.MarkTrend:
+		return "trend", "", nil
 	case geom.MarkHLine:
 		return "rule", "horizontal", nil
 	case geom.MarkVLine:
@@ -76,6 +93,20 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		return geom.MarkArea, nil
 	case "boxplot":
 		return geom.MarkBoxplot, nil
+	case "histogram":
+		return geom.MarkHistogram, nil
+	case "violin":
+		return geom.MarkViolin, nil
+	case "ridgeline":
+		return geom.MarkRidgeline, nil
+	case "hexbin":
+		return geom.MarkHexbin, nil
+	case "beeswarm":
+		return geom.MarkBeeswarm, nil
+	case "ecdf":
+		return geom.MarkECDF, nil
+	case "trend":
+		return geom.MarkTrend, nil
 	case "rule":
 		switch m.Orient {
 		case "horizontal":
@@ -107,7 +138,7 @@ func hasField(enc *Encoding) bool {
 	if enc == nil {
 		return false
 	}
-	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode} {
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size} {
 		if ch != nil && ch.Field != "" {
 			return true
 		}
@@ -236,6 +267,34 @@ func markerShape(name string) ir.Marker {
 		}
 	}
 	return ir.MarkerCircle
+}
+
+// Trend fits. "loess" is the name the statistics literature uses and Vega
+// spells the same way; "linear" is ordinary least squares.
+var smoothings = []struct {
+	method geom.Smoothing
+	name   string
+}{
+	{geom.Loess, "loess"},
+	{geom.LinearFit, "linear"},
+}
+
+func smoothName(m geom.Smoothing) string {
+	for _, x := range smoothings {
+		if x.method == m {
+			return x.name
+		}
+	}
+	return "loess"
+}
+
+func smoothing(name string) geom.Smoothing {
+	for _, x := range smoothings {
+		if x.name == name {
+			return x.method
+		}
+	}
+	return geom.Loess
 }
 
 // Missing-data policies.

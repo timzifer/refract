@@ -425,7 +425,8 @@ func TestALayerThatCannotDescribeItselfIsAnError(t *testing.T) {
 }
 
 func TestAnUnknownMarkIsAnError(t *testing.T) {
-	s := spec.Spec{Layer: []spec.Layer{{Mark: spec.Mark{Type: "violin"}}}}
+	// "violin" used to be the example here, until v0.9 made it a mark.
+	s := spec.Spec{Layer: []spec.Layer{{Mark: spec.Mark{Type: "sunburst"}}}}
 	if _, err := s.Chart(); err == nil {
 		t.Fatal("an unknown mark was accepted")
 	}

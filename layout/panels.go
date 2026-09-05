@@ -31,9 +31,8 @@ type Grid struct {
 	// Panels are the panels, in any order. A cell with no panel is a hole.
 	Panels []Panel
 
-	// LegendLabels and Colorbars are the guides for the grid as a whole.
-	LegendLabels []string
-	Colorbars    []Colorbar
+	// Guides are the keys beside the grid as a whole, in stacking order.
+	Guides []Guide
 }
 
 // Panel is one Cartesian area within a grid.
@@ -74,9 +73,9 @@ type GridResult struct {
 	// anticlockwise.
 	Title, XTitle, YTitle ir.Point
 
-	// Legend and Colorbars are the guide boxes, as in [Result].
-	Legend    ir.Rect
-	Colorbars []ir.Rect
+	// Guides are the guide boxes, one per entry in Grid.Guides and in the same
+	// order, as in [Result].
+	Guides []ir.Rect
 
 	// TickLabelPad is copied from the theme so the renderer does not re-derive
 	// it.
@@ -156,7 +155,7 @@ func Panels(g Grid, m Measurer) GridResult {
 	usableH := regionBottom - regionTop
 	panelH := (usableH - sum(rowGutter) - sum(stripH) - float32(g.Rows-1)*th.PanelGap) / float32(g.Rows)
 
-	guides := measureGuides(th, g.LegendLabels, g.Colorbars, m, panelH*float32(g.Rows))
+	guides := measureGuides(th, g.Guides, m, panelH*float32(g.Rows))
 
 	var guideW float32
 	for _, gd := range guides {
@@ -252,7 +251,7 @@ func Panels(g Grid, m Measurer) GridResult {
 		r.YTitle = ir.Point{X: area.Min.X + mm.Ascent, Y: (span.Min.Y + span.Max.Y) / 2}
 	}
 
-	r.Legend, r.Colorbars = placeGuides(guides, span, th)
+	r.Guides = placeGuides(guides, span, th)
 	return r
 }
 

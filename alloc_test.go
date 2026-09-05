@@ -252,6 +252,50 @@ func benchmarkBrokenRing(b *testing.B, rows int) {
 func BenchmarkBrokenRing1k(b *testing.B)   { benchmarkBrokenRing(b, 1_000) }
 func BenchmarkBrokenRing100k(b *testing.B) { benchmarkBrokenRing(b, 100_000) }
 
+// bubbleCloud is the v0.9 data path: a scatter whose size comes from a column,
+// so every mark is a circle collected into a path and the marks are ordered
+// largest first before they are emitted.
+//
+// It is worth measuring because it is the one path that *sorts* per frame. The
+// sort is over the scratch's own index list and in place, so a hundred times
+// the rows must still cost what a thousand cost.
+func bubbleCloud(n int) *refract.Plot {
+	x := make([]float64, n)
+	y := make([]float64, n)
+	size := make([]float64, n)
+	for i := range n {
+		x[i] = float64(i%997) / 997
+		y[i] = math.Sin(float64(i) / 31)
+		size[i] = float64(i%64) + 1
+	}
+	src := refract.Float64Columns(map[string][]float64{"x": x, "y": y, "n": size})
+	p := refract.New(refract.Size(800, 500))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Scatter(src, geom.X("x"), geom.Y("y"),
+		geom.SizeBy("n", scale.Size())))
+	return p
+}
+
+func benchmarkBubbles(b *testing.B, rows int) {
+	onOnePGate(b)
+	p := bubbleCloud(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkBubbles1k(b *testing.B)   { benchmarkBubbles(b, 1_000) }
+func BenchmarkBubbles100k(b *testing.B) { benchmarkBubbles(b, 100_000) }
+
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }
 func BenchmarkFrame1M(b *testing.B)   { benchmarkFrame(b, 1_000_000) }

@@ -97,7 +97,9 @@ func TestFromDescNeedsASource(t *testing.T) {
 }
 
 func TestFromDescRejectsAnUnknownMark(t *testing.T) {
-	if _, err := FromDesc(Desc{Mark: "hexbin", Source: testSource()}); err == nil {
+	// "hexbin" used to be the example here, until v0.9 made it a mark. Anything
+	// this package genuinely has no constructor for will do.
+	if _, err := FromDesc(Desc{Mark: "sunburst", Source: testSource()}); err == nil {
 		t.Error("an unknown mark was built")
 	}
 }

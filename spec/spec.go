@@ -52,14 +52,15 @@ import (
 // version of it; nothing fetches it, and a Vega-Lite consumer that checks the
 // field will refuse the document, which is the honest outcome.
 //
-// It moves when the dialect gains or changes a field: v0.8 added the top-level
-// `coord`, v0.7 added the series
+// It moves when the dialect gains or changes a field: v0.9 added the
+// distribution marks with their own properties and the size channel, v0.8 added
+// the top-level `coord`, v0.7 added the series
 // channel (`detail`), the position adjustments (`stack`, `dodge`, `order`) and
 // the data-driven rect, and v0.6 added a time scale's `origin`. Reading is not
 // gated on it — a document written by an
 // older refract reads fine, and refusing one because of a version string would
 // make the field a trap rather than a label.
-const Schema = "https://github.com/timzifer/refract/spec/v0.8"
+const Schema = "https://github.com/timzifer/refract/spec/v0.9"
 
 // Chart is the part of a plot that survives being written down: everything
 // [Of] reads and everything [Spec.Chart] returns.
@@ -170,6 +171,30 @@ type Mark struct {
 	// what makes a radar a contour. Vega-Lite has no equivalent, so no name is
 	// borrowed for it.
 	Closed bool `json:"closed,omitempty"`
+
+	// The distribution marks' own properties. Vega-Lite reaches most of this
+	// through transforms — `bin`, `density`, `loess`, `regression` — which
+	// refract runs inside the layer, so the numbers that configure them travel
+	// with the mark. See docs/adr/0014-json-spec.md on spelling a difference out
+	// rather than disguising it.
+	//
+	// Bins is how many bins a histogram divides its column into, and BinStart
+	// and BinEnd pin the interval it covers.
+	Bins     int      `json:"bins,omitempty"`
+	BinStart *float64 `json:"binStart,omitempty"`
+	BinEnd   *float64 `json:"binEnd,omitempty"`
+	// Bandwidth is the kernel width a violin or a ridgeline estimates with, in
+	// the data's own units. Vega-Lite's density transform spells it the same
+	// way.
+	Bandwidth float64 `json:"bandwidth,omitempty"`
+	// Span is the fraction of the rows one local fit of a trend sees, and
+	// Method how it fits: "loess" or "linear". Vega-Lite's loess transform
+	// spells the first the same way.
+	Span   float64 `json:"span,omitempty"`
+	Method string  `json:"method,omitempty"`
+	// Overlap is how far a ridgeline's tallest ridge rises, in slots of its
+	// categorical axis.
+	Overlap float64 `json:"overlap,omitempty"`
 }
 
 // Coord is the coordinate system the chart is drawn in.
@@ -241,6 +266,12 @@ type Encoding struct {
 	// which is how one slice leaves a donut and the rest stay in it. The
 	// constant form is the mark's own `explode` property.
 	Explode *Channel `json:"explode,omitempty"`
+
+	// Size is the column a mark takes its size from — the bubble chart's third
+	// dimension. Vega-Lite has the same channel with the same name; what is
+	// refract's is that the scale behind it is read as an *area*, which the
+	// scale's `type: "size"` says.
+	Size *Channel `json:"size,omitempty"`
 }
 
 // Channel is one encoding: a column, or a literal value, and the scale behind
@@ -277,6 +308,17 @@ type Scale struct {
 	Scheme   string   `json:"scheme,omitempty"`
 	Range    []string `json:"range,omitempty"`
 	Reverse  bool     `json:"reverse,omitempty"`
+
+	// SizeRange is the diameters a size scale's domain maps onto, in device
+	// units, when the chart pinned them rather than leaving them to the theme.
+	// Vega-Lite writes a size scale's range as a plain `range` of two numbers;
+	// this is a separate field because `range` here is already the list of
+	// colours a colour scale carries.
+	SizeRange []float32 `json:"sizeRange,omitempty"`
+	// SizeZero is the value a size scale gives its smallest mark, when it is
+	// not zero. Anchoring anywhere but zero stops the drawing being a
+	// proportion, so it is written out rather than assumed.
+	SizeZero *float64 `json:"sizeZero,omitempty"`
 
 	// MinorTicks, Center, Undefined, TimeZone and Origin are refract's.
 	MinorTicks *bool    `json:"minorTicks,omitempty"`

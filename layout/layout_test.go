@@ -89,26 +89,26 @@ func TestAxisTitlesTakeRoom(t *testing.T) {
 func TestLegendReservesSpaceToTheRight(t *testing.T) {
 	m := irtest.New()
 	c := base()
-	c.LegendLabels = []string{"alpha", "beta"}
+	c.Guides = []layout.Guide{{Kind: layout.GuideLegend, Labels: []string{"alpha", "beta"}}}
 	got := layout.Compute(c, m)
 
-	if got.Legend.Empty() {
+	if len(got.Guides) != 1 || got.Guides[0].Empty() {
 		t.Fatal("legend rectangle is empty")
 	}
-	if got.Legend.Min.X < got.Plot.Max.X {
-		t.Errorf("legend %v overlaps the plot area %v", got.Legend, got.Plot)
+	if got.Guides[0].Min.X < got.Plot.Max.X {
+		t.Errorf("legend %v overlaps the plot area %v", got.Guides[0], got.Plot)
 	}
-	if got.Legend.Max.X > 800 {
-		t.Errorf("legend %v runs off the canvas", got.Legend)
+	if got.Guides[0].Max.X > 800 {
+		t.Errorf("legend %v runs off the canvas", got.Guides[0])
 	}
 }
 
 func TestLongerLegendLabelsWidenTheReservation(t *testing.T) {
 	m := irtest.New()
 	short := base()
-	short.LegendLabels = []string{"a"}
+	short.Guides = []layout.Guide{{Kind: layout.GuideLegend, Labels: []string{"a"}}}
 	long := base()
-	long.LegendLabels = []string{"a very long series name indeed"}
+	long.Guides = []layout.Guide{{Kind: layout.GuideLegend, Labels: []string{"a very long series name indeed"}}}
 
 	if layout.Compute(long, m).Plot.Max.X >= layout.Compute(short, m).Plot.Max.X {
 		t.Fatal("a longer legend label must shrink the plot area")

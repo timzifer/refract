@@ -177,21 +177,20 @@ func Draw(b ir.Backend, c Chart) error {
 	//    measurePanels gives every scale a provisional unit range, and the
 	//    real one is set below once the rectangles exist. The guides are
 	//    collected here too, because how wide they are decides how wide the
-	//    panels can be.
-	legend := legendEntries(c, panels, ir.Rect{})
-	guides := panelColorGuides(panels)
+	//    panels can be — and because collecting a size key is what gives its
+	//    scale the diameters the theme asks for, which the marks then read.
+	guides := chartGuides(c, panels, th, ir.Rect{})
 
 	lay := layout.Panels(layout.Grid{
-		Canvas:       canvas,
-		Theme:        th,
-		Title:        c.Title,
-		XTitle:       c.XTitle,
-		YTitle:       c.YTitle,
-		Rows:         rows,
-		Cols:         cols,
-		Panels:       measurePanels(panels, th),
-		LegendLabels: labelsOfEntries(legend),
-		Colorbars:    colorbarLabels(guides, th),
+		Canvas: canvas,
+		Theme:  th,
+		Title:  c.Title,
+		XTitle: c.XTitle,
+		YTitle: c.YTitle,
+		Rows:   rows,
+		Cols:   cols,
+		Panels: measurePanels(panels, th),
+		Guides: layoutGuides(guides, th),
 	}, b)
 
 	// 3. Paint. Furniture for every panel first, then the titles, then the
@@ -226,15 +225,19 @@ func Draw(b ir.Backend, c Chart) error {
 		return err
 	}
 
-	if !lay.Legend.Empty() {
-		drawLegend(b, lay.Legend, th, legendEntries(c, panels, lay.Areas[0]))
-	}
 	// The solver reserves one box per guide, in order, so these are parallel.
-	for i, box := range lay.Colorbars {
+	// The legend is rebuilt against the real plot rectangle: an entry can
+	// depend on where the layer was drawn, and the provisional pass above had
+	// no rectangle to give it.
+	for i, box := range lay.Guides {
 		if i >= len(guides) {
 			break
 		}
-		drawColorbar(b, box, th, guides[i])
+		g := guides[i]
+		if g.kind == layout.GuideLegend {
+			g.entries = legendEntries(c, panels, lay.Areas[0])
+		}
+		drawGuide(b, box, th, g)
 	}
 	return nil
 }
@@ -318,17 +321,6 @@ func measurePanels(panels []Panel, th theme.Theme) []layout.Panel {
 	return out
 }
 
-// panelColorGuides collects the colour guides across every panel. Faceted
-// panels share their colour scale, so the merge in colorGuides reduces them to
-// the one bar that describes all of them.
-func panelColorGuides(panels []Panel) []geom.ColorGuide {
-	var all []geom.Geom
-	for _, p := range panels {
-		all = append(all, p.Layers...)
-	}
-	return colorGuides(all)
-}
-
 // cullEps is the tolerance for "is this tick inside the plot area".
 //
 // Tick positions come out of a float32 mapping, so a tick sitting exactly on
@@ -344,14 +336,6 @@ func labelsOf(ticks []scale.Tick) []string {
 		if t.Label != "" {
 			out = append(out, t.Label)
 		}
-	}
-	return out
-}
-
-func labelsOfEntries(es []geom.LegendEntry) []string {
-	out := make([]string, 0, len(es))
-	for _, e := range es {
-		out = append(out, e.Label)
 	}
 	return out
 }

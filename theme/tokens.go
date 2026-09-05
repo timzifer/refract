@@ -128,6 +128,13 @@ func Build(t Tokens) Theme {
 		ColorbarBorder:    t.Line,
 		ColorbarTickCount: 5,
 
+		// A bubble the size of eight spacing units is large enough that the
+		// biggest value in a cloud is unmistakable and small enough that it
+		// does not swallow its neighbours; three samples are what a reader can
+		// interpolate between without the key becoming a chart of its own.
+		BubbleSize:   8 * u,
+		SizeKeyCount: 3,
+
 		AnnotationColor:   t.InkSubtle,
 		AnnotationWidth:   1,
 		AnnotationDash:    []float32{4, 3},

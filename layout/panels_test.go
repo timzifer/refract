@@ -189,31 +189,65 @@ func TestTitlesAreCentredOnThePanelsRatherThanTheCanvas(t *testing.T) {
 func TestGuidesTakeRoomFromThePanels(t *testing.T) {
 	plain := layout.Panels(grid(1, 1, numbered(0, 0)), irtest.New())
 	g := grid(1, 1, numbered(0, 0))
-	g.LegendLabels = []string{"a series with a long name"}
+	g.Guides = []layout.Guide{{Kind: layout.GuideLegend, Labels: []string{"a series with a long name"}}}
 	withLegend := layout.Panels(g, irtest.New())
 
 	if withLegend.Areas[0].Max.X >= plain.Areas[0].Max.X {
 		t.Error("the legend took no room from the panel")
 	}
-	if withLegend.Legend.Empty() {
+	if len(withLegend.Guides) != 1 || withLegend.Guides[0].Empty() {
 		t.Error("no legend box was reserved")
 	}
 }
 
-func TestColorbarsStackUnderTheLegend(t *testing.T) {
+// The three guide kinds share one column, one stacking rule and one result
+// slice. That is the v0.9 generalisation, and this is what says a third kind
+// did not need a third field: a chart with all of them lays them out in order,
+// aligned, without overlap.
+func TestEveryGuideKindStacksInOneColumn(t *testing.T) {
 	g := grid(1, 1, numbered(0, 0))
-	g.LegendLabels = []string{"series"}
-	g.Colorbars = []layout.Colorbar{{Title: "value", Ticks: []string{"0", "10"}}}
+	g.Guides = []layout.Guide{
+		{Kind: layout.GuideLegend, Labels: []string{"series"}},
+		{Kind: layout.GuideColorbar, Title: "value", Labels: []string{"0", "10"}},
+		{Kind: layout.GuideSize, Title: "population", Labels: []string{"1M", "10M"}, Sizes: []float32{8, 32}},
+	}
 	got := layout.Panels(g, irtest.New())
 
-	if len(got.Colorbars) != 1 {
-		t.Fatalf("got %d colourbar boxes, want 1", len(got.Colorbars))
+	if len(got.Guides) != 3 {
+		t.Fatalf("got %d guide boxes, want one per guide", len(got.Guides))
 	}
-	if got.Colorbars[0].Min.Y < got.Legend.Max.Y {
-		t.Errorf("the colourbar at %v overlaps the legend at %v", got.Colorbars[0], got.Legend)
+	for i, box := range got.Guides {
+		if box.Empty() {
+			t.Fatalf("guide %d was given no room", i)
+		}
+		if box.Min.X != got.Guides[0].Min.X {
+			t.Errorf("guide %d starts at x=%v and the first at x=%v; the guides are not in one column",
+				i, box.Min.X, got.Guides[0].Min.X)
+		}
+		if i > 0 && box.Min.Y < got.Guides[i-1].Max.Y {
+			t.Errorf("guide %d at %v overlaps guide %d at %v", i, box, i-1, got.Guides[i-1])
+		}
 	}
-	if got.Colorbars[0].Min.X != got.Legend.Min.X {
-		t.Error("the guides are not in one column")
+	if got.Guides[2].Max.X <= got.Areas[0].Max.X {
+		t.Error("the size key is not beside the panel")
+	}
+}
+
+// A size key's rows are as tall as their marks, so a key of large bubbles is
+// taller than a key of small ones. Measuring it as text would clip them.
+func TestALargerSizeKeyTakesMoreRoom(t *testing.T) {
+	small := grid(1, 1, numbered(0, 0))
+	small.Guides = []layout.Guide{{Kind: layout.GuideSize, Labels: []string{"a", "b"}, Sizes: []float32{4, 6}}}
+	large := grid(1, 1, numbered(0, 0))
+	large.Guides = []layout.Guide{{Kind: layout.GuideSize, Labels: []string{"a", "b"}, Sizes: []float32{40, 60}}}
+
+	a := layout.Panels(small, irtest.New()).Guides[0]
+	b := layout.Panels(large, irtest.New()).Guides[0]
+	if b.Dy() <= a.Dy() {
+		t.Errorf("a key of 40 and 60 pixel marks is %v tall and one of 4 and 6 is %v", b.Dy(), a.Dy())
+	}
+	if b.Dx() <= a.Dx() {
+		t.Errorf("a key of wider marks is %v wide and one of narrow marks %v", b.Dx(), a.Dx())
 	}
 }
 

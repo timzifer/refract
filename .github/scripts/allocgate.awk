@@ -112,6 +112,23 @@ END {
 	# That is a cost per *tick*, which is what an axis is allowed to cost.
 	flat("BenchmarkBrokenRing1k", "BenchmarkBrokenRing100k", 12)
 
+	# The size channel, added in v0.9. A sized layer collects a diameter per
+	# mark, orders the marks largest first and emits them as subpaths of one
+	# path per colour. The ordering is a sort — the only one on the drawing
+	# path — and it runs in place over the scratch's own index list, so a sort
+	# that allocated its own permutation would show up here and nowhere else.
+	#
+	# The slack is wider than the others because this frame is large enough to
+	# provoke a pool miss. A hundred thousand bubbles is a path of 1.3 million
+	# points — about 15 MB — so a collection runs between frames and sync.Pool
+	# is emptied by one; the frame that finds an empty pool refills the
+	# scratch's buffers, which is a handful of allocations that has nothing to
+	# do with the rows. The steady-state gap is four, which
+	# TestASizedLayerDoesNotAllocatePerPoint pins at a slack of eight; twelve
+	# here leaves room for the miss and still fails a per-row allocation, which
+	# at a hundred times the rows would be thousands rather than nine.
+	flat("BenchmarkBubbles1k", "BenchmarkBubbles100k", 12)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

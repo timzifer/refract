@@ -13,7 +13,7 @@ func TestGridCountsEveryPointOnce(t *testing.T) {
 	g.Reset(4, 2, 0, 0, 8, 4)
 	xs := []float64{0, 1, 2, 3, 4, 5, 6, 7}
 	ys := []float64{0, 0, 0, 0, 3, 3, 3, 3}
-	stat.Bin(&g, xs, ys)
+	stat.BinGrid(&g, xs, ys)
 	if g.N != 8 {
 		t.Fatalf("binned %d of 8 points", g.N)
 	}
@@ -173,6 +173,6 @@ func BenchmarkBin(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		g.Reset(800, 500, 0, 0, 800, 500)
-		stat.Bin(&g, xs, ys)
+		stat.BinGrid(&g, xs, ys)
 	}
 }

@@ -99,12 +99,16 @@ func (g *Grid) At(col, row int) uint32 {
 	return g.Counts[row*g.Cols+col]
 }
 
-// Bin counts every row of xs against ys into g, returning it.
+// BinGrid counts every row of xs against ys into g, returning it.
 //
 // The coordinates are whatever g's rectangle is in — device space for a geom
 // binning what it was about to draw, data space for a caller aggregating
 // before it builds a chart.
-func Bin[F Float](g *Grid, xs, ys []F) *Grid {
+//
+// It is BinGrid rather than Bin because [Bin] is the one-dimensional
+// histogram, which is what "bin" means without a qualifier. The three binners
+// are named after what they fill: BinGrid, [BinHex] and Bin itself.
+func BinGrid[F Float](g *Grid, xs, ys []F) *Grid {
 	n := min(len(xs), len(ys))
 	for i := range n {
 		g.Add(float64(xs[i]), float64(ys[i]))
@@ -127,14 +131,18 @@ const (
 // Fraction maps a count onto [0, 1] against the busiest cell. An empty cell is
 // 0 under every scaling, which is what keeps the background of a density
 // raster empty rather than faintly painted.
-func (g *Grid) Fraction(count uint32, s Scaling) float64 {
-	if count == 0 || g.Max == 0 {
+func (g *Grid) Fraction(count uint32, s Scaling) float64 { return fraction(count, g.Max, s) }
+
+// fraction is the shared implementation, so that a square cell and a hexagonal
+// one are shaded by the same rule. See [Hex.Fraction].
+func fraction(count, maxCount uint32, s Scaling) float64 {
+	if count == 0 || maxCount == 0 {
 		return 0
 	}
-	if count >= g.Max {
+	if count >= maxCount {
 		return 1
 	}
-	c, m := float64(count), float64(g.Max)
+	c, m := float64(count), float64(maxCount)
 	switch s {
 	case Linear:
 		return c / m

@@ -77,9 +77,14 @@ func Decimate(d Decimation) Option { return func(c *config) { c.decimate = d } }
 // [DensityRaster], whose resolution is the plot area itself.
 func Budget(n int) Option { return func(c *config) { c.budget = n } }
 
-// DensityCells sets the size of one density-raster cell in device pixels. The
-// default is 1: one cell per pixel, which is as fine as the output can show.
-// Larger cells trade resolution for a smaller image and a smoother picture.
+// DensityCells sets the size of one cell in device pixels — the side of a
+// density-raster cell, or the circumradius of a [Hexbin]'s hexagon.
+//
+// The default is 1 for a raster: one cell per pixel, which is as fine as the
+// output can show, and larger cells trade resolution for a smaller image and a
+// smoother picture. A hexbin's default is [DefaultHexRadius] instead, because
+// its cells are marks rather than pixels and a lattice of one-pixel hexagons is
+// a raster with extra steps.
 func DensityCells(px float64) Option { return func(c *config) { c.cellSize = px } }
 
 // markShape is what a layer's marks are, which is what decides which reduction
@@ -216,6 +221,7 @@ type scratch struct {
 	gx    []float64 // one group's columns, gathered out of the table
 	gy    []float64
 	gz    []float64
+	gsz   []float64
 	grows []int
 	dx    []float32 // mapped columns, which are device columns under Cartesian
 	dy    []float32
@@ -226,6 +232,7 @@ type scratch struct {
 	sy    []float32
 	keep  []int
 	rows  []int
+	order []int
 	mrows []int // source rows behind the marks, when someone asked
 	irows []int // source rows of an interpolated series
 	pts   []ir.Point
@@ -233,13 +240,18 @@ type scratch struct {
 	rects []ir.Rect
 	edge  []ir.Point
 	cols  []ir.Color
+	sizes []float32
 	runs  []colorRun
+	iruns []indexRun
 	rruns []rectRun
 	gruns []groupRun
 	at    map[ir.Color]int
 	fill  ir.Path
 	line  ir.Path
 	grid  stat.Grid
+	hex   stat.Hex
+	cells []stat.Cell
+	verts []stat.Point
 	img   *image.NRGBA
 
 	// wantRows is whether this Build's caller asked which source row is behind
@@ -272,6 +284,17 @@ func grow[T any](buf []T, n int) []T {
 		return buf[:n]
 	}
 	return make([]T, n)
+}
+
+// marksIn is the identity list 0..n-1, out of the scratch's own buffer. It is
+// what a geom hands to a helper that reorders what it is given: the row list
+// the caller was just told about must not be permuted under it.
+func (sc *scratch) marksIn(n int) []int {
+	sc.order = grow(sc.order, n)
+	for i := range n {
+		sc.order[i] = i
+	}
+	return sc.order
 }
 
 // plottable marks the rows both scales have a position for, into the scratch's
@@ -360,6 +383,13 @@ func (sc *scratch) gather(s series, rows []int) series {
 			out.y2[i] = s.y2[r]
 		}
 		sc.gz = out.y2
+	}
+	if s.sz != nil {
+		out.sz = grow(sc.gsz, n)
+		for i, r := range rows {
+			out.sz[i] = s.sz[r]
+		}
+		sc.gsz = out.sz
 	}
 	if sc.wantRows {
 		out.rows = grow(sc.grows, n)

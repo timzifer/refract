@@ -97,14 +97,16 @@ func TestPlotAreaAgreesAcrossBackendsWithinKnownDrift(t *testing.T) {
 	svgB, ggB := measurers(t)
 
 	c := layout.Chart{
-		Canvas:       ir.R(0, 0, 640, 400),
-		Theme:        theme.Light,
-		Title:        "Signal",
-		XTitle:       "time",
-		YTitle:       "amplitude",
-		XLabels:      []string{"09:00", "09:15", "09:30", "09:45"},
-		YLabels:      []string{"-1.0", "-0.5", "0.0", "0.5", "1.0"},
-		LegendLabels: []string{"measured", "modelled"},
+		Canvas:  ir.R(0, 0, 640, 400),
+		Theme:   theme.Light,
+		Title:   "Signal",
+		XTitle:  "time",
+		YTitle:  "amplitude",
+		XLabels: []string{"09:00", "09:15", "09:30", "09:45"},
+		YLabels: []string{"-1.0", "-0.5", "0.0", "0.5", "1.0"},
+		Guides: []layout.Guide{
+			{Kind: layout.GuideLegend, Labels: []string{"measured", "modelled"}},
+		},
 	}
 
 	a := layout.Compute(c, svgB)
@@ -117,7 +119,7 @@ func TestPlotAreaAgreesAcrossBackendsWithinKnownDrift(t *testing.T) {
 	}{
 		{"plot min", a.Plot.Min.X, a.Plot.Min.Y, b.Plot.Min.X, b.Plot.Min.Y},
 		{"plot max", a.Plot.Max.X, a.Plot.Max.Y, b.Plot.Max.X, b.Plot.Max.Y},
-		{"legend min", a.Legend.Min.X, a.Legend.Min.Y, b.Legend.Min.X, b.Legend.Min.Y},
+		{"legend min", a.Guides[0].Min.X, a.Guides[0].Min.Y, b.Guides[0].Min.X, b.Guides[0].Min.Y},
 	} {
 		if math.Abs(float64(cmp.x-cmp.x2)) > maxLayoutDrift || math.Abs(float64(cmp.y-cmp.y2)) > maxLayoutDrift {
 			t.Errorf("%s differs: svg (%v,%v), gg (%v,%v)", cmp.name, cmp.x, cmp.y, cmp.x2, cmp.y2)
