@@ -649,11 +649,16 @@ func eachGroup(sc *scratch, gs *groups, s series, fn func(seg series, group int)
 type groupRun struct {
 	group int
 	rects []ir.Rect
+	// offs is how far each of the run's cells is broken out of the middle of
+	// the coord, index for index with rects. It is empty for a layer that is
+	// not broken out — read it through [offsetAt].
+	offs []ir.Point
 }
 
 // groupRuns batches rects by series, in stacking order. rows[i] is the source
-// row behind rects[i], which is what says which series it belongs to.
-func (sc *scratch) groupRuns(gs *groups, rects []ir.Rect, rows []int) []groupRun {
+// row behind rects[i], which is what says which series it belongs to, and
+// offs[i] how far it is broken out — nil when nothing is.
+func (sc *scratch) groupRuns(gs *groups, rects []ir.Rect, rows []int, offs []ir.Point) []groupRun {
 	n := 0
 	for _, g := range gs.order {
 		if n == len(sc.gruns) {
@@ -661,10 +666,15 @@ func (sc *scratch) groupRuns(gs *groups, rects []ir.Rect, rows []int) []groupRun
 		}
 		sc.gruns[n].group = g
 		sc.gruns[n].rects = sc.gruns[n].rects[:0]
+		sc.gruns[n].offs = sc.gruns[n].offs[:0]
 		n++
 	}
 	for i, r := range rects {
-		sc.gruns[gs.rank[gs.of[rows[i]]]].rects = append(sc.gruns[gs.rank[gs.of[rows[i]]]].rects, r)
+		j := gs.rank[gs.of[rows[i]]]
+		sc.gruns[j].rects = append(sc.gruns[j].rects, r)
+		if offs != nil {
+			sc.gruns[j].offs = append(sc.gruns[j].offs, offs[i])
+		}
 	}
 	return sc.gruns[:n]
 }

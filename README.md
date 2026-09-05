@@ -134,6 +134,7 @@ picture here cannot drift away from the code that produced it.
 | ![Standard error curves labelled with typeset notation](docs/images/notation.png) | ![Revenue stacked by product, one layer over a long table](docs/images/stacked.png) |
 | ![Traffic by channel as a streamgraph](docs/images/stream.png) | ![Calls per hour as a heatmap of coloured cells](docs/images/heatmap.png) |
 | ![Browser share as a donut](docs/images/pie.png) | ![Two designs compared on five axes as a radar chart](docs/images/radar.png) |
+| ![Spend by team as a donut whose slices reach as far as each team used of its budget, with the team that went over broken out of the ring](docs/images/donut.png) | |
 
 ## What it does
 
@@ -171,7 +172,10 @@ picture here cannot drift away from the code that produced it.
   rose and gauge. A scale still maps a value into an interval — the coord
   decides what the interval means — so no geom and no scale changed shape for
   it, and the arcs are cubics because the IR has always had those
-  ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)). A slice's inner and outer
+  radius are columns like its share is (`geom.X` and `geom.X2`), and
+  `geom.ExplodeBy` breaks one out of the ring without changing what it says
+  ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
 - **Missing data** — one explicit policy per layer (gap, interpolate, error),
   covering both `NaN`/`Inf` and values a scale has no position for, such as zero
   on a log axis.
@@ -315,6 +319,41 @@ closes into a full circle because a stacked domain ends at the total — which i
 why neither scale is niced — and the hole is where the radial scale starts, so
 it is an annulus rather than a circle of background painted over the middle.
 
+### A slice's radii are dimensions, and a slice can leave the ring
+
+The donut above carries one number per slice: its share, which is the angle.
+Two more are already there for the taking, because the radial axis is an axis
+like any other. `geom.X` and `geom.X2` name a mark's two edges on it — the pair
+a gantt bar has used since v0.7 — so a slice starts and stops where its row
+says:
+
+```go
+p := refract.New(refract.Coord(coord.Pie(coord.Radius(0.95))), refract.Theme(bare))
+p.X(scale.Linear(scale.Domain(0, 1)))   // the radius: 1 is the whole budget
+p.Y(scale.Linear())                     // the angle: the stacked share
+p.Add(geom.Bar(src,
+    geom.X("floor"), geom.X2("used"),   // where the slice starts and stops
+    geom.Y("share"),                    // how far round it goes
+    geom.GroupBy("team"),
+    geom.ExplodeBy("pull"),             // and which of them leaves the ring
+    geom.ColorBy("team", scale.Qualitative(palette.OkabeIto))))
+```
+
+That is the figure above: three numbers per slice, one layer, no new mark.
+`coord.Pie()` and `coord.Donut(f)` are sugar for the polar recipe and describe
+themselves as the polar coord they are.
+
+`geom.Explode(f)` breaks every mark of a layer out of the middle by a fraction
+of the outer radius; `geom.ExplodeBy(col)` reads that fraction per row, which is
+what pulls one slice out and leaves the rest where they were. It is a
+displacement rather than a longer radius, and that is the whole point: the slice
+still says what it said, the gap shows where it came from, and a pointer follows
+it out — the path a geom hands the backend is the path that gets indexed, so a
+hit in the gap finds nothing. A coord with no middle to move away from —
+`coord.Cartesian` — ignores it rather than inventing a direction, which is why
+every golden file in the repository is unchanged by an option every geom now
+accepts ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
+
 A radar is `geom.Line` or `geom.Area` over an ordinal angular axis, with
 `coord.Chord()` for sides that are straight and `geom.Closed(true)` for a
 contour that comes back to the first axis. A rose, a wind rose and a gauge are
@@ -337,8 +376,8 @@ reports that it does not decimate rather than have a reduction measure something
 it was not designed for. Nothing polar is a big-data chart, so this costs
 nothing real.
 
-A runnable version of the donut, the radar, a wind rose and a gauge is in
-[`examples/polar`](examples/polar).
+A runnable version of the donut, the radar, a wind rose, a gauge and the
+broken-out donut above is in [`examples/polar`](examples/polar).
 
 ## Boxes bounded by their own row
 

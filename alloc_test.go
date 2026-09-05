@@ -93,6 +93,36 @@ func polarSignal(n int) *refract.Plot {
 	return p
 }
 
+// brokenRing is the v0.8 sugar's data path: a donut whose slices name their
+// own inner and outer radius and are broken out of the ring per row.
+//
+// It is the fifth thing worth measuring, because it is the one that collects
+// something per mark that is not a mark — a displacement — and carries it
+// through the batching. The buffer for it comes from the scratch pool like
+// every other, and this is what says so.
+func brokenRing(n int) *refract.Plot {
+	names := [...]string{"north", "south", "east", "west"}
+	var share, floor, reach, pull []float64
+	var series []string
+	for i := range n {
+		share = append(share, 1+math.Sin(float64(i)/97))
+		floor = append(floor, 0.4)
+		reach = append(reach, 0.6+0.4*math.Abs(math.Sin(float64(i)/31)))
+		pull = append(pull, 0.05*float64(i%3))
+		series = append(series, names[i%len(names)])
+	}
+	src := refract.NewTable().
+		Float64("share", share).Float64("floor", floor).
+		Float64("reach", reach).Float64("pull", pull).
+		String("s", series)
+	p := refract.New(refract.Size(800, 500), refract.Coord(coord.Donut(0.3)))
+	p.X(scale.Linear(scale.Domain(0, 1)))
+	p.Y(scale.Linear())
+	p.Add(geom.Bar(src, geom.X("floor"), geom.X2("reach"), geom.Y("share"),
+		geom.GroupBy("s"), geom.ExplodeBy("pull")))
+	return p
+}
+
 func facetedSignal(panels, rows int) *refract.Plot { return facetedSignalWith(panels, rows, true) }
 
 func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
@@ -167,6 +197,34 @@ func benchmarkPolar(b *testing.B, rows int) {
 // coord.Coord.Points, and the batch form is the reason that costs nothing.
 func BenchmarkPolar1k(b *testing.B)   { benchmarkPolar(b, 1_000) }
 func BenchmarkPolar100k(b *testing.B) { benchmarkPolar(b, 100_000) }
+
+func benchmarkBrokenRing(b *testing.B, rows int) {
+	p := brokenRing(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// The v0.8 sugar's path: a slice's radii come from two columns and its
+// break-out from a third, and the displacement of every mark is collected and
+// carried through the batching out of pooled memory.
+//
+// There is no hundred-thousand-slice twin of this on purpose. A ring that size
+// holds the biggest pooled buffers in the suite, and the garbage it leaves
+// empties the pool for every benchmark that runs after it in the same process
+// — which is measured as *their* allocations and would make gates that have
+// nothing to do with this one flake. The size comparison is made in
+// TestABrokenOutLayerDoesNotAllocatePerPoint, which averages twenty runs in a
+// process running nothing else.
+func BenchmarkBrokenRing1k(b *testing.B) { benchmarkBrokenRing(b, 1_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }

@@ -30,6 +30,10 @@ import (
 // A [ColorBy] column paints each cell separately, through a ramp or through a
 // qualitative palette; without one the whole layer is one colour.
 //
+// Under a polar coord a cell is an annular sector, so [Explode] and [ExplodeBy]
+// break one out of the middle exactly as they do a slice of a donut — the two
+// marks that draw a sector are the two that can leave one.
+//
 // Cells that share an edge are drawn as separate shapes and antialiased
 // separately, so a shared edge can show as a hairline of the background. That
 // is compositing rather than a gap in the data — the cells are exactly
@@ -41,11 +45,12 @@ func Rect(src data.Source, opts ...Option) Geom {
 }
 
 type rectGeom struct {
-	src data.Source
-	cfg config
-	s   series
-	x2  []float64
-	err error
+	src  data.Source
+	cfg  config
+	s    series
+	x2   []float64
+	pull []float64
+	err  error
 }
 
 func (g *rectGeom) Train(x, y scale.Scale) error {
@@ -62,6 +67,9 @@ func (g *rectGeom) Train(x, y scale.Scale) error {
 			g.err = errLength(g.cfg.xcol, g.cfg.x2col, len(g.s.x), len(g.x2))
 			return g.err
 		}
+	}
+	if g.pull, g.err = g.cfg.trainBreakOut(g.src, len(g.s.x)); g.err != nil {
+		return g.err
 	}
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
@@ -120,6 +128,7 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	defer sc.release()
 
 	cd := f.Coords()
+	brk := g.cfg.breaking(cd, g.pull)
 	ok := sc.plottable(g.s, f.X, f.Y)
 	halfX, halfY := g.halfWidth(g.s.x), g.halfWidth(g.s.y)
 
@@ -141,12 +150,16 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	if len(rects) == 0 {
 		return nil
 	}
+	offs := sc.offsets(brk, rects, rows)
 	// A cell's row is at its middle: a rect is bounded on both axes, so unlike
-	// a bar there is no end that means more than the other.
+	// a bar there is no end that means more than the other. A broken-out cell
+	// reports the middle it was moved to, because that is where its ink is.
 	if f.tracking() {
 		sc.pts = grow(sc.pts, len(rects))
 		for i, r := range rects {
-			sc.pts[i] = cd.Point((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+			p := cd.Point((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+			d := offsetAt(offs, i)
+			sc.pts[i] = ir.Point{X: p.X + d.X, Y: p.Y + d.Y}
 		}
 		f.Marks(sc.pts, sc.sourceRows(g.s, rows))
 	}
@@ -158,13 +171,13 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 	// call, so that a pointer lands on the cell rather than on the sheet — see
 	// docs/adr/0015-hit-testing.md.
 	if cols := sc.colorsFor(g.cfg, g.s, rows); cols != nil {
-		for _, run := range sc.groupByRect(rects, cols) {
+		for _, run := range sc.groupByRect(rects, cols, offs) {
 			if run.color.A == 0 {
 				continue
 			}
 			sc.fill.Reset()
-			for _, r := range run.rects {
-				area(&sc.fill, cd, r)
+			for j, r := range run.rects {
+				areaAt(&sc.fill, cd, r, offsetAt(run.offs, j))
 			}
 			b.FillPath(&sc.fill, ir.Solid(run.color), ir.NonZero)
 		}
@@ -174,8 +187,8 @@ func (g *rectGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 	sc.fill.Reset()
-	for _, r := range rects {
-		area(&sc.fill, cd, r)
+	for i, r := range rects {
+		areaAt(&sc.fill, cd, r, offsetAt(offs, i))
 	}
 	b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 	if outline && stroke.Visible() {

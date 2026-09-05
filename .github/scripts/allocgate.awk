@@ -103,6 +103,21 @@ END {
 	# has broken exactly this way once before. See docs/adr/0018.
 	flat("BenchmarkPolar1k", "BenchmarkPolar100k", 8)
 
+	# The v0.8 sugar: a donut whose slices name their own radii and are broken
+	# out of the ring per row. The displacement is collected per mark and
+	# carried through the colour and group batching, all of it out of the
+	# scratch pool.
+	#
+	# There is one size here rather than a pair, and it is a budget rather than
+	# a comparison. A ring of a hundred thousand annular sectors is the
+	# grouped layer's problem from BenchmarkStacked100k one size worse — 96,
+	# 137 and 348 allocations on three consecutive runs of the same code — and
+	# the garbage it leaves empties the pool for whatever benchmark runs next,
+	# so pinning it would make gates that have nothing to do with it flake as
+	# well. TestABrokenOutLayerDoesNotAllocatePerPoint is where the size
+	# comparison is made properly, averaging twenty runs in a quiet process.
+	atMost("BenchmarkBrokenRing1k", 128)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

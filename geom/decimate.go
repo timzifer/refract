@@ -229,6 +229,7 @@ type scratch struct {
 	mrows []int // source rows behind the marks, when someone asked
 	irows []int // source rows of an interpolated series
 	pts   []ir.Point
+	offs  []ir.Point // how far each mark is broken out of the middle
 	rects []ir.Rect
 	edge  []ir.Point
 	cols  []ir.Color

@@ -245,10 +245,15 @@ func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } 
 // radar, a rose or a gauge is — the marks are the ones that were already
 // there:
 //
-//	p := refract.New(refract.Coord(coord.Polar(coord.Theta(coord.FromY))))
+//	p := refract.New(refract.Coord(coord.Donut(0.45)))
 //	p.X(scale.Linear())
 //	p.Y(scale.Linear())
 //	p.Add(geom.Bar(src, geom.X("one"), geom.Y("share"), geom.GroupBy("browser")))
+//
+// [coord.Pie] and [coord.Donut] are that recipe named; neither scale is niced,
+// because a pie's ring closes on the stacked total. A slice can also name its
+// own inner and outer radius with [geom.X] and [geom.X2] and be broken out of
+// the ring with [geom.ExplodeBy], neither of which is a new mark.
 //
 // A coord belongs to the chart rather than to a panel, so the panels of a
 // facet all share it.

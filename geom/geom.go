@@ -117,13 +117,15 @@ type config struct {
 	y2col      string
 	label      string
 
-	groupCol string
-	widthCol string
-	stack    Stacking
-	stackSet bool
-	dodge    bool
-	dodgePad float64
-	order    Ordering
+	groupCol   string
+	widthCol   string
+	explode    float64
+	explodeCol string
+	stack      Stacking
+	stackSet   bool
+	dodge      bool
+	dodgePad   float64
+	order      Ordering
 
 	color      *ir.Color
 	width      float32
@@ -211,11 +213,28 @@ func Baseline(v float64) Option { return func(c *config) { c.baseline = v } }
 // per-row baseline.
 func Y2(col string) Option { return func(c *config) { c.y2col = col } }
 
-// X2 selects a second X column, giving a [Rect] its far edge: a gantt bar runs
-// from a start column to an end column, a candle from open to close.
+// X2 selects a second X column, giving a [Rect] or a [Bar] its far edge on
+// that axis: a gantt bar runs from a start column to an end column, a candle
+// from open to close.
 //
-// A rect with no X2 spans its slot on that axis instead, which is what a
+// A mark with no X2 spans its slot instead — a band scale's own bandwidth, or
+// the closest spacing in the data narrowed by [BarWidth] — which is what a
 // heatmap wants and what makes the cell the size of the category.
+//
+// Under [github.com/timzifer/refract/coord.Donut] the X axis is the radius, so
+// the pair is a slice's inner and outer radius and both are dimensions of the
+// data rather than a constant the coord chose:
+//
+//	geom.Bar(src, geom.X("floor"), geom.X2("reach"), geom.Y("share"),
+//	    geom.GroupBy("browser"))
+//
+// The angular extent is still the stacked Y value, so such a layer reads three
+// columns as three dimensions: how far round the slice goes, where it starts
+// and where it stops.
+//
+// [Dodge] still divides the span between the layer's series, whether the span
+// came from a column or from the slot: dodging is about sharing a mark's width,
+// and a row that named its own edges named the width to share.
 func X2(col string) Option { return func(c *config) { c.x2col = col } }
 
 // Opacity scales the fill alpha, in [0, 1]. The default is 1 for an explicit
@@ -636,10 +655,16 @@ func (sc *scratch) groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
 type rectRun struct {
 	color ir.Color
 	rects []ir.Rect
+	// offs is how far each of the run's cells is broken out of the middle of
+	// the coord, index for index with rects. It is empty for a layer that is
+	// not broken out, which is every layer that never asked — read it through
+	// [offsetAt], which is why that tests the length rather than nil.
+	offs []ir.Point
 }
 
-// groupByRect batches cells by colour, in order of first appearance.
-func (sc *scratch) groupByRect(rects []ir.Rect, cols []ir.Color) []rectRun {
+// groupByRect batches cells by colour, in order of first appearance. offs is
+// the displacement of each cell, or nil.
+func (sc *scratch) groupByRect(rects []ir.Rect, cols []ir.Color, offs []ir.Point) []rectRun {
 	if sc.at == nil {
 		sc.at = make(map[ir.Color]int, 8)
 	}
@@ -656,9 +681,13 @@ func (sc *scratch) groupByRect(rects []ir.Rect, cols []ir.Color) []rectRun {
 			}
 			sc.rruns[j].color = c
 			sc.rruns[j].rects = sc.rruns[j].rects[:0]
+			sc.rruns[j].offs = sc.rruns[j].offs[:0]
 			sc.at[c] = j
 		}
 		sc.rruns[j].rects = append(sc.rruns[j].rects, r)
+		if offs != nil {
+			sc.rruns[j].offs = append(sc.rruns[j].offs, offs[i])
+		}
 	}
 	return sc.rruns[:n]
 }

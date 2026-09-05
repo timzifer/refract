@@ -349,10 +349,12 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		rows()
 		group()
 		m.BarWidth, m.Origin = float64Ptr(d.BarWidth), d.Baseline
+		m.Explode = d.Explode
 	case geom.MarkRect:
 		stroke()
 		fill()
 		m.BarWidth = float64Ptr(d.BarWidth)
+		m.Explode = d.Explode
 	case geom.MarkArea:
 		stroke()
 		fill()
@@ -410,6 +412,9 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.WidthCol != "" {
 			enc.Width = &Channel{Field: d.WidthCol}
+		}
+		if d.ExplodeCol != "" {
+			enc.Explode = &Channel{Field: d.ExplodeCol}
 		}
 		// The stack is a property of the axis the groups are stacked along,
 		// which is the Y axis for every mark that has one — so it goes on the

@@ -211,6 +211,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Decimate:  decimationMode(l.Mark.Decimate),
 		Budget:    l.Mark.Budget,
 		CellSize:  l.Mark.DensityCells,
+		Explode:   l.Mark.Explode,
 		Text:      l.Mark.Text,
 		FontSize:  l.Mark.FontSize,
 		Rotation:  radians(l.Mark.Angle),
@@ -283,6 +284,7 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 	d.X, d.Y, d.Y2 = fieldOf(enc.X), fieldOf(enc.Y), fieldOf(enc.Y2)
 	d.X2 = fieldOf(enc.X2)
 	d.Group, d.WidthCol = fieldOf(enc.Detail), fieldOf(enc.Width)
+	d.ExplodeCol = fieldOf(enc.Explode)
 	// The stack rides the channel it adjusts. A document that names none
 	// leaves the mark's own default in place, which is why this is a pair
 	// rather than a value — see [geom.Desc].

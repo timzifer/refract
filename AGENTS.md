@@ -530,6 +530,34 @@ measured from the pointer rather than from the corner the hit reports — a corn
 of a tall bar is nearer to the neighbouring bar's row than to its own, and every
 slice of a pie shares the corner in the middle.
 
+**A break-out is a displacement the coord computes and the geom applies.**
+`coord.Exploder` answers how far a mark moves when it is broken out of the
+middle; `geom` moves the points the `Area` call appended, in place. That split
+is the coordinate stage's own: a coord reports geometry and does not draw. Two
+consequences are load-bearing. `coord.Cartesian` deliberately does **not**
+implement `Exploder`, so `geom.Explode` on a Cartesian chart draws exactly what
+it drew — that silence is what keeps every golden file unchanged by an option
+every geom now accepts, and making Cartesian answer would move every bar of a
+layer the same way, which is a translation rather than a reading. And the
+displacement is applied to the mark's path rather than to its extent: a
+broken-out slice keeps the angle and the radii the data gave it, and growing the
+radius instead would move the ink *and* the reading. See
+[ADR 0026](docs/adr/0026-breaking-a-mark-out.md).
+
+**A run's displacement buffer is tested by length, not against nil.** The
+batching runs come back from the scratch pool emptied rather than cleared away,
+so a layer that breaks nothing out is handed a non-nil `offs` with nothing in
+it. `geom.offsetAt` therefore compares `i >= len(offs)`. Testing for nil there
+compiles, passes every test with a fresh pool, and panics on the second frame of
+a chart drawn after a broken-out one.
+
+**A bar's slot is measured once per Train, and that is not a micro-optimisation.**
+`smallestGap` sorts a copy of the column, and `barGeom.halfWidth` used to ask
+for it per row — which made a bar layer quadratic in its rows: a ring of sixteen
+thousand slices spent 2.5 seconds a frame, of which 64 % was that sort. It is
+`barGeom.gap` now, filled in `Train` beside the other derived columns. Do not
+move it back into the drawing loop; nothing fails, the chart just stops scaling.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it
@@ -550,7 +578,7 @@ everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
 `scale.Describer`, `scale.ColorDescriber`, `scale.DiscreteColorScale`,
 `scale.Temporal`, `geom.Faceter`, `geom.Guided`, `geom.Legender`,
-`geom.Describer`, `coord.Describer`, `ir.Partial`, `ir.Semantics`,
+`geom.Describer`, `coord.Describer`, `coord.Exploder`, `ir.Partial`, `ir.Semantics`,
 `ir.Resizer`, `mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
 `Backend`. `geom.Legender` is the newest and the argument is worth keeping in
 view: a pie, a stack and a waffle contribute N legend entries from one layer,
@@ -583,6 +611,19 @@ whether a series wraps is a fact about the series, and a polar time series
 spiralling through three revolutions does not wrap. And a curve is hit-tested as
 its control polygon, so a filled shape can be pointed at a little way outside
 its ink at a bulge.
+
+Things the v0.8 sugar deliberately did not do. There is no `geom.Slice` and
+there are no `Inner`/`Outer` channels: `Geom.Train` is handed the two scales and
+no coord, so a layer cannot know at training time which of them is the radius —
+a channel that only exists under one coord would be the pie geom this project
+does not have. The break-out is **per row rather than per group**, because that
+is what a channel means everywhere else; a donut has one row per slice, so the
+distinction only shows on a stack of several rows per series, whose segments
+move independently. Only `Bar` and `Rect` honour it, because they are the marks
+that draw an annular sector — a broken-out line has no ring to leave. And a
+layer that asks for a break-out under a coord that cannot answer draws what it
+drew, silently: an error would make every Cartesian chart's option list
+conditional on a coord chosen somewhere else.
 
 Things v0.7 deliberately did not do. A grouped **line, step and scatter do not
 stack**: two series drawn over one another are two readings, and adding them

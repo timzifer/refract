@@ -12,6 +12,13 @@ import (
 // baseline up: a long table with a series column is a stacked bar chart, and
 // [Stack] and [Dodge] are how it becomes a 100 % chart or a grouped one
 // instead. See docs/adr/0019-position-adjustments.md.
+//
+// The cross axis is the bar's width, and a row that names both of its edges
+// with [X] and [X2] gets exactly those rather than a share of the slot. In
+// [github.com/timzifer/refract/coord.Donut] that axis is the radius, so the
+// pair is a slice's inner and outer radius: a donut whose slices reach
+// different distances is this layer with one more column, not another mark.
+// [Explode] and [ExplodeBy] then break a slice out of the ring.
 func Bar(src data.Source, opts ...Option) Geom {
 	return &barGeom{src: src, cfg: newConfig(opts)}
 }
@@ -21,6 +28,9 @@ type barGeom struct {
 	cfg   config
 	s     series
 	width []float64
+	x2    []float64
+	pull  []float64
+	gap   float64
 	gs    groups
 	err   error
 }
@@ -43,7 +53,28 @@ func (g *barGeom) Train(x, y scale.Scale) error {
 			return g.err
 		}
 	}
+	if g.cfg.x2col != "" {
+		g.x2, g.err = column(g.src, g.cfg.x2col, x)
+		if g.err != nil {
+			return g.err
+		}
+		if len(g.x2) != len(g.s.x) {
+			g.err = errLength(g.cfg.xcol, g.cfg.x2col, len(g.s.x), len(g.x2))
+			return g.err
+		}
+	}
+	if g.pull, g.err = g.cfg.trainBreakOut(g.src, len(g.s.x)); g.err != nil {
+		return g.err
+	}
+	// The spacing a bar's width is a fraction of is a property of the column
+	// rather than of a row, and finding it sorts a copy of the column — so it
+	// is found once here rather than once per bar, which is what it cost while
+	// [barGeom.halfWidth] asked for it inside the drawing loop.
+	g.gap = smallestGap(g.s.x)
 	trainColumn(x, g.s.x)
+	if g.x2 != nil {
+		trainColumn(x, g.x2)
+	}
 	g.cfg.trainColors(g.s)
 
 	// The adjustment is derived here, before anything is measured, because the
@@ -61,8 +92,10 @@ func (g *barGeom) Train(x, y scale.Scale) error {
 	}
 
 	// A band scale already reserves a slot per bar, so widening its domain
-	// would only add an empty category at each end.
-	if _, band := x.(scale.Band); band {
+	// would only add an empty category at each end. Neither does a bar whose
+	// row named both of its edges: its width is in the domain already, which
+	// is the same reason a [Rect] with an X2 is not widened either.
+	if _, band := x.(scale.Band); band || g.x2 != nil {
 		return nil
 	}
 
@@ -80,8 +113,9 @@ func (g *barGeom) widthFraction() float64 {
 	return g.cfg.barWidth
 }
 
-// slot is the spacing between adjacent bars in data units.
-func (g *barGeom) slot() float64 { return smallestGap(g.s.x) }
+// slot is the spacing between adjacent bars in data units, measured once per
+// Train.
+func (g *barGeom) slot() float64 { return g.gap }
 
 // halfWidth is how far row i's bar reaches on each side of its position, in
 // data units. [WidthBy] answers it per row; otherwise every bar is the same
@@ -109,6 +143,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	defer sc.release()
 
 	cd := f.Coords()
+	brk := g.cfg.breaking(cd, g.pull)
 	base := baselinePos(f, g.cfg.baseline)
 	// A stacked layer draws the bounds the adjustment gave it rather than the
 	// column, and every traversal below — including which rows are holes —
@@ -124,10 +159,12 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	rects := sc.rects[:0]
 	rows := sc.rows[:0]
 	for i := range s.x {
-		if !ok[i] {
+		if !ok[i] || (g.x2 != nil && !defined(f.X, g.x2[i])) {
 			continue
 		}
-		x0, x1 := markSpan(f, s.x[i], g.halfWidth(i))
+		// A row that named both of its edges gets exactly those; one that named
+		// a single position gets its share of the slot around it.
+		x0, x1 := spanOn(f.X, s.x, g.x2, i, g.halfWidth(i), true)
 		if g.cfg.dodge {
 			x0, x1 = dodgeSpan(x0, x1, g.gs.slotIndex(i), g.gs.count(), g.cfg.dodgePad)
 		}
@@ -148,6 +185,7 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	if len(rects) == 0 {
 		return nil
 	}
+	offs := sc.offsets(brk, rects, rows)
 	// A bar's row is at the middle of the end it grew to, which is where a
 	// reader points when they mean "this bar" — not at a corner, and not at
 	// the middle of a shape whose height is the value. A stacked segment is
@@ -162,8 +200,12 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 			}
 			// The position is worked out in the space the scales map into and
 			// placed by the coord, so a slice of a pie reports the middle of
-			// its arc rather than a point the transform never visited.
-			sc.pts[i] = cd.Point((r.Min.X+r.Max.X)/2, at)
+			// its arc rather than a point the transform never visited — and
+			// then moves with the mark, because a broken-out slice's row is
+			// where the slice is rather than where it would have been.
+			p := cd.Point((r.Min.X+r.Max.X)/2, at)
+			d := offsetAt(offs, i)
+			sc.pts[i] = ir.Point{X: p.X + d.X, Y: p.Y + d.Y}
 		}
 		f.Marks(sc.pts, sc.sourceRows(g.s, rows))
 	}
@@ -171,14 +213,14 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 	// A grouped layer is painted by series, and every segment is its own
 	// subpath so that a pointer lands on the segment rather than on the stack.
 	if g.gs.grouped() {
-		for _, run := range sc.groupRuns(&g.gs, rects, rows) {
+		for _, run := range sc.groupRuns(&g.gs, rects, rows, offs) {
 			col := g.cfg.groupColor(f, &g.gs, run.group)
 			if col.A == 0 {
 				continue
 			}
 			sc.fill.Reset()
-			for _, r := range run.rects {
-				area(&sc.fill, cd, r)
+			for j, r := range run.rects {
+				areaAt(&sc.fill, cd, r, offsetAt(run.offs, j))
 			}
 			b.FillPath(&sc.fill, ir.Solid(col), ir.NonZero)
 		}
@@ -191,15 +233,15 @@ func (g *barGeom) Build(b ir.Backend, f Frame) error {
 				continue
 			}
 			sc.fill.Reset()
-			area(&sc.fill, cd, r)
+			areaAt(&sc.fill, cd, r, offsetAt(offs, i))
 			b.FillPath(&sc.fill, ir.Solid(cols[i]), ir.NonZero)
 		}
 		return nil
 	}
 
 	sc.fill.Reset()
-	for _, r := range rects {
-		area(&sc.fill, cd, r)
+	for i, r := range rects {
+		areaAt(&sc.fill, cd, r, offsetAt(offs, i))
 	}
 	b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
 

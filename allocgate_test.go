@@ -117,6 +117,19 @@ func TestAPolarRenderDoesNotAllocatePerPoint(t *testing.T) {
 	}
 }
 
+// A broken-out layer collects a displacement per mark and carries it through
+// the colour and group batching. All of that comes out of the scratch pool, so
+// a ring of two hundred thousand slices costs what a ring of a thousand does.
+func TestABrokenOutLayerDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, brokenRing(1_000))
+	large := allocsPerFrame(t, brokenRing(200_000))
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("200k broken-out slices allocate %.0f times per frame against %.0f for 1k: "+
+			"the break-out is allocating per mark", large, small)
+	}
+}
+
 // A layer coloured from a column is the other data path: one colour per mark,
 // batched into one drawing call per distinct colour. Its buffers are pooled
 // too, and this is the assertion that they stay that way.

@@ -31,6 +31,7 @@ func TestDescribeAndRebuildAgree(t *testing.T) {
 		Line(src, X("x"), Y("y"), Color(palette.Blue), Width(3), Dash(1, 2), Tension(0.7), OnMissing(Interpolate)),
 		Scatter(src, X("x"), Y("y"), Shape(ir.MarkerPlus), Size(11), ColorBy("z", cs)),
 		Bar(src, X("x"), Y("y"), BarWidth(0.4), Baseline(-2), Fill(palette.Green), Opacity(0.3)),
+		Bar(src, X("x"), X2("z"), Y("y"), GroupBy("z"), Explode(0.08), ExplodeBy("z")),
 		Area(src, X("x"), Y("y"), Y2("z"), Decimate(MinMax), Budget(64)),
 		Step(src, X("x"), Y("y"), Steps(StepMid)),
 		Boxplot(src, X("x"), Y("y"), Whisker(3), Outliers(false)),
