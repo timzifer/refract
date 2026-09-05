@@ -72,6 +72,32 @@ does — `Train` runs outside a `Build`, where there is no scratch to take.
 without a qualifier. The two-dimensional binners are named after what they fill:
 `BinGrid` (the square lattice that was called `Bin` before v0.9) and `BinHex`.
 
+### Nothing here has a cliff in it
+
+Two properties were added after the first CI run, because the milestone shipped
+without them and macOS said so.
+
+An evaluation grid returns its ends *exactly* rather than accumulating them.
+`lo + float64(i)*step` is a multiply and an add, and the Go spec permits
+contracting the pair into a fused multiply-add "possibly across statements";
+arm64 takes that and amd64 does not, so a grid of sixty-one points over [-3, 3]
+ended at 3 on one and 3.0000000000000004 on the other. `stat.gridAt` is the fix
+and it is the one `scale.place` already makes for the same arithmetic: do not
+compute what is known.
+
+And a kernel is summed in full, with no cutoff. Skipping anything past four
+bandwidths saved an `exp` on a value under a ten-thousandth of the peak —
+invisible in a chart, and not invisible to a *decision*. A cutoff is a
+discontinuity, so the estimate depended on the last bit of its argument, and the
+two facts together made a symmetric sample produce an asymmetric density on one
+architecture only. The cutoff was not buying an order of growth either: the loop
+visits every row with or without it.
+
+The test that holds this fails on every architecture rather than on one, which
+is the property worth having — `TestADensityHasNoCliffInItsTail` samples the
+tail finely enough that a truncated kernel's step is four hundred times the
+analytic one.
+
 ### The nearest hexagon is measured in real distance, not in lattice units
 
 `Hex.Cell` follows d3-hexbin's structure — round to the nearest row, round to

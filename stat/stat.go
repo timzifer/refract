@@ -111,6 +111,27 @@ func StdDev(vs []float64) float64 {
 	return math.Sqrt(sum / float64(n-1))
 }
 
+// gridAt returns the i'th of n equally spaced points across [lo, hi].
+//
+// The ends are handed back exactly rather than accumulated, and that is
+// load-bearing. `lo + float64(i)*step` is a multiply and an add, which Go may
+// contract into a fused multiply-add "possibly across statements"; arm64 takes
+// that contraction and amd64 does not, so a grid of sixty-one points over
+// [-3, 3] ends at exactly 3 on one machine and at 3.0000000000000004 on the
+// other. A grid whose last point is not its upper bound is wrong on both — the
+// documentation says "across [lo, hi]" — and the fix is the one
+// scale.place already carries for the same arithmetic: do not compute what is
+// known.
+func gridAt(lo, hi float64, i, n int) float64 {
+	switch {
+	case n <= 1 || i <= 0:
+		return lo
+	case i >= n-1:
+		return hi
+	}
+	return lo + float64(i)*((hi-lo)/float64(n-1))
+}
+
 // finiteExtent is the range of the finite values in a column, and whether
 // there were any. It is not [extent], which is the unguarded form the
 // decimation family uses on columns it has already filtered.

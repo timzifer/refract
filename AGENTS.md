@@ -574,6 +574,27 @@ one each for the same reason. The buffer lives on the layer rather than in the
 frame's pool because `Train` runs outside a `Build`, where there is no scratch
 to take; that is the same argument the group index already makes.
 
+**A stat evaluated on a grid pins the grid's ends, and never truncates a
+kernel.** Both halves of that are the same bug, and it shipped for exactly one
+CI run — green on amd64, red on macOS. `lo + float64(i)*step` is a multiply and
+an add, which Go may contract into an FMA "possibly across statements"; arm64
+takes it and amd64 does not, so a grid of sixty-one points over [-3, 3] ended
+at 3 on one machine and 3.0000000000000004 on the other. That is one ulp, and
+one ulp is invisible — until it lands on the far side of a *decision*. `AppendKDE`
+skipped any sample past four bandwidths, so the endpoint's kernel was summed on
+one architecture and dropped on the other, and a density that was symmetric on
+one was not on the other.
+
+`stat.gridAt` now hands back the ends exactly rather than computing them, which
+is the same "do not compute what is known" fix `scale.place` carries for the
+same arithmetic; `AppendKDE` and `AppendLoess` both use it. And the kernel is
+summed in full: a cutoff is a discontinuity, so the estimate depended on the
+last bit of its argument, and it was not buying an order of growth either — the
+loop visits every row either way and the cutoff saved an `exp`.
+`TestADensityHasNoCliffInItsTail` and `TestAnEvaluationGridEndsExactlyOnItsBounds`
+are what hold both, and the first fails on *every* architecture, which is the
+point: a property that only one machine can check is a property nobody checks.
+
 **A distribution stat runs in `Train`; a device-space one runs in `Build`.**
 ADR 0011 puts decimation in `Build` on the rule that what a chart's axis reports
 must not depend on how wide the chart is. A histogram, a violin, an ECDF and a

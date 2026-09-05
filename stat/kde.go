@@ -69,25 +69,14 @@ func AppendKDE(dst []Point, vs []float64, bw, lo, hi float64, n int) []Point {
 	// The normalisation is 1/(n·h·sqrt(2π)), applied once rather than per
 	// kernel: the sum inside is a plain sum of exp(-t²/2).
 	norm := 1 / (float64(count) * bw * math.Sqrt(2*math.Pi))
-	step := 0.0
-	if n > 1 {
-		step = (hi - lo) / float64(n-1)
-	}
 	for i := range n {
-		x := lo + float64(i)*step
+		x := gridAt(lo, hi, i, n)
 		sum := 0.0
 		for _, v := range vs {
 			if !finite(v) {
 				continue
 			}
 			t := (x - v) / bw
-			// Past four bandwidths a Gaussian contributes less than a ten
-			// thousandth of its peak, which is below the width of the line the
-			// curve is drawn with. Skipping those is what keeps a ridgeline of
-			// twenty groups from being quadratic in the whole table.
-			if t > kdeReach || t < -kdeReach {
-				continue
-			}
 			sum += math.Exp(-0.5 * t * t)
 		}
 		dst = append(dst, Point{X: x, Y: sum * norm})
@@ -95,11 +84,23 @@ func AppendKDE(dst []Point, vs []float64, bw, lo, hi float64, n int) []Point {
 	return dst
 }
 
-// kdeReach is how many bandwidths of a Gaussian are worth summing. exp(-8) is
-// about 3.4e-4 of the peak; the error it drops is far below the stroke width
-// the curve is drawn with, and far below the uncertainty the bandwidth choice
-// itself carries.
-const kdeReach = 4
+// Every kernel is summed, with no cutoff, and that is a correction rather than
+// an oversight.
+//
+// This first skipped anything past four bandwidths, where a Gaussian is under a
+// ten-thousandth of its peak — invisible in a chart, and worth an exp call. It
+// is not invisible to a *decision*. A cutoff is a discontinuity: a value a hair
+// inside it contributes 3.4e-4 and a value a hair outside contributes nothing,
+// so the estimate depended on the last bit of its argument. That is the same
+// trap scale.place documents, and it sprang the same way — a grid whose last
+// point came out as 3 on amd64 and 3.0000000000000004 on arm64 put one sample
+// on each side of the fence, and a density that was symmetric on one machine
+// was not on the other.
+//
+// The cutoff was not even buying an order of growth: the loop visits every row
+// either way, so it saved an exp and nothing else. Summing every kernel makes
+// the estimate a continuous function of its argument, which is what a
+// determinism claim across two architectures actually requires.
 
 // Silverman returns the bandwidth Silverman's rule of thumb chooses:
 // 0.9·min(σ, IQR/1.349)·n^(-1/5).

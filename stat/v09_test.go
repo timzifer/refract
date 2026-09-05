@@ -136,6 +136,63 @@ func TestADensityIsSymmetricAboutASymmetricSample(t *testing.T) {
 	}
 }
 
+// The grid a density or a fit is evaluated on ends exactly where it was told
+// to, on every machine.
+//
+// `lo + i*step` is a multiply and an add, which Go may contract into a fused
+// multiply-add — arm64 does, amd64 does not — so the last point of a grid over
+// [-3, 3] came out as 3.0000000000000004 on one of them. A grid whose last
+// point is not its upper bound is wrong on both, and is what made this
+// package's first symmetry test fail on macOS alone.
+func TestAnEvaluationGridEndsExactlyOnItsBounds(t *testing.T) {
+	for _, n := range []int{2, 3, 61, 128, 501} {
+		pts := stat.KDE([]float64{-1, 0, 1}, 0.5, -3, 3, n)
+		if len(pts) != n {
+			t.Fatalf("n=%d: got %d points", n, len(pts))
+		}
+		if pts[0].X != -3 || pts[n-1].X != 3 {
+			t.Errorf("n=%d: the grid runs %v..%v, want exactly -3..3", n, pts[0].X, pts[n-1].X)
+		}
+	}
+
+	xs, ys := make([]float64, 40), make([]float64, 40)
+	for i := range xs {
+		xs[i] = float64(i) / 7
+		ys[i] = float64(i)
+	}
+	fit := stat.Loess(xs, ys, 0.5, 33)
+	if fit[0].X != xs[0] || fit[len(fit)-1].X != xs[len(xs)-1] {
+		t.Errorf("the fit runs %v..%v, want the data's own %v..%v",
+			fit[0].X, fit[len(fit)-1].X, xs[0], xs[len(xs)-1])
+	}
+}
+
+// A density is a continuous function of its argument, including out in the tail
+// where a truncated kernel would have a step.
+//
+// This is not pedantry about a ten-thousandth of a peak. A cutoff makes the
+// estimate depend on the last bit of its argument — a sample a hair inside
+// contributes and one a hair outside does not — and two architectures that
+// disagree about that last bit then draw two different charts. The kernel is
+// summed in full for exactly this reason.
+func TestADensityHasNoCliffInItsTail(t *testing.T) {
+	// One observation at the origin and a unit bandwidth, sampled finely across
+	// the region a four-sigma cutoff would have fallen in. The analytic slope
+	// there is under 0.004, so a step of 5e-4 moves the density by under 2e-6;
+	// a truncated kernel would drop 1.3e-4 in a single step.
+	pts := stat.KDE([]float64{0}, 1, 3.5, 4.5, 2001)
+	for i := 1; i < len(pts); i++ {
+		if d := math.Abs(pts[i].Y - pts[i-1].Y); d > 1e-5 {
+			t.Fatalf("the density steps by %v between %v and %v: the tail has a cliff in it",
+				d, pts[i-1].X, pts[i].X)
+		}
+	}
+	// And it is still a density out there rather than a floor: it decreases.
+	if !(pts[len(pts)-1].Y < pts[0].Y && pts[len(pts)-1].Y > 0) {
+		t.Errorf("the tail runs %v..%v, want it falling and still positive", pts[0].Y, pts[len(pts)-1].Y)
+	}
+}
+
 func TestADensityEstimatesTheSameCurveTwice(t *testing.T) {
 	vs := scatterOf(300, 5)
 	a := stat.KDE(vs, 0, 0, 0, 64)

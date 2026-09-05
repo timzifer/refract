@@ -70,10 +70,9 @@ func AppendLoess(dst []Point, xs, ys []float64, span float64, n int) []Point {
 	// line through them is not determined.
 	q := min(max(int(math.Ceil(span*float64(m))), 2), m)
 
-	step := (hi - lo) / float64(n-1)
 	left := 0
 	for i := range n {
-		x := lo + float64(i)*step
+		x := gridAt(lo, hi, i, n)
 		// Slide the window while the row entering on the right is nearer to x
 		// than the row leaving on the left. On an ascending column that is the
 		// definition of the q nearest neighbours, and it never moves backwards
