@@ -46,6 +46,30 @@ func colouredCloud(n int) *refract.Plot {
 	return p
 }
 
+// stackedSeries is a long table of n rows split into four series and stacked,
+// which is the v0.7 data path: the groups are indexed and the adjustment is
+// derived on every Train, and neither may cost anything per row.
+//
+// The series column is text, which is what a series column is. A numeric one
+// is formatted into a label per row, and that is a cost of naming a category
+// with a number rather than of stacking.
+func stackedSeries(n int) *refract.Plot {
+	names := [...]string{"north", "south", "east", "west"}
+	var x, y []float64
+	var series []string
+	for i := range n {
+		x = append(x, float64(i/len(names)))
+		y = append(y, 1+math.Sin(float64(i)/97))
+		series = append(series, names[i%len(names)])
+	}
+	src := refract.NewTable().Float64("x", x).Float64("y", y).String("s", series)
+	p := refract.New(refract.Size(800, 500))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Area(src, geom.X("x"), geom.Y("y"), geom.GroupBy("s")))
+	return p
+}
+
 func facetedSignal(panels, rows int) *refract.Plot { return facetedSignalWith(panels, rows, true) }
 
 func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
@@ -79,6 +103,27 @@ func benchmarkFrame(b *testing.B, rows int) {
 		}
 	}
 }
+
+func benchmarkStacked(b *testing.B, rows int) {
+	p := stackedSeries(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// The stacked path measured the same way as the plain one. The adjustment is
+// derived on every Train — the axis has to describe the totals — so this is
+// where a buffer that escaped the layer's own memory would show up.
+func BenchmarkStacked1k(b *testing.B)   { benchmarkStacked(b, 1_000) }
+func BenchmarkStacked100k(b *testing.B) { benchmarkStacked(b, 100_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }

@@ -42,7 +42,9 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		return "rect", "horizontal", nil
 	case geom.MarkVBand:
 		return "rect", "vertical", nil
-	case geom.MarkRegion:
+	case geom.MarkRegion, geom.MarkRect:
+		// Both are a rect and neither is oriented, so the type does not tell
+		// them apart — the encoding does. See [geomMark].
 		return "rect", "", nil
 	case geom.MarkNote:
 		return "text", "", nil
@@ -53,7 +55,13 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 // geomMark is markType inverted. The interpolation decides between a line and
 // a step, and the orientation between a rule and a segment, or a band and a
 // region.
-func geomMark(m Mark) (geom.Mark, error) {
+//
+// The encoding decides the one case the mark object cannot. `("rect", "")` is
+// both a data-driven [geom.Rect] and the [geom.Region] annotation, and the two
+// differ in where their corners come from: a rect reads columns and a region
+// carries four literals. So a rect with a field is data and a rect with a
+// datum is an annotation, which is how Vega-Lite resolves the same ambiguity.
+func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 	switch m.Type {
 	case "line":
 		if strings.HasPrefix(m.Interpolate, "step") {
@@ -83,11 +91,89 @@ func geomMark(m Mark) (geom.Mark, error) {
 		case "vertical":
 			return geom.MarkVBand, nil
 		}
+		if hasField(enc) {
+			return geom.MarkRect, nil
+		}
 		return geom.MarkRegion, nil
 	case "text":
 		return geom.MarkNote, nil
 	}
 	return "", fmt.Errorf("refract/spec: unknown mark type %q", m.Type)
+}
+
+// hasField reports whether a layer's encoding names any column, which is what
+// separates a layer with data from an annotation placed at literal values.
+func hasField(enc *Encoding) bool {
+	if enc == nil {
+		return false
+	}
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width} {
+		if ch != nil && ch.Field != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// Position adjustments. The first three are Vega-Lite's spelling; "wiggle" is
+// Vega's name for the streamgraph offset, and "none" is what Vega-Lite writes
+// as a JSON null — which an absent field cannot mean here, because absent
+// already means "the mark's own default".
+var stackings = []struct {
+	stack geom.Stacking
+	name  string
+}{
+	{geom.NoStack, "none"},
+	{geom.StackZero, "zero"},
+	{geom.StackFill, "normalize"},
+	{geom.StackSilhouette, "center"},
+	{geom.StackWiggle, "wiggle"},
+}
+
+func stackName(s geom.Stacking) string {
+	for _, x := range stackings {
+		if x.stack == s {
+			return x.name
+		}
+	}
+	return "zero"
+}
+
+func stacking(name string) (geom.Stacking, bool) {
+	for _, x := range stackings {
+		if x.name == name {
+			return x.stack, true
+		}
+	}
+	return geom.NoStack, false
+}
+
+// Group orders.
+var orderings = []struct {
+	order geom.Ordering
+	name  string
+}{
+	{geom.OrderAppearance, "appearance"},
+	{geom.OrderValue, "value"},
+	{geom.OrderInsideOut, "inside-out"},
+}
+
+func orderName(o geom.Ordering) string {
+	for _, x := range orderings {
+		if x.order == o {
+			return x.name
+		}
+	}
+	return "appearance"
+}
+
+func ordering(name string) geom.Ordering {
+	for _, x := range orderings {
+		if x.name == name {
+			return x.order
+		}
+	}
+	return geom.OrderAppearance
 }
 
 // Step positions, in Vega-Lite's spelling. "step-after" holds each value until

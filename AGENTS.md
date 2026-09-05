@@ -392,6 +392,83 @@ canvas, and nothing would fail.
 also keeps whatever the scales were zoomed to, on purpose: a reader who dragged
 a view into place has not asked to leave it.
 
+**A position adjustment is derived in `Train` and drawn in `Build`, and both
+halves are forced.** `render.Draw` trains every layer before it measures
+anything, because tick labels need a domain — so a stacked bar's Y scale has to
+be trained on the *totals*, or the tallest stack runs off the top of an axis
+that describes rows nobody can see. `geom.groups.train` therefore computes the
+per-row `(lo, hi)` pair, and `Build` only maps it through the scales. This is
+the same boundary ADR 0011 draws for decimation, drawn for the same reason: what
+a chart's axis says must not depend on how wide the chart is. See
+[ADR 0019](docs/adr/0019-position-adjustments.md).
+
+**A stacked layer's holes are decided once, and both traversals read that
+answer.** `groups.ok` is computed in `Train` and an unplottable row gets `NaN`
+bounds, so the cumulative sum and the drawing traversal agree about where the
+holes are. A NaN the sum skipped but the draw did not would shift every segment
+above it — there is a test, and it compares a table with a hole against the same
+table with the row removed.
+
+**A grouped layer's buffers live on the layer, not in the frame's pool.** The
+group index, the row lists and the derived bounds are refilled by every `Train`
+out of memory the geom keeps: `Train` runs as often as `Build` does, and a chart
+redrawn over a live table would otherwise allocate its group index per frame.
+`TestAStackedLayerDoesNotAllocatePerPoint` is what holds that. Note that the
+rows of each group are listed once, in `groups.split`, rather than found by
+scanning the table per group — the scan is what makes a chart with many series
+quadratic.
+
+**There is exactly one scratch per `Build`, and a helper takes the caller's
+rather than acquiring its own.** Two scratches held at once put two objects with
+*disjoint* buffers into one pool; whichever comes back in the other's role next
+frame has to grow the other's buffers, which is a per-row allocation on the path
+whose whole point is not having one. `geom.eachGroup` therefore takes a
+`*scratch` parameter. This shipped broken for exactly one commit and cost a
+grouped frame 127 kB and seven allocations it did not need; nothing failed
+except the allocation gate, which is what the gate is for.
+
+**A benchmark's allocation count is not stable enough to compare across sizes
+when a pool miss is in play.** `sync.Pool` is emptied by every collection, and
+how many collections land inside `-benchtime=10x` depends on the garbage the
+*other* benchmarks in that process left behind — so `BenchmarkStacked100k`
+comes out at 91, 98 or 106 for the same code. The flat comparison therefore
+lives in `TestAStackedLayerDoesNotAllocatePerPoint`, which averages twenty runs
+in a process running nothing else, and `.github/scripts/allocgate.awk` pins a
+*budget* for that benchmark instead. Reach for `atMost` rather than a wider
+`flat` slack the next time a pair will not sit still: a gate that flakes is a
+gate people learn to ignore.
+
+**Group order is order of first appearance, and `geom.Order` is the only thing
+that changes it.** Map iteration order is not an order; ADR 0012 requires a
+parallel render to be byte-identical to a serial one, and `scale.Qualitative`,
+`geom.groupByColor` and `boxplot.summarise` all already establish the
+convention.
+
+**A grouped `Bar` and `Area` stack by default; nothing else does.** That is
+`config.stackFor`, and it is why `geom.Desc` carries `Stack` *and* `StackSet` —
+`NoStack` is both the zero value and an adjustment somebody may have asked for,
+exactly as `Dash`/`DashSet` and `Marker`/`MarkerSet` already are. Without the
+flag, a round trip through the spec turns a grouped bar's default into a pinned
+"do not stack", and the chart silently changes.
+
+**Which guide a layer contributes follows from the kind of colour scale it was
+handed.** `scale.Qualitative` is a `ColorScale` — it rides that interface the way
+`scale.Categorical` rides `Scale` — so `geom.ColorBy` takes either kind, and
+`config.colorGuide` returns false for a discrete one while `config.legends`
+returns an entry per category. A colourbar over eight categories would be a ramp
+through colours nothing is painted with.
+
+**A layer that implements `geom.Legender` is not asked for `Legend` as well.**
+`geom.Legends` prefers the list; `geom.LegendsOr` is the fallback written once,
+and a geom that answers `Legends` without it silently loses its single entry.
+There is a test — it was the first thing that broke when the interface landed.
+
+**A rect and a region are both `("rect", "")` in the document, and the encoding
+is what tells them apart.** `spec.geomMark` is passed the layer's encoding for
+that one reason: a rect with a *field* is data, a rect with a *datum* is an
+annotation. Dropping the parameter compiles and turns every heatmap into a
+four-literal annotation.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it
@@ -410,10 +487,14 @@ passing; it needs its own ADR.
 Optional interfaces are how this codebase extends a type without breaking
 everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
-`scale.Describer`, `scale.ColorDescriber`, `scale.Temporal`, `geom.Faceter`,
-`geom.Guided`, `geom.Describer`, `ir.Partial`, `ir.Semantics`, `ir.Resizer`,
+`scale.Describer`, `scale.ColorDescriber`, `scale.DiscreteColorScale`,
+`scale.Temporal`, `geom.Faceter`, `geom.Guided`, `geom.Legender`,
+`geom.Describer`, `ir.Partial`, `ir.Semantics`, `ir.Resizer`,
 `mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
-`Backend`.
+`Backend`. `geom.Legender` is the newest and the argument is worth keeping in
+view: a pie, a stack and a waffle contribute N legend entries from one layer,
+and adding a second method to `Geom` for them would have broken every
+implementation and spent the v1.0 freeze before the evidence for it existed.
 
 `Cloner`, `Snapshotter` and `Zoomer` are three different things and none
 substitutes for another: Clone hands back an *untrained* copy for a free facet
@@ -423,11 +504,26 @@ scale in place for a pan or a zoom.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. Everything through v0.6 has shipped; what is
-left before v1.0 is the extension API, the docs and a public benchmark suite,
-and past it the coordinate systems, stats, animation and 3D that §14 lists.
-Adding a stub for one of those is not progress towards it — the seams exist,
-that is enough.
+project is doing and in what order. Everything through v0.7 has shipped; next is
+`coord/` in v0.8 — which is why the groups and the adjustments landed first, a
+pie being a stacked bar with θ from the Y axis — then the stats in v0.9, and
+then the extension API, the docs and a public benchmark suite for v1.0. Adding a
+stub for one of those is not progress towards it — the seams exist, that is
+enough.
+
+Things v0.7 deliberately did not do. A grouped **line, step and scatter do not
+stack**: two series drawn over one another are two readings, and adding them
+would invent a third nobody measured. Stacking accumulates in group order, so a
+stack of mixed signs runs each segment from where the last one ended rather than
+splitting into a positive and a negative half. `geom.WidthBy` gives a bar its
+width from a column and does **not** reposition the slots — a marimekko is one
+layer whose X column already holds each column's centre, and unequal slots that
+label themselves are an axis question rather than an adjustment one. A group
+index is per layer, so a facet whose panels hold different groups needs an
+explicit `scale.Qualitative` for a series to keep its colour across panels. And
+a group column that is numeric or temporal is formatted into a label per row,
+which is a cost of naming a category with a number rather than of grouping: the
+allocation gate uses a text column, which is what a series column is.
 
 Things v0.6 deliberately did not do. The GPU tier is opt-in beta and stays that
 way past v1.0 — for server-side stills the CPU rasterizer and the vector

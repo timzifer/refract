@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Stacked</title>
+<defs>
+<clipPath id="c1"><path d="M33.232,32.8 L400.648,32.8 L400.648,288.825 L33.232,288.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L480,0 L480,320 L0,320 Z" fill="#ffffff"/>
+<polyline fill="none" points="71.907,32.8 71.907,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="120.252,32.8 120.252,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="168.596,32.8 168.596,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="216.94,32.8 216.94,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="265.284,32.8 265.284,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="313.628,32.8 313.628,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="361.973,32.8 361.973,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,288.825 400.648,288.825" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,203.483 400.648,203.483" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,118.142 400.648,118.142" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,32.8 400.648,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="33.232,288.825 400.648,288.825" stroke="#333333"/>
+<polyline fill="none" points="33.232,32.8 33.232,288.825" stroke="#333333"/>
+<polyline fill="none" points="71.907,288.825 71.907,293.825" stroke="#333333"/>
+<text x="71.907" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.0</text>
+<polyline fill="none" points="120.252,288.825 120.252,293.825" stroke="#333333"/>
+<text x="120.252" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.5</text>
+<polyline fill="none" points="168.596,288.825 168.596,293.825" stroke="#333333"/>
+<text x="168.596" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1.0</text>
+<polyline fill="none" points="216.94,288.825 216.94,293.825" stroke="#333333"/>
+<text x="216.94" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1.5</text>
+<polyline fill="none" points="265.284,288.825 265.284,293.825" stroke="#333333"/>
+<text x="265.284" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2.0</text>
+<polyline fill="none" points="313.628,288.825 313.628,293.825" stroke="#333333"/>
+<text x="313.628" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2.5</text>
+<polyline fill="none" points="361.973,288.825 361.973,293.825" stroke="#333333"/>
+<text x="361.973" y="297.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">3.0</text>
+<polyline fill="none" points="28.232,288.825 33.232,288.825" stroke="#333333"/>
+<text x="24.232" y="288.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="28.232,203.483 33.232,203.483" stroke="#333333"/>
+<text x="24.232" y="203.483" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">5</text>
+<polyline fill="none" points="28.232,118.142 33.232,118.142" stroke="#333333"/>
+<text x="24.232" y="118.142" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10</text>
+<polyline fill="none" points="28.232,32.8 33.232,32.8" stroke="#333333"/>
+<text x="24.232" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">15</text>
+<text x="216.94" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Stacked</text>
+<g clip-path="url(#c1)">
+<path d="M33.232,271.757 L110.583,271.757 L110.583,288.825 L33.232,288.825 Z M129.92,254.688 L207.271,254.688 L207.271,288.825 L129.92,288.825 Z M226.609,237.62 L303.96,237.62 L303.96,288.825 L226.609,288.825 Z M323.297,220.552 L400.648,220.552 L400.648,288.825 L323.297,288.825 Z" fill="#0072b2"/>
+<path d="M33.232,237.62 L110.583,237.62 L110.583,271.757 L33.232,271.757 Z M129.92,203.483 L207.271,203.483 L207.271,254.688 L129.92,254.688 Z M226.609,169.347 L303.96,169.347 L303.96,237.62 L226.609,237.62 Z M323.297,135.21 L400.648,135.21 L400.648,220.552 L323.297,220.552 Z" fill="#d55e00"/>
+<path d="M33.232,186.415 L110.583,186.415 L110.583,237.62 L33.232,237.62 Z M129.92,135.21 L207.271,135.21 L207.271,203.483 L129.92,203.483 Z M226.609,84.005 L303.96,84.005 L303.96,169.347 L226.609,169.347 Z M323.297,32.8 L400.648,32.8 L400.648,135.21 L323.297,135.21 Z" fill="#009e73"/>
+</g>
+<path d="M414.648,137.713 L426.648,137.713 L426.648,149.713 L414.648,149.713 Z" fill="#0072b2"/>
+<text x="432.648" y="143.713" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">north</text>
+<path d="M414.648,154.813 L426.648,154.813 L426.648,166.813 L414.648,166.813 Z" fill="#d55e00"/>
+<text x="432.648" y="160.813" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">south</text>
+<path d="M414.648,171.913 L426.648,171.913 L426.648,183.913 L414.648,183.913 Z" fill="#009e73"/>
+<text x="432.648" y="177.913" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">east</text>
+</svg>

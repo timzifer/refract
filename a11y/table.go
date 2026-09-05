@@ -163,7 +163,7 @@ func (t *tableWriter) table(label string, d geom.Desc) {
 func fields(d geom.Desc) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, name := range []string{d.X, d.Y, d.Y2, d.ColorCol} {
+	for _, name := range []string{d.X, d.Y, d.X2, d.Y2, d.ColorCol, d.Group, d.WidthCol} {
 		if name == "" || seen[name] {
 			continue
 		}

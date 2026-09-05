@@ -19,7 +19,7 @@
 // # Shape
 //
 //	{
-//	  "$schema": "https://github.com/timzifer/refract/spec/v0.6",
+//	  "$schema": "https://github.com/timzifer/refract/spec/v0.7",
 //	  "width": 800, "height": 500,
 //	  "title": "Signal",
 //	  "data": {"values": [{"t": 0, "y": 1}], "format": {"parse": {"t": "number", "y": "number"}}},
@@ -51,12 +51,13 @@ import (
 // version of it; nothing fetches it, and a Vega-Lite consumer that checks the
 // field will refuse the document, which is the honest outcome.
 //
-// It moves when the dialect gains or changes a field: v0.6 added a time
-// scale's `origin` and made a mark's `shape` the layer's choice rather than
-// its effective value. Reading is not gated on it — a document written by an
+// It moves when the dialect gains or changes a field: v0.7 added the series
+// channel (`detail`), the position adjustments (`stack`, `dodge`, `order`) and
+// the data-driven rect, and v0.6 added a time scale's `origin`. Reading is not
+// gated on it — a document written by an
 // older refract reads fine, and refusing one because of a version string would
 // make the field a trap rather than a label.
-const Schema = "https://github.com/timzifer/refract/spec/v0.6"
+const Schema = "https://github.com/timzifer/refract/spec/v0.7"
 
 // Chart is the part of a plot that survives being written down: everything
 // [Of] reads and everything [Spec.Chart] returns.
@@ -146,6 +147,16 @@ type Mark struct {
 	DensityCells float64 `json:"densityCells,omitempty"`
 	// Extend reports whether an annotation widens the axis to include itself.
 	Extend *bool `json:"extend,omitempty"`
+	// Dodge places the groups of a slot side by side rather than stacking
+	// them, leaving this fraction of each share blank. It is a pointer because
+	// zero padding is a dodge with the bars touching, which is a different
+	// thing from no dodge at all. Vega-Lite reaches the same place with an
+	// `xOffset` channel and its own scale, which is more machinery than one
+	// number.
+	Dodge *float64 `json:"dodge,omitempty"`
+	// Order is the order the groups are stacked and listed in: "appearance",
+	// "value" or "inside-out".
+	Order string `json:"order,omitempty"`
 }
 
 // Encoding maps channels onto columns, values and scales.
@@ -155,6 +166,17 @@ type Encoding struct {
 	X2    *Channel `json:"x2,omitempty"`
 	Y2    *Channel `json:"y2,omitempty"`
 	Color *Channel `json:"color,omitempty"`
+
+	// Detail is the series column: the channel that splits a layer into groups
+	// without saying anything about how they look. It is Vega-Lite's own name
+	// for exactly that, and a layer that also colours by the column carries it
+	// in both places, because the two say different things — one is what makes
+	// the series, the other is what paints them.
+	Detail *Channel `json:"detail,omitempty"`
+
+	// Width is refract's: the column a bar takes its width from. Vega-Lite has
+	// no equivalent channel, so no name is borrowed for it.
+	Width *Channel `json:"width,omitempty"`
 }
 
 // Channel is one encoding: a column, or a literal value, and the scale behind
@@ -168,6 +190,14 @@ type Channel struct {
 	Datum any    `json:"datum,omitempty"`
 	Title string `json:"title,omitempty"`
 	Scale *Scale `json:"scale,omitempty"`
+
+	// Stack is the position adjustment applied along this channel: "zero",
+	// "normalize", "center", "wiggle", or "none" for groups drawn from a
+	// common baseline. Vega-Lite puts it here too, and spells the first three
+	// the same way; "wiggle" is Vega's name for the streamgraph offset and
+	// "none" is refract's spelling of Vega-Lite's `null`, which is a JSON null
+	// rather than an absent field and would read as "not set" here.
+	Stack string `json:"stack,omitempty"`
 }
 
 // Scale is a positional or colour scale.

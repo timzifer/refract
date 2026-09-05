@@ -103,6 +103,31 @@ order that depends on scheduling.
   and cleared, not allocated per row. This is the allocation gate's business, and
   the gate is not to be widened for it.
 
+## As built, in v0.7
+
+The record survives contact with the code; three details it did not settle were
+settled while building it, and are recorded here rather than left to be
+rediscovered.
+
+- **A grouped `Bar` and `Area` stack by default, and nothing else does.** A bar
+  chart with a series column means a stacked bar chart — it is what a reader
+  expects and what the same document means in Vega-Lite — while two lines drawn
+  over one another are two readings that must not be added. So the default is
+  per mark, `config.stackFor` is where it lives, and `geom.Desc` carries
+  `StackSet` beside `Stack` so that a round trip through the spec cannot turn a
+  default into a pinned `NoStack`. That pair is `Dash`/`DashSet` again.
+- **Stacking accumulates in group order**, so a stack of mixed signs runs each
+  segment from where the last one ended rather than splitting into a positive
+  and a negative half. It is the reading a running total has, it is what d3
+  does, and the alternative is a second convention to explain.
+- **`geom.WidthBy` gives a bar its width in the axis's own units and does not
+  move the slots.** The record listed it for marimekko, where "the slot itself
+  carries a value" — but unequal slots have to be *labelled*, and an axis that
+  labels unequal slots is a scale question rather than an adjustment one. So a
+  marimekko is one layer whose X column already holds each column's centre, with
+  `WidthBy` for the widths and `StackFill` for the proportions, and the axis
+  question stays open until something needs it answered.
+
 ## Revisit if
 
 - **Someone genuinely needs to stack two differently-shaped layers** — a bar

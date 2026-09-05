@@ -192,13 +192,23 @@ func plotColumns(area ir.Rect) int { return max(int(area.Dx()), 1) }
 // draws.
 //
 // A scratch is held for one Build call and released at the end of it, so two
-// layers — or two panels on two goroutines — never share one.
+// layers — or two panels on two goroutines — never share one. It is exactly
+// one per Build, too: a helper that took a second one while the first was
+// still held would put two objects with *disjoint* buffers into one pool, and
+// whichever came back in the other's role next frame would have to grow the
+// other's buffers. That is a per-row allocation on the path whose whole point
+// is not having one, and it is invisible until the allocation gate is looked
+// at — see [eachGroup], which takes the caller's scratch for this reason.
 type scratch struct {
 	ok    []bool
 	segs  []series
 	fx    []float64 // interpolated data-space columns
 	fy    []float64
 	fz    []float64
+	gx    []float64 // one group's columns, gathered out of the table
+	gy    []float64
+	gz    []float64
+	grows []int
 	dx    []float32 // device-space columns
 	dy    []float32
 	dz    []float32
@@ -211,6 +221,8 @@ type scratch struct {
 	edge  []ir.Point
 	cols  []ir.Color
 	runs  []colorRun
+	rruns []rectRun
+	gruns []groupRun
 	at    map[ir.Color]int
 	fill  ir.Path
 	line  ir.Path
@@ -308,6 +320,37 @@ func (sc *scratch) reduce(mode Decimation, budget int, x, y, z []float32) []int 
 		return nil // nothing was dropped; skip the gather
 	}
 	return sc.keep
+}
+
+// gather collects the given rows of s into a contiguous series of its own.
+//
+// It is how a grouped layer draws one series at a time: the rows of one group
+// are scattered through the table, and every traversal below this — segmenting
+// at the holes, projecting, reducing — is written over a contiguous run. The
+// gathered series is not a cut of the source, so it carries a source row per
+// element rather than an offset, and only when someone asked for one.
+func (sc *scratch) gather(s series, rows []int) series {
+	n := len(rows)
+	out := series{x: grow(sc.gx, n), y: grow(sc.gy, n)}
+	for i, r := range rows {
+		out.x[i], out.y[i] = s.x[r], s.y[r]
+	}
+	sc.gx, sc.gy = out.x, out.y
+	if s.y2 != nil {
+		out.y2 = grow(sc.gz, n)
+		for i, r := range rows {
+			out.y2[i] = s.y2[r]
+		}
+		sc.gz = out.y2
+	}
+	if sc.wantRows {
+		out.rows = grow(sc.grows, n)
+		for i, r := range rows {
+			out.rows[i] = s.rowAt(r)
+		}
+		sc.grows = out.rows
+	}
+	return out
 }
 
 // marks gathers a projected segment into points, keeping only the given rows —

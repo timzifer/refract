@@ -73,6 +73,29 @@ END {
 	atMost("BenchmarkLTTB", 0)
 	atMost("BenchmarkMinMax", 0)
 
+	# Groups and the position adjustments, added in v0.7. A grouped layer
+	# indexes its rows and derives its stack on every Train, out of buffers it
+	# keeps between frames — so a long table costs what a short one costs. See
+	# docs/adr/0019-position-adjustments.md.
+	#
+	# This one is a budget rather than a comparison, and the reason is worth
+	# writing down. A grouped layer draws one series at a time out of a dozen
+	# pooled buffers, so a collection that empties the pool mid-run costs about
+	# seven allocations per frame to grow them all back — and how many
+	# collections land inside ten iterations depends on the garbage every
+	# *other* benchmark in the process left behind. Measured here, the large
+	# side comes out at 91, 98 or 106 depending on nothing this repository
+	# controls. A flat() over that pair would be a gate that goes red on an
+	# unlucky Tuesday, which this file exists not to be.
+	#
+	# The comparison is still made, where it can be made properly:
+	# TestAStackedLayerDoesNotAllocatePerPoint averages twenty runs in a
+	# process running nothing else. What is pinned here is the ceiling, which is
+	# what catches the regression that matters — a per-row cost over 100k rows
+	# is four orders of magnitude away from this number, not four allocations.
+	atMost("BenchmarkStacked100k", 128)
+	require("BenchmarkStacked1k")
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

@@ -134,6 +134,12 @@ func describeLayer(i int, g geom.Geom, c Chart) Series {
 	out.Rows = d.Source.Len()
 	out.XRange = columnRange(d.Source, d.X)
 	out.YRange = columnRange(d.Source, d.Y)
+	// A mark bounded on both axes reaches as far as its second column does, on
+	// whichever axis carries it: a gantt bar ends at its end date, and a
+	// description that stopped at the start dates would misreport the extent.
+	if r := columnRange(d.Source, d.X2); r.Ok {
+		out.XRange = merge(out.XRange, r)
+	}
 	if r := columnRange(d.Source, d.Y2); r.Ok {
 		out.YRange = merge(out.YRange, r)
 	}

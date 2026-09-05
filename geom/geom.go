@@ -90,8 +90,17 @@ type Option func(*config)
 
 type config struct {
 	xcol, ycol string
+	x2col      string
 	y2col      string
 	label      string
+
+	groupCol string
+	widthCol string
+	stack    Stacking
+	stackSet bool
+	dodge    bool
+	dodgePad float64
+	order    Ordering
 
 	color      *ir.Color
 	width      float32
@@ -174,8 +183,16 @@ func Baseline(v float64) Option { return func(c *config) { c.baseline = v } }
 
 // Y2 selects a second Y column, turning an area into a band between the two
 // series rather than between one series and a baseline. It is how a confidence
-// interval or a min/max envelope is drawn.
+// interval or a min/max envelope is drawn, and how a [Rect] is given a
+// per-row baseline.
 func Y2(col string) Option { return func(c *config) { c.y2col = col } }
+
+// X2 selects a second X column, giving a [Rect] its far edge: a gantt bar runs
+// from a start column to an end column, a candle from open to close.
+//
+// A rect with no X2 spans its slot on that axis instead, which is what a
+// heatmap wants and what makes the cell the size of the category.
+func X2(col string) Option { return func(c *config) { c.x2col = col } }
 
 // Opacity scales the fill alpha, in [0, 1]. The default is 1 for an explicit
 // [Fill] colour and 0.25 for an area that takes its colour from the palette —
@@ -197,12 +214,20 @@ const (
 // Steps sets where a [Step] geom changes value.
 func Steps(where StepPos) Option { return func(c *config) { c.steps = where } }
 
-// ColorBy maps a numeric column through a colour scale, giving every mark its
-// own colour. It applies to [Scatter] and [Bar]; geoms whose mark is one
+// ColorBy maps a column through a colour scale, giving every mark its own
+// colour. It applies to [Scatter], [Bar] and [Rect]; geoms whose mark is one
 // connected shape ignore it.
 //
-// A layer coloured this way contributes a colourbar rather than a legend
-// entry — a single swatch cannot represent a continuum. See [ColorGuide].
+// Which guide the layer then contributes follows from the kind of scale it was
+// handed. A continuous scale — [scale.Sequential], [scale.Diverging] — reads a
+// numeric column and contributes a colourbar, because a single swatch cannot
+// represent a continuum; see [ColorGuide]. A discrete one —
+// [scale.Qualitative] — reads a column of categories and contributes one legend
+// entry per category; see [Legender].
+//
+// The same scale also colours the series of a grouped layer, where the group
+// label is the category. Sharing one across the layers of a chart, or across
+// the panels of a facet, is what makes one colour mean one thing everywhere.
 func ColorBy(col string, s scale.ColorScale) Option {
 	return func(c *config) { c.colorCol, c.colorScale = col, s }
 }
@@ -350,10 +375,7 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 		s.y2 = v
 	}
 	if c.colorCol != "" {
-		if _, text := src.StringColumn(c.colorCol); text {
-			return series{}, fmt.Errorf("%w: column %q holds category names and a colour scale reads numbers", ErrCategorical, c.colorCol)
-		}
-		v, err := column(src, c.colorCol, nil)
+		v, err := colorColumn(src, c)
 		if err != nil {
 			return series{}, err
 		}
@@ -363,6 +385,35 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 		s.c = v
 	}
 	return s, nil
+}
+
+// colorColumn reads the column a colour scale paints from.
+//
+// A discrete scale reads categories, so a text column is encoded through it —
+// the same arrangement a categorical *axis* has, where the scale assigns the
+// numbers and the column is read in the scale's own space. A continuous scale
+// reads numbers and a text column is an error: there is no position on a ramp
+// for a name.
+func colorColumn(src data.Source, c config) ([]float64, error) {
+	if d, discrete := scale.Discrete(c.colorScale); discrete {
+		// Whatever the column is stored as, it is read as one label per row —
+		// [data.Labels] is the shared spelling of that, so a colour category
+		// and an axis category for the same value are the same string.
+		labels, ok := data.Labels(src, c.colorCol)
+		if !ok {
+			return nil, fmt.Errorf("%w: %q", ErrNoColumn, c.colorCol)
+		}
+		out := make([]float64, len(labels))
+		for i, l := range labels {
+			out[i] = d.Encode(l)
+		}
+		return out, nil
+	}
+	if _, text := src.StringColumn(c.colorCol); text {
+		return nil, fmt.Errorf("%w: column %q holds category names and a colour ramp reads numbers; give it a scale.Qualitative",
+			ErrCategorical, c.colorCol)
+	}
+	return column(src, c.colorCol, nil)
 }
 
 // column reads one column as float64 for the axis it feeds.
@@ -482,7 +533,13 @@ func (s series) checkMissing(c config, x, y scale.Scale) error {
 // faded to defaultOpacity instead, because a geom that fills the plot area has
 // to sit behind the lines and points it belongs to rather than bury them.
 func (c config) fillFor(f Frame, defaultOpacity float64) ir.Color {
-	base := c.colorFor(f)
+	return c.fillOf(c.colorFor(f), defaultOpacity)
+}
+
+// fillOf is fillFor over a colour the caller already resolved, which is what a
+// grouped layer needs: the base colour is the series' own rather than the
+// layer's.
+func (c config) fillOf(base ir.Color, defaultOpacity float64) ir.Color {
 	op := defaultOpacity
 	if c.fill != nil {
 		base, op = *c.fill, 1
@@ -534,6 +591,40 @@ func (sc *scratch) groupByColor(pts []ir.Point, cols []ir.Color) []colorRun {
 	return sc.runs[:n]
 }
 
+// rectRun is a set of cells that share a colour. It is [colorRun] for a mark
+// that is a box rather than a point, and it exists for the same reason: the IR
+// carries one style per drawing call, so a layer of a thousand differently
+// coloured cells is a call per distinct colour rather than a call per cell.
+type rectRun struct {
+	color ir.Color
+	rects []ir.Rect
+}
+
+// groupByRect batches cells by colour, in order of first appearance.
+func (sc *scratch) groupByRect(rects []ir.Rect, cols []ir.Color) []rectRun {
+	if sc.at == nil {
+		sc.at = make(map[ir.Color]int, 8)
+	}
+	clear(sc.at)
+	n := 0
+	for i, r := range rects {
+		c := cols[i]
+		j, ok := sc.at[c]
+		if !ok {
+			j = n
+			n++
+			if j == len(sc.rruns) {
+				sc.rruns = append(sc.rruns, rectRun{})
+			}
+			sc.rruns[j].color = c
+			sc.rruns[j].rects = sc.rruns[j].rects[:0]
+			sc.at[c] = j
+		}
+		sc.rruns[j].rects = append(sc.rruns[j].rects, r)
+	}
+	return sc.rruns[:n]
+}
+
 // trainColors feeds the colour column into the colour scale. It is separate
 // from training the positional scales because a colour scale is not a Scale:
 // it maps to paint, not to a position.
@@ -560,6 +651,23 @@ func (sc *scratch) colorsFor(c config, s series, idx []int) []ir.Color {
 
 // varying reports whether this layer paints each mark from a colour scale.
 func (c config) varying(s series) bool { return c.colorScale != nil && s.c != nil }
+
+// errLength reports two columns of a layer that disagree about how many rows
+// there are.
+func errLength(a, b string, na, nb int) error {
+	return fmt.Errorf("refract/geom: columns %q and %q differ in length (%d vs %d)", a, b, na, nb)
+}
+
+// extent is the range of the finite values in a column.
+func extent(vs []float64) (lo, hi float64, ok bool) {
+	lo, hi = math.Inf(1), math.Inf(-1)
+	for _, v := range vs {
+		if finite(v) {
+			lo, hi, ok = math.Min(lo, v), math.Max(hi, v), true
+		}
+	}
+	return lo, hi, ok
+}
 
 // smallestGap is the spacing between adjacent positions in data units: the
 // smallest distance between distinct values. Using the smallest rather than

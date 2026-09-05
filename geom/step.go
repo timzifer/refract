@@ -21,6 +21,7 @@ type stepGeom struct {
 	src data.Source
 	cfg config
 	s   series
+	gs  groups
 	err error
 }
 
@@ -34,30 +35,43 @@ func (g *stepGeom) Train(x, y scale.Scale) error {
 	}
 	trainColumn(x, g.s.x)
 	trainColumn(y, g.s.y)
-	return nil
+	// A staircase is a reading held over time, and two of them do not add up
+	// any more than two lines do.
+	g.err = g.gs.train(g.src, g.s, g.cfg, x, y, NoStack)
+	return g.err
 }
 
 func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
+	sc := acquire(f)
+	defer sc.release()
+
+	if g.gs.grouped() {
+		return eachGroup(sc, &g.gs, g.s, func(seg series, grp int) error {
+			return g.build(b, f, sc, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupDash(f, grp))
+		})
+	}
+	return g.build(b, f, sc, g.s, g.cfg.colorFor(f), g.cfg.dashFor(f))
+}
+
+func (g *stepGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Color, dash []float32) error {
 	stroke := ir.Stroke{
-		Color: g.cfg.colorFor(f),
+		Color: col,
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
 		Cap:   ir.CapButt,
 		Join:  ir.JoinMiter,
-		Dash:  g.cfg.dashFor(f),
+		Dash:  dash,
 	}
 	if !stroke.Visible() {
 		return nil
 	}
-	sc := acquire(f)
-	defer sc.release()
 
 	// A staircase is its transitions, so the reduction that keeps its extremes
 	// per column is the one that keeps the picture. See [Decimate].
-	mode, budget := g.cfg.reduction(shapeStair, g.s, f)
-	for _, seg := range sc.segments(g.s, sc.plottable(g.s, f.X, f.Y), g.cfg.missing) {
+	mode, budget := g.cfg.reduction(shapeStair, s, f)
+	for _, seg := range sc.segments(s, sc.plottable(s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
 		keep := sc.reduce(mode, budget, x, y, nil)
 		marks := sc.marks(x, y, keep)
@@ -71,6 +85,13 @@ func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 		b.Polyline(pts, stroke)
 	}
 	return nil
+}
+
+func (g *stepGeom) Legends(f Frame) []LegendEntry {
+	if g.err != nil {
+		return nil
+	}
+	return LegendsOr(g, f, g.cfg.legends(f, &g.gs, g.s, SwatchLine))
 }
 
 func (g *stepGeom) Legend(f Frame) (LegendEntry, bool) {

@@ -269,8 +269,13 @@ The part refract actually builds. Building blocks:
   the golden files prove it ([ADR 0018](docs/adr/0018-coordinate-systems.md)).
   Geographic projections are a wider seam — they transform every point with no
   linear interval underneath — and stay beyond v1.0.
-- **Geoms** — `Line`, `Scatter`, `Bar`, `Area`, `Step`, `Boxplot`, … Geoms know
-  *what* their shape is, never *how* it's rendered.
+- **Geoms** — `Line`, `Scatter`, `Bar`, `Area`, `Step`, `Boxplot`, `Rect`, …
+  Geoms know *what* their shape is, never *how* it's rendered.
+- **Groups and position adjustments** — a layer over a long table is N series,
+  split by `geom.GroupBy` and painted from a discrete colour scale; `Stack`,
+  `Dodge` and the streamgraph offsets are defined over those groups. The
+  offsets are derived in `Train`, because the axis has to describe the totals
+  ([ADR 0019](docs/adr/0019-position-adjustments.md)).
 - **Stats / transforms** — `Bin` (histogram), `Density` (KDE), `Smooth`
   (regression/loess), aggregation. A histogram is `geom.Bar` + `stat.Bin`.
 - **Facets** — `facet.Wrap` / `facet.Grid`, shared or free scales.
@@ -769,36 +774,56 @@ the interface. Accessibility stops at the document: there is no per-mark
 handling — a chart with ten thousand points has no useful reading as ten
 thousand elements, and the table is the better answer to the same question.
 
-### v0.7 — Marks, groups and adjustments
+### v0.7 — Marks, groups and adjustments — **shipped**
 
-The plumbing half the catalogue is waiting on. Nothing here is a coordinate
+The plumbing half the catalogue was waiting on. Nothing here is a coordinate
 system and nothing here is a stat; it is the four pieces that most missing
 chart types share. See [docs/chart-types.md](docs/chart-types.md) for the full
 list and what each form costs.
 
 - A data-driven rectangle mark. `Bar` grows from a baseline and `Region` takes
-  four literals, so no mark occupies an arbitrary box per row. `geom.Rect`, a
-  `geom.X2` beside the existing `geom.Y2`, and a per-row baseline turn heatmap,
-  gantt, candlestick, waterfall, bullet, waffle and calendar into recipes rather
-  than into seven geoms.
-- Groups within one layer, and a discrete colour scale to paint them. A long
-  table with a series column is one layer, not N — which is what streamgraph and
-  marimekko need anyway, and what stacking is defined over
+  four literals, so no mark occupied an arbitrary box per row. `geom.Rect`, a
+  `geom.X2` beside the existing `geom.Y2`, and a per-row baseline through `Y2`
+  turn heatmap, gantt, candlestick, waterfall, bullet, waffle and calendar into
+  recipes rather than into seven geoms. An edge the row does not name is the
+  slot the axis implies — a band's own width, or the closest spacing in the
+  data — so a heatmap over two categorical axes is two columns and a colour.
+- Groups within one layer, and a discrete colour scale to paint them.
+  `geom.GroupBy` splits a long table into series; `scale.Qualitative` is the
+  categorical colour scale, shaped like `scale.Categorical` and riding the
+  `ColorScale` interface the same way, so one `geom.ColorBy` binds either kind
+  and the guide follows from the scale rather than from a second option
   ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
-- A layer may contribute many legend entries, through an optional interface
-  rather than a wider `Geom`. §17.7 freezes that interface at v1.0, and a pie
-  with N slices in one layer must not be the reason it freezes badly.
+- A layer may contribute many legend entries, through `geom.Legender` — an
+  optional interface rather than a wider `Geom`. §17.7 freezes that interface
+  at v1.0, and a pie with N slices in one layer must not be the reason it
+  freezes badly.
 - Position adjustments: stack, dodge, fill, and the silhouette and wiggle
   offsets a streamgraph is made of. Derived in `Train`, because the axis has to
   describe the totals; drawn in `Build`, because that is where geometry lives
-  ([ADR 0019](docs/adr/0019-position-adjustments.md)).
+  ([ADR 0019](docs/adr/0019-position-adjustments.md)). The Byron–Wattenberg
+  offset itself is `stat.StackOffsets` — numbers in, numbers out.
 - *DoD:* one layer over a long table draws N coloured series and the legend
   names all N; a stacked bar's axis reaches the stacked total and each segment
   is separately hittable and separately attributable to its row; a heatmap and
   a gantt chart render from the public API; every new mark and option survives
   the JSON round trip, including the `("rect", "")` collision between a
   data-driven rect and the region annotation; the allocation gates are
-  unchanged.
+  unchanged. ✔
+
+Not in v0.7, in case they look like oversights. A grouped **bar and area stack
+by default** and everything else does not: two lines drawn over one another are
+two readings, and adding them would invent a third nobody measured. Stacking
+accumulates in group order, so a stack of mixed signs runs each segment from
+where the last one ended rather than splitting into a positive and a negative
+half — the pictures differ, and the sequential one is the one a running total
+is. `geom.WidthBy` gives a bar its width from a column, in the axis's own
+units; it does not *reposition* the slots, so a marimekko is one layer whose X
+column already holds each column's centre. That is a deliberate line: unequal
+slots that label themselves are an axis question rather than an adjustment
+one. And a group index is per layer, so a facet whose panels hold different
+groups wants an explicit `scale.Qualitative` — a shared scale is what makes one
+colour mean one thing across panels, and the palette index cannot be.
 
 ### v0.8 — Coordinates
 
@@ -906,8 +931,11 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
   scale/                     # linear, time (+ log, symlog, ordinal, colour) (v0.1)
                              # + Origin, for a time domain that keeps its
                              # nanoseconds at any zoom                    (v0.6)
+                             # + Qualitative, the discrete colour scale   (v0.7)
   geom/                      # line, scatter, bar (+ area, step, boxplot) (v0.1)
+                             # + rect, groups and the position adjustments (v0.7)
   stat/                      # LTTB, min/max, density binning              (v0.4)
+                             # + StackOffsets, the streamgraph baselines   (v0.7)
                              # (smooth and aggregate are still to come)
   coord/                     # cartesian + polar (the pluggable stage)   (v0.8)
   layout/                    # panel-grid constraint solver               (v0.3)
