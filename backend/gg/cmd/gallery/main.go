@@ -519,6 +519,40 @@ func figures() []figure {
 			},
 		},
 		{
+			// The v0.8 sugar, and still not a new mark. A slice's two radial
+			// edges are two columns — geom.X and geom.X2, the pair a gantt bar
+			// has used since v0.7 — so how far a slice reaches is a second
+			// measure rather than a constant the coord chose. geom.ExplodeBy
+			// then moves one slice out of the ring along its own bisector
+			// without changing anything it says; the gap is where it came
+			// from. See docs/adr/0026-breaking-a-mark-out.md.
+			name: "donut", width: 620, high: 440, title: "Spend against each team's budget",
+			theme: theme.Light.With(
+				theme.Grid(false, false),
+				theme.AxisLines(false, false),
+				theme.Ticks(false, false),
+			),
+			opts: []refract.Option{refract.Coord(coord.Pie(coord.Radius(0.95)))},
+			build: func(p *refract.Plot) {
+				teams, share, floor, used, pull := budgets()
+				src := refract.NewTable().
+					String("team", teams).
+					Float64("share", share).
+					Float64("floor", floor).
+					Float64("used", used).
+					Float64("pull", pull)
+				// The radial domain is fixed so that the rim means the whole
+				// budget rather than the biggest of these five; the angular
+				// one is not niced, so the ring closes.
+				p.X(scale.Linear(scale.Domain(0, 1)))
+				p.Y(scale.Linear())
+				p.Add(geom.Bar(src,
+					geom.X("floor"), geom.X2("used"), geom.Y("share"),
+					geom.GroupBy("team"), geom.ExplodeBy("pull"),
+					geom.ColorBy("team", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
 			// A radar is not a new mark either: it is a line over an ordinal
 			// angular axis. Two things make it read as one — its edges are
 			// chords rather than arcs, and the contour closes back to the
@@ -558,6 +592,17 @@ func figures() []figure {
 			},
 		},
 	}
+}
+
+// budgets is five teams: what each spent as a share of the total, where its
+// slice starts, how much of its own budget it used, and how far it is broken
+// out of the ring. Growth is the one over budget, and the one pulled out.
+func budgets() (teams []string, share, floor, used, pull []float64) {
+	return []string{"platform", "data", "growth", "support", "design"},
+		[]float64{32, 24, 18, 14, 12},
+		[]float64{0.35, 0.35, 0.35, 0.35, 0.35},
+		[]float64{0.92, 0.78, 1, 0.55, 0.66},
+		[]float64{0, 0, 0.12, 0, 0}
 }
 
 // browserShare is a market share that adds to a hundred, so the ring closes on

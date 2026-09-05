@@ -116,6 +116,28 @@ type Describer interface {
 	Describe() Desc
 }
 
+// Exploder is implemented by a coord with a middle for a mark to be moved away
+// from: what a slice broken out of a donut is doing.
+//
+// It is an optional interface, like [Describer], and [Cartesian] deliberately
+// does not implement it. A rectangle on a Cartesian panel has no direction to
+// be broken out in — every bar would move the same way, which is a translation
+// of the layer rather than a reading of it — so a layer asking to break its
+// marks out under a coord that has no middle draws exactly what it drew, and
+// nothing is silently invented.
+//
+// The displacement is answered rather than applied, because a coord does not
+// draw: the geom that built the mark moves the path it built. A geom resolves
+// the interface once per Build rather than per mark, exactly as it does
+// [github.com/timzifer/refract/scale.Band]. See
+// docs/adr/0026-breaking-a-mark-out.md.
+type Exploder interface {
+	// Explode reports the device displacement of a mark whose extent in the
+	// space the scales map into is the given pair of mapped positions, when it
+	// is broken out by the fraction by of the coord's outer radius.
+	Explode(x0, y0, x1, y1 float32, by float64) (dx, dy float32)
+}
+
 // Metrics are the theme lengths a coord needs in order to place furniture.
 // They are passed in rather than read because a coord must not know what a
 // theme is.

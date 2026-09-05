@@ -55,6 +55,43 @@ func Polar(opts ...Option) Coord {
 	return p
 }
 
+// Pie is [Polar] with the angle taken from the Y axis: the recipe above, named.
+//
+// It is sugar and nothing else — `Pie()` is `Polar(Theta(FromY))` — but it is
+// the spelling that says what the chart is, and the one place the two things a
+// pie needs beyond the coord can be written down where a reader will look for
+// them. Those two are the layer and the scales:
+//
+//	p := refract.New(refract.Coord(coord.Pie()))
+//	p.X(scale.Linear()) // one slot, filling the radius
+//	p.Y(scale.Linear()) // the stacked total, filling the circle
+//	p.Add(geom.Bar(src, geom.X("one"), geom.Y("share"), geom.GroupBy("browser")))
+//
+// Neither scale is niced, and that is not an oversight: a niced angular domain
+// rounds the total up and leaves a wedge of nothing at twelve o'clock.
+//
+// Further options are applied after the default, so a half pie is
+// `Pie(Sweep(math.Pi))` and a pie that turns the other way is
+// `Pie(Counterclockwise(true))`.
+func Pie(opts ...Option) Coord {
+	return Polar(append([]Option{Theta(FromY)}, opts...)...)
+}
+
+// Donut is [Pie] with a hole of the given fraction: the same chart with its
+// middle left empty.
+//
+//	refract.Coord(coord.Donut(0.45))
+//
+// The hole is where the radial scale starts rather than a disc of background
+// painted over the middle, so nothing is drawn inside it and a pointer in it
+// hits nothing — see [Hole]. A donut whose slices name their own inner and
+// outer radius is that hole plus [github.com/timzifer/refract/geom.X2]: the
+// radial axis is a dimension like any other, and the ring is only the slot a
+// slice fills when the row does not say.
+func Donut(hole float64, opts ...Option) Coord {
+	return Pie(append([]Option{Hole(hole)}, opts...)...)
+}
+
 // Option configures a coord.
 type Option func(*polar)
 
@@ -415,6 +452,25 @@ func (p *polar) Invert(pt ir.Point) (x, y float32) {
 	return p.join(float32(theta), float32(r))
 }
 
+// Explode reports how far a mark spanning the given mapped rectangle moves when
+// it is broken out of the ring: outwards along its own bisector, by the given
+// fraction of the outer radius. See [Exploder].
+//
+// The bisector rather than the near edge is what makes a broken-out slice read
+// as the slice it was: a wedge moved along its middle keeps a gap of the same
+// width on both of its radial edges, while one moved along an edge closes the
+// gap on that side and opens twice as much on the other.
+func (p *polar) Explode(x0, y0, x1, y1 float32, by float64) (dx, dy float32) {
+	if by == 0 {
+		return 0, 0
+	}
+	t0, _ := p.split(x0, y0)
+	t1, _ := p.split(x1, y1)
+	s, c := math.Sincos(p.angle(float64(t0+t1) / 2))
+	d := by * float64(p.r1)
+	return float32(d * s), float32(-d * c)
+}
+
 // Decimates reports false: see [Coord.Decimates]. A bucket of equal angle is
 // not a bucket of equal width, so a reduction defined over pixel columns would
 // be measuring something other than what it was designed to measure — and
@@ -531,4 +587,5 @@ const alignEps = 0.05
 var (
 	_ Coord     = (*polar)(nil)
 	_ Describer = (*polar)(nil)
+	_ Exploder  = (*polar)(nil)
 )

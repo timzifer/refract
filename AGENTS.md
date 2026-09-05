@@ -433,16 +433,25 @@ whose whole point is not having one. `geom.eachGroup` therefore takes a
 grouped frame 127 kB and seven allocations it did not need; nothing failed
 except the allocation gate, which is what the gate is for.
 
-**A benchmark's allocation count is not stable enough to compare across sizes
-when a pool miss is in play.** `sync.Pool` is emptied by every collection, and
-how many collections land inside `-benchtime=10x` depends on the garbage the
-*other* benchmarks in that process left behind — so `BenchmarkStacked100k`
-comes out at 91, 98 or 106 for the same code. The flat comparison therefore
-lives in `TestAStackedLayerDoesNotAllocatePerPoint`, which averages twenty runs
-in a process running nothing else, and `.github/scripts/allocgate.awk` pins a
-*budget* for that benchmark instead. Reach for `atMost` rather than a wider
-`flat` slack the next time a pair will not sit still: a gate that flakes is a
-gate people learn to ignore.
+**A gated benchmark measures on one processor, and that is what makes its count
+reproducible.** `sync.Pool` keeps a private slot per P. A render Gets its
+scratch and Puts it back on one goroutine — but a frame takes milliseconds, the
+scheduler preempts asynchronously every ten of them, and a goroutine that
+resumes on a different P finds its own scratch stranded in the old P's private
+slot, which nothing can steal from. That frame then refills every buffer it
+needs: about sixty allocations that have nothing to do with the data, landing
+in one iteration out of a few dozen. Over ten iterations that is the difference
+between 54 and 68 allocs/op for the same code, and it is why three gates in
+`allocgate.awk` used to be budgets with an apology attached.
+
+`onOnePGate` in `alloc_test.go` pins the measurement, and the counts are now
+bit-identical across runs — `flat()` compares every pair again. Add it to any
+new benchmark whose number the gate reads; leave it off the parallel ones,
+which measure panels on several goroutines and are gated on nothing.
+`testing.AllocsPerRun` pins the same way, which is why the test half of the
+gate was steady all along while the benchmark half was not. A pool miss is a
+real cost that a real chart pays occasionally; it is simply not the cost this
+gate measures, which is whether a frame allocates *per row*.
 
 **Group order is order of first appearance, and `geom.Order` is the only thing
 that changes it.** Map iteration order is not an order; ADR 0012 requires a
@@ -530,6 +539,41 @@ measured from the pointer rather than from the corner the hit reports — a corn
 of a tall bar is nearer to the neighbouring bar's row than to its own, and every
 slice of a pie shares the corner in the middle.
 
+**A break-out is a displacement the coord computes and the geom applies.**
+`coord.Exploder` answers how far a mark moves when it is broken out of the
+middle; `geom` moves the points the `Area` call appended, in place. That split
+is the coordinate stage's own: a coord reports geometry and does not draw. Two
+consequences are load-bearing. `coord.Cartesian` deliberately does **not**
+implement `Exploder`, so `geom.Explode` on a Cartesian chart draws exactly what
+it drew — that silence is what keeps every golden file unchanged by an option
+every geom now accepts, and making Cartesian answer would move every bar of a
+layer the same way, which is a translation rather than a reading. And the
+displacement is applied to the mark's path rather than to its extent: a
+broken-out slice keeps the angle and the radii the data gave it, and growing the
+radius instead would move the ink *and* the reading. See
+[ADR 0026](docs/adr/0026-breaking-a-mark-out.md).
+
+**A run's displacement buffer is tested by length, not against nil.** The
+batching runs come back from the scratch pool emptied rather than cleared away,
+so a layer that breaks nothing out is handed a non-nil `offs` with nothing in
+it. `geom.offsetAt` therefore compares `i >= len(offs)`. Testing for nil there
+compiles, passes every test with a fresh pool, and panics on the second frame of
+a chart drawn after a broken-out one.
+
+**A bar's slot is measured once per Train, out of a buffer the layer keeps.**
+Two mistakes lived in one line here, and both are worth recognising again.
+`smallestGap` sorts, and `barGeom.halfWidth` asked it for the answer *per row* —
+which made a bar layer quadratic in its rows: a ring of sixteen thousand slices
+spent 2.5 seconds a frame, of which 64 % was that sort. And `smallestGap`
+allocated the copy it sorted, so even once per `Train` it was a copy of the
+column **per frame** — 800 kB of the 810 kB a hundred-thousand-slice frame
+allocated, which is also enough garbage to drive the collections that empty the
+scratch pool. It is `barGeom.gap` now, measured in `Train` out of `barGeom.gaps`
+— `smallestGap(buf, vs)` hands the buffer back — and `Rect` and `Boxplot` keep
+one each for the same reason. The buffer lives on the layer rather than in the
+frame's pool because `Train` runs outside a `Build`, where there is no scratch
+to take; that is the same argument the group index already makes.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it
@@ -550,7 +594,7 @@ everyone who implements it: `scale.Definite`, `scale.Categorical`,
 `scale.Band`, `scale.Cloner`, `scale.Snapshotter`, `scale.Zoomer`,
 `scale.Describer`, `scale.ColorDescriber`, `scale.DiscreteColorScale`,
 `scale.Temporal`, `geom.Faceter`, `geom.Guided`, `geom.Legender`,
-`geom.Describer`, `coord.Describer`, `ir.Partial`, `ir.Semantics`,
+`geom.Describer`, `coord.Describer`, `coord.Exploder`, `ir.Partial`, `ir.Semantics`,
 `ir.Resizer`, `mathtext.Plainer`. Reach for one before adding a method to `Scale`, `Geom` or
 `Backend`. `geom.Legender` is the newest and the argument is worth keeping in
 view: a pie, a stack and a waffle contribute N legend entries from one layer,
@@ -583,6 +627,19 @@ whether a series wraps is a fact about the series, and a polar time series
 spiralling through three revolutions does not wrap. And a curve is hit-tested as
 its control polygon, so a filled shape can be pointed at a little way outside
 its ink at a bulge.
+
+Things the v0.8 sugar deliberately did not do. There is no `geom.Slice` and
+there are no `Inner`/`Outer` channels: `Geom.Train` is handed the two scales and
+no coord, so a layer cannot know at training time which of them is the radius —
+a channel that only exists under one coord would be the pie geom this project
+does not have. The break-out is **per row rather than per group**, because that
+is what a channel means everywhere else; a donut has one row per slice, so the
+distinction only shows on a stack of several rows per series, whose segments
+move independently. Only `Bar` and `Rect` honour it, because they are the marks
+that draw an annular sector — a broken-out line has no ring to leave. And a
+layer that asks for a break-out under a coord that cannot answer draws what it
+drew, silently: an error would make every Cartesian chart's option list
+conditional on a coord chosen somewhere else.
 
 Things v0.7 deliberately did not do. A grouped **line, step and scatter do not
 stack**: two series drawn over one another are two readings, and adding them

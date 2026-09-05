@@ -27,19 +27,21 @@ func main() {
 	radar := flag.String("radar", "designs.svg", "output path for the radar chart")
 	rose := flag.String("rose", "wind.svg", "output path for the wind rose")
 	gauge := flag.String("gauge", "capacity.svg", "output path for the gauge")
+	spend := flag.String("spend", "budgets.svg", "output path for the broken-out donut")
 	flag.Parse()
-	if err := run(*donut, *radar, *rose, *gauge); err != nil {
+	if err := run(*donut, *radar, *rose, *gauge, *spend); err != nil {
 		fmt.Fprintln(os.Stderr, "polar:", err)
 		os.Exit(1)
 	}
 }
 
-func run(donut, radar, rose, gauge string) error {
+func run(donut, radar, rose, gauge, spend string) error {
 	for _, step := range []func() error{
 		func() error { return browserShare(donut) },
 		func() error { return designScores(radar) },
 		func() error { return windRose(rose) },
 		func() error { return capacity(gauge) },
+		func() error { return spending(spend) },
 	} {
 		if err := step(); err != nil {
 			return err
@@ -188,6 +190,61 @@ func capacity(out string) error {
 		geom.HLine(90, geom.Label("limit")),
 	)
 	return p.Render(refract.SVG(out))
+}
+
+// spending is a donut carrying three numbers per slice instead of one, with
+// the slice that matters broken out of the ring.
+//
+// It is the v0.8 sugar in one chart, and nothing in it is a new mark. How far
+// round a slice goes is its share of the spend, exactly as in the donut above.
+// How far *out* it goes is its team's budget used, because geom.X and geom.X2
+// name the radial edges per row — so the ring is no longer a ring, and the
+// second measure is read against the rim rather than against a legend. And the
+// team that went over its budget is pulled out of the ring by geom.ExplodeBy,
+// which moves the slice without changing anything it says: the gap is where it
+// came from.
+//
+// coord.Pie rather than coord.Donut, because here the hole is a column: every
+// slice starts at the same floor, and it would be a different column if they
+// did not.
+func spending(out string) error {
+	teams, share, floor, used, pull := budgets()
+	src := refract.NewTable().
+		String("team", teams).
+		Float64("share", share).
+		Float64("floor", floor).
+		Float64("used", used).
+		Float64("pull", pull)
+
+	p := refract.New(
+		refract.Size(620, 440),
+		refract.Title("Spend by team, against each team's own budget"),
+		refract.Theme(bare(theme.Light)),
+		refract.Coord(coord.Pie(coord.Radius(0.95))),
+	)
+	// The radial domain is fixed at [0, 1] so that the rim means "the whole
+	// budget" rather than "the biggest of these five", and the angular one is
+	// not niced so that the ring closes.
+	p.X(scale.Linear(scale.Domain(0, 1)))
+	p.Y(scale.Linear())
+	p.Add(geom.Bar(src,
+		geom.X("floor"), geom.X2("used"), geom.Y("share"),
+		geom.GroupBy("team"),
+		geom.ExplodeBy("pull"),
+		geom.ColorBy("team", scale.Qualitative(palette.OkabeIto)),
+	))
+	return p.Render(refract.SVG(out))
+}
+
+// budgets is five teams: what each spent as a share of the total, where its
+// slice starts, how much of its own budget it used, and how far it is pulled
+// out of the ring. Growth is the one over its budget, and the one broken out.
+func budgets() (teams []string, share, floor, used, pull []float64) {
+	return []string{"platform", "data", "growth", "support", "design"},
+		[]float64{32, 24, 18, 14, 12},
+		[]float64{0.35, 0.35, 0.35, 0.35, 0.35},
+		[]float64{0.92, 0.78, 1, 0.55, 0.66},
+		[]float64{0, 0, 0.12, 0, 0}
 }
 
 // browsers is a market share that adds to a hundred, so the ring closes on

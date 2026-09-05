@@ -161,6 +161,11 @@ type Mark struct {
 	// Order is the order the groups are stacked and listed in: "appearance",
 	// "value" or "inside-out".
 	Order string `json:"order,omitempty"`
+	// Explode breaks the mark out of the middle of the coord, as a fraction of
+	// its outer radius: a slice pulled out of a donut. It is refract's own —
+	// Vega-Lite has no coordinate stage and therefore no middle to move away
+	// from — and the per-row form is the `explode` channel.
+	Explode float64 `json:"explode,omitempty"`
 	// Closed joins a connected mark's last point back to its first, which is
 	// what makes a radar a contour. Vega-Lite has no equivalent, so no name is
 	// borrowed for it.
@@ -231,6 +236,11 @@ type Encoding struct {
 	// Width is refract's: the column a bar takes its width from. Vega-Lite has
 	// no equivalent channel, so no name is borrowed for it.
 	Width *Channel `json:"width,omitempty"`
+
+	// Explode is refract's too: the column each mark's break-out is read from,
+	// which is how one slice leaves a donut and the rest stay in it. The
+	// constant form is the mark's own `explode` property.
+	Explode *Channel `json:"explode,omitempty"`
 }
 
 // Channel is one encoding: a column, or a literal value, and the scale behind

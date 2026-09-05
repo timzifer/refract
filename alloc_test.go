@@ -2,6 +2,7 @@ package refract_test
 
 import (
 	"math"
+	"runtime"
 	"testing"
 
 	"github.com/timzifer/refract"
@@ -93,6 +94,36 @@ func polarSignal(n int) *refract.Plot {
 	return p
 }
 
+// brokenRing is the v0.8 sugar's data path: a donut whose slices name their
+// own inner and outer radius and are broken out of the ring per row.
+//
+// It is the fifth thing worth measuring, because it is the one that collects
+// something per mark that is not a mark — a displacement — and carries it
+// through the batching. The buffer for it comes from the scratch pool like
+// every other, and this is what says so.
+func brokenRing(n int) *refract.Plot {
+	names := [...]string{"north", "south", "east", "west"}
+	var share, floor, reach, pull []float64
+	var series []string
+	for i := range n {
+		share = append(share, 1+math.Sin(float64(i)/97))
+		floor = append(floor, 0.4)
+		reach = append(reach, 0.6+0.4*math.Abs(math.Sin(float64(i)/31)))
+		pull = append(pull, 0.05*float64(i%3))
+		series = append(series, names[i%len(names)])
+	}
+	src := refract.NewTable().
+		Float64("share", share).Float64("floor", floor).
+		Float64("reach", reach).Float64("pull", pull).
+		String("s", series)
+	p := refract.New(refract.Size(800, 500), refract.Coord(coord.Donut(0.3)))
+	p.X(scale.Linear(scale.Domain(0, 1)))
+	p.Y(scale.Linear())
+	p.Add(geom.Bar(src, geom.X("floor"), geom.X2("reach"), geom.Y("share"),
+		geom.GroupBy("s"), geom.ExplodeBy("pull")))
+	return p
+}
+
 func facetedSignal(panels, rows int) *refract.Plot { return facetedSignalWith(panels, rows, true) }
 
 func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
@@ -112,7 +143,36 @@ func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
 	return p
 }
 
+// onOnePGate pins a benchmark's measurement to a single processor, and is what
+// makes an allocation count reproducible rather than merely typical.
+//
+// The noise it removes is sync.Pool's, and it is worth writing down because it
+// is invisible in a profile. A pool keeps a private slot per P. A render Gets
+// its scratch and Puts it back on the same goroutine — but a frame here takes
+// milliseconds, the scheduler preempts asynchronously every ten of them, and a
+// goroutine that comes back on a different P finds its own scratch stranded in
+// the old P's private slot, which nothing can steal from. The frame then
+// refills every buffer it needs: about sixty allocations that have nothing to
+// do with the data, landing in one iteration out of a few dozen. Measured over
+// ten iterations that is the difference between 54 and 68 allocs/op for the
+// same code, which is exactly the flake that makes a gate ignorable.
+//
+// One P has one private slot and nothing to migrate to, so the count is the
+// same on every run. This is not a thumb on the scale: a pool miss is a real
+// cost that a real chart pays occasionally, and it is simply not the cost this
+// gate measures — the gate asks whether a frame allocates *per row*.
+// testing.AllocsPerRun does the same thing for the test half of the gate, which
+// is why the tests were steady all along while the benchmarks were not.
+//
+// The parallel benchmarks below are deliberately not pinned: what they measure
+// is panels drawn on several goroutines, and nothing gates their counts.
+func onOnePGate(b *testing.B) {
+	prev := runtime.GOMAXPROCS(1)
+	b.Cleanup(func() { runtime.GOMAXPROCS(prev) })
+}
+
 func benchmarkFrame(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := signal(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -128,6 +188,7 @@ func benchmarkFrame(b *testing.B, rows int) {
 }
 
 func benchmarkStacked(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := stackedSeries(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -149,6 +210,7 @@ func BenchmarkStacked1k(b *testing.B)   { benchmarkStacked(b, 1_000) }
 func BenchmarkStacked100k(b *testing.B) { benchmarkStacked(b, 100_000) }
 
 func benchmarkPolar(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := polarSignal(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -167,6 +229,28 @@ func benchmarkPolar(b *testing.B, rows int) {
 // coord.Coord.Points, and the batch form is the reason that costs nothing.
 func BenchmarkPolar1k(b *testing.B)   { benchmarkPolar(b, 1_000) }
 func BenchmarkPolar100k(b *testing.B) { benchmarkPolar(b, 100_000) }
+
+func benchmarkBrokenRing(b *testing.B, rows int) {
+	onOnePGate(b)
+	p := brokenRing(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// The v0.8 sugar's path: a slice's radii come from two columns and its
+// break-out from a third, and the displacement of every mark is collected and
+// carried through the batching out of pooled memory.
+func BenchmarkBrokenRing1k(b *testing.B)   { benchmarkBrokenRing(b, 1_000) }
+func BenchmarkBrokenRing100k(b *testing.B) { benchmarkBrokenRing(b, 100_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }

@@ -19,6 +19,12 @@ import (
 // allocsPerFrame is the average number of allocations one steady-state render
 // makes, into a backend that does nothing — so what is measured is refract's
 // own work rather than an emitter's.
+//
+// [testing.AllocsPerRun] measures on one processor, which is what keeps the
+// count reproducible: a goroutine that migrated between processors would leave
+// its pooled scratch in the old one's private slot and be charged for refilling
+// it. The benchmark half of the gate pins itself the same way — see onOnePGate
+// in alloc_test.go, which is a note about why this half never needed one.
 func allocsPerFrame(t *testing.T, p *refract.Plot) float64 {
 	t.Helper()
 	target := irtest.NullTarget()
@@ -114,6 +120,19 @@ func TestAPolarRenderDoesNotAllocatePerPoint(t *testing.T) {
 	if large > small+slack {
 		t.Errorf("200k polar marks allocate %.0f times per frame against %.0f for 1k: "+
 			"the coord is allocating per point", large, small)
+	}
+}
+
+// A broken-out layer collects a displacement per mark and carries it through
+// the colour and group batching. All of that comes out of the scratch pool, so
+// a ring of two hundred thousand slices costs what a ring of a thousand does.
+func TestABrokenOutLayerDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, brokenRing(1_000))
+	large := allocsPerFrame(t, brokenRing(200_000))
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("200k broken-out slices allocate %.0f times per frame against %.0f for 1k: "+
+			"the break-out is allocating per mark", large, small)
 	}
 }
 

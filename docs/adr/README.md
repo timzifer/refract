@@ -35,6 +35,7 @@ depends on.
 | [0023](0023-math-typesetting.md) | Notation is typeset by a pluggable typesetter, installed by wrapping the backend | Accepted | — |
 | [0024](0024-accessibility.md) | A chart says what it is in three channels: a name, a description, and its data | Accepted | — |
 | [0025](0025-responsive-charts.md) | A chart follows its surface by scaling its theme | Accepted | — |
+| [0026](0026-breaking-a-mark-out.md) | A mark is broken out by displacing it, and the coord answers how far | Accepted | — |
 
 Still open, deliberately: **§17.7** (the third-party geom and backend extension
 API). It freezes at v1.0, and freezing it well is what makes the "last plotting

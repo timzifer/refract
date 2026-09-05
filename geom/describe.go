@@ -85,6 +85,12 @@ type Desc struct {
 	Order    Ordering
 	WidthCol string
 
+	// Explode is how far the layer's marks are broken out of the middle of the
+	// coord, as a fraction of its outer radius, and ExplodeCol the column that
+	// answers it per row. Zero and "" are a layer that stays where it is.
+	Explode    float64
+	ExplodeCol string
+
 	// Label names the layer in the legend.
 	Label string
 
@@ -250,6 +256,12 @@ func (d Desc) options() []Option {
 	if d.WidthCol != "" {
 		opts = append(opts, WidthBy(d.WidthCol))
 	}
+	if d.Explode != 0 {
+		opts = append(opts, Explode(d.Explode))
+	}
+	if d.ExplodeCol != "" {
+		opts = append(opts, ExplodeBy(d.ExplodeCol))
+	}
 	if d.Label != "" {
 		opts = append(opts, Label(d.Label))
 	}
@@ -298,6 +310,8 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		DodgePad:   c.dodgePad,
 		Order:      c.order,
 		WidthCol:   c.widthCol,
+		Explode:    c.explode,
+		ExplodeCol: c.explodeCol,
 		Label:      c.label,
 		Color:      c.color,
 		Fill:       c.fill,

@@ -32,6 +32,8 @@ type boxGeom struct {
 	cfg    config
 	s      series
 	groups []boxGroup
+	at     []float64 // the group positions, gathered for [boxGeom.slot]
+	gaps   []float64 // the buffer the slot is measured out of
 	err    error
 }
 
@@ -78,11 +80,14 @@ func (g *boxGeom) widthFraction() float64 {
 }
 
 func (g *boxGeom) slot() float64 {
-	at := make([]float64, len(g.groups))
+	at := grow(g.at, len(g.groups))
 	for i, grp := range g.groups {
 		at[i] = grp.at
 	}
-	return smallestGap(at)
+	g.at = at
+	gap, buf := smallestGap(g.gaps, at)
+	g.gaps = buf
+	return gap
 }
 
 func (g *boxGeom) Build(b ir.Backend, f Frame) error {

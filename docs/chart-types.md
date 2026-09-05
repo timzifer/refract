@@ -79,8 +79,10 @@ name them.
 
 | Chart | Recipe |
 |---|---|
-| Pie | `Bar` + `GroupBy` in `coord.Polar(coord.Theta(coord.FromY))`, over one X slot |
-| Donut | the same, plus `coord.Hole(f)` — the hole is where the radial scale starts |
+| Pie | `Bar` + `GroupBy` in `coord.Pie()` — `coord.Polar(coord.Theta(coord.FromY))` — over one X slot |
+| Donut | the same, plus `coord.Hole(f)`, which `coord.Donut(f)` is sugar for — the hole is where the radial scale starts |
+| Donut with a second measure | the same, plus `geom.X("floor")` and `geom.X2("reach")`: a slice's inner and outer radius are columns, so how far it reaches is a reading |
+| Exploded pie or donut | the same, plus `geom.ExplodeBy(col)` — one slice leaves the ring along its own bisector, and `geom.Explode(f)` moves them all |
 | Radar / spider | `Line` or `Area` over an ordinal angular axis, with `coord.Chord()` and `geom.Closed(true)` |
 | Rose / coxcomb, wind rose | `Bar` with the direction on the angular axis and the count on the radial one |
 | Gauge | `Bar` over `coord.Sweep(math.Pi)` — a partial ring — usually with a hole |
@@ -96,6 +98,14 @@ without `scale.Nice()` is the recipe, and `refract.Coord`'s doc comment says so.
 **An edge is an arc by default and a chord on request.** That is
 `coord.Chord()`, and it is what tells a radar's sides apart from a rose petal's.
 Without it a spider chart comes out with bowed sides.
+
+**A slice's radial edges are dimensions, and its break-out is not.** `X` and
+`X2` name where a slice starts and stops, so a donut can carry a second measure
+against the rim — which is the honest version of the chart an exploded pie
+usually fakes by growing a slice. The break-out itself moves the mark and
+changes nothing it says, which is why it is a displacement the coord computes
+rather than a radius the geom adds
+([ADR 0026](adr/0026-breaking-a-mark-out.md)).
 
 **A pie has no axis worth labelling**, so `theme.Grid(false, false)`,
 `theme.AxisLines(false, false)` and `theme.Ticks(false, false)` are the three

@@ -878,6 +878,31 @@ edge is a curve can be hit a little way outside its ink at a bulge — the conve
 hull of a cubic, which is the same slack a vertex already gets and the opposite
 error from missing a slice the pointer is plainly inside.
 
+#### The v0.8 sugar
+
+Three additions, none of them a new mark, all of them things the coordinate
+stage made expressible and nothing spelled:
+
+- A slice's **inner and outer radius are columns**. `geom.Bar` reads `X` and
+  `X2` as its two edges on the cross axis, exactly as `geom.Rect` has since
+  v0.7 — and under a polar coord that axis is the radius. So a donut carries
+  three numbers per slice instead of one: how far round it goes, where it
+  starts, and where it stops.
+- A slice can be **broken out of the ring**. `geom.Explode(f)` moves every mark
+  of a layer away from the middle by a fraction of the outer radius and
+  `geom.ExplodeBy(col)` reads that per row, which is what pulls one slice out
+  and leaves the others in place. It is a displacement along the mark's own
+  bisector rather than a longer radius, so the slice still says what it said
+  and the gap shows where it came from. The coord answers how far and the geom
+  moves the path, because a coord does not draw; `coord.Cartesian` deliberately
+  cannot answer, so a Cartesian chart is unchanged by an option every geom now
+  accepts ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
+- `coord.Pie()` and `coord.Donut(f)` **name the recipe**. They are sugar for
+  `Polar(Theta(FromY))` and that plus `Hole(f)`, describe themselves as the
+  polar coord they are, and are where the two facts a pie needs beyond the
+  coord are written down: that the angular scale must not be niced, and that
+  the hole is where the radial scale starts.
+
 ### v0.9 — Distributions, density and size
 
 - The stats [§8](#8-model-layer-gog-lite) has promised since v0.1 and `stat/`

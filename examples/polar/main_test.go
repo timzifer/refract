@@ -12,10 +12,11 @@ import (
 func TestExampleRuns(t *testing.T) {
 	dir := t.TempDir()
 	paths := map[string]string{}
-	for _, name := range []string{"browsers", "designs", "wind", "capacity"} {
+	for _, name := range []string{"browsers", "designs", "wind", "capacity", "budgets"} {
 		paths[name] = filepath.Join(dir, name+".svg")
 	}
-	if err := run(paths["browsers"], paths["designs"], paths["wind"], paths["capacity"]); err != nil {
+	if err := run(paths["browsers"], paths["designs"], paths["wind"], paths["capacity"],
+		paths["budgets"]); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
@@ -26,6 +27,9 @@ func TestExampleRuns(t *testing.T) {
 		"designs":  {"<svg", "Two designs", "prism", "lens", "clarity"},
 		"wind":     {"<svg", "Hours by wind direction", "NW"},
 		"capacity": {"<svg", "Capacity used"},
+		// The broken-out donut names every team, for the same reason: its
+		// slices are one layer, and the legend is what tells them apart.
+		"budgets": {"<svg", "Spend by team", "growth", "platform"},
 	} {
 		b, err := os.ReadFile(paths[name])
 		if err != nil {
@@ -44,11 +48,11 @@ func TestExampleRuns(t *testing.T) {
 // test.
 func TestEveryPolarChartIsDrawnWithCubics(t *testing.T) {
 	dir := t.TempDir()
-	paths := make([]string, 0, 4)
-	for _, name := range []string{"browsers", "designs", "wind", "capacity"} {
+	paths := make([]string, 0, 5)
+	for _, name := range []string{"browsers", "designs", "wind", "capacity", "budgets"} {
 		paths = append(paths, filepath.Join(dir, name+".svg"))
 	}
-	if err := run(paths[0], paths[1], paths[2], paths[3]); err != nil {
+	if err := run(paths[0], paths[1], paths[2], paths[3], paths[4]); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	// The radar is the exception and is meant to be: its sides are chords, so
@@ -81,6 +85,23 @@ func TestTheLongTableIsWellFormed(t *testing.T) {
 	total := 0.0
 	for _, v := range share {
 		total += v
+	}
+	teams, spend, floor, used, pull := budgets()
+	for _, col := range [][]float64{spend, floor, used, pull} {
+		if len(col) != len(teams) {
+			t.Errorf("a budget column has %d rows, want %d", len(col), len(teams))
+		}
+	}
+	// Exactly one team is pulled out of the ring: a chart where everything is
+	// emphasised emphasises nothing.
+	out := 0
+	for _, v := range pull {
+		if v > 0 {
+			out++
+		}
+	}
+	if out != 1 {
+		t.Errorf("%d slices are broken out, want the one that went over budget", out)
 	}
 	// The ring closes because the total is the domain's end. A share that did
 	// not add up would leave a gap at twelve o'clock, and the chart would be
