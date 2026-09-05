@@ -621,13 +621,16 @@ func (gs *groups) slotIndex(i int) int {
 //
 // It is how a layer whose mark is a connected shape draws groups: a line and a
 // band are written over a run of rows, and the rows of one group are scattered
-// through the table. The gather is into a pooled buffer, so N series cost one
-// buffer rather than N allocations, and the buffer is handed back when the
-// last group has been drawn.
-func eachGroup(f Frame, gs *groups, s series, fn func(seg series, group int) error) error {
-	sc := acquire(f)
-	defer sc.release()
-
+// through the table. The gather is into the caller's own scratch, so N series
+// cost one buffer rather than N allocations.
+//
+// The scratch is passed in rather than taken here, and that is not tidiness:
+// a scratch is held for one Build and released at the end of it, so a helper
+// that took a second one would leave two objects with *disjoint* buffers
+// cycling through one pool. Whichever came back as the gatherer next frame
+// would have to grow the drawer's buffers and vice versa — a real per-row
+// allocation, on a path whose whole point is not having one.
+func eachGroup(sc *scratch, gs *groups, s series, fn func(seg series, group int) error) error {
 	bounds := gs.bounds(s)
 	for _, grp := range gs.order {
 		rows := gs.rows[grp]

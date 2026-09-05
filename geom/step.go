@@ -45,15 +45,18 @@ func (g *stepGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
+	sc := acquire(f)
+	defer sc.release()
+
 	if g.gs.grouped() {
-		return eachGroup(f, &g.gs, g.s, func(seg series, grp int) error {
-			return g.build(b, f, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupDash(f, grp))
+		return eachGroup(sc, &g.gs, g.s, func(seg series, grp int) error {
+			return g.build(b, f, sc, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupDash(f, grp))
 		})
 	}
-	return g.build(b, f, g.s, g.cfg.colorFor(f), g.cfg.dashFor(f))
+	return g.build(b, f, sc, g.s, g.cfg.colorFor(f), g.cfg.dashFor(f))
 }
 
-func (g *stepGeom) build(b ir.Backend, f Frame, s series, col ir.Color, dash []float32) error {
+func (g *stepGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Color, dash []float32) error {
 	stroke := ir.Stroke{
 		Color: col,
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
@@ -64,8 +67,6 @@ func (g *stepGeom) build(b ir.Backend, f Frame, s series, col ir.Color, dash []f
 	if !stroke.Visible() {
 		return nil
 	}
-	sc := acquire(f)
-	defer sc.release()
 
 	// A staircase is its transitions, so the reduction that keeps its extremes
 	// per column is the one that keeps the picture. See [Decimate].

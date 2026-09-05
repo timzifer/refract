@@ -73,10 +73,13 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
+	sc := acquire(f)
+	defer sc.release()
+
 	if g.gs.grouped() {
-		return g.buildGroups(b, f)
+		return g.buildGroups(b, f, sc)
 	}
-	return g.build(b, f, g.s, g.cfg.fillFor(f, areaFillOpacity), g.cfg.colorFor(f), g.cfg.dashFor(f))
+	return g.build(b, f, sc, g.s, g.cfg.fillFor(f, areaFillOpacity), g.cfg.colorFor(f), g.cfg.dashFor(f))
 }
 
 // buildGroups draws one band per series.
@@ -84,20 +87,20 @@ func (g *areaGeom) Build(b ir.Backend, f Frame) error {
 // Each series is drawn as its own band between the bounds the adjustment gave
 // it, which is the same shape a [Y2] band already is — so the drawing code is
 // the same code, called once per group over that group's rows.
-func (g *areaGeom) buildGroups(b ir.Backend, f Frame) error {
+func (g *areaGeom) buildGroups(b ir.Backend, f Frame, sc *scratch) error {
 	op := areaFillOpacity
 	if g.gs.stacked() {
 		op = stackedFillOpacity
 	}
-	return eachGroup(f, &g.gs, g.s, func(seg series, grp int) error {
+	return eachGroup(sc, &g.gs, g.s, func(seg series, grp int) error {
 		col := g.cfg.groupColor(f, &g.gs, grp)
-		return g.build(b, f, seg, g.cfg.fillOf(col, op), col, g.cfg.groupDash(f, grp))
+		return g.build(b, f, sc, seg, g.cfg.fillOf(col, op), col, g.cfg.groupDash(f, grp))
 	})
 }
 
 // build draws one band: the shared body of an ungrouped area and of one series
 // of a grouped one.
-func (g *areaGeom) build(b ir.Backend, f Frame, s series, fill, line ir.Color, dash []float32) error {
+func (g *areaGeom) build(b ir.Backend, f Frame, sc *scratch, s series, fill, line ir.Color, dash []float32) error {
 	stroke := ir.Stroke{
 		Color: line,
 		Width: pick(g.cfg.width, f.Theme.LineWidth),
@@ -107,9 +110,6 @@ func (g *areaGeom) build(b ir.Backend, f Frame, s series, fill, line ir.Color, d
 	}
 	tension := float32(clamp01(g.cfg.tension))
 	base := baselinePos(f, g.cfg.baseline)
-
-	sc := acquire(f)
-	defer sc.release()
 
 	// A band is bounded by both of its edges, so its reduction has to see both;
 	// an area over a baseline is a line with a fill under it. See [Decimate].

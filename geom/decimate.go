@@ -192,7 +192,13 @@ func plotColumns(area ir.Rect) int { return max(int(area.Dx()), 1) }
 // draws.
 //
 // A scratch is held for one Build call and released at the end of it, so two
-// layers — or two panels on two goroutines — never share one.
+// layers — or two panels on two goroutines — never share one. It is exactly
+// one per Build, too: a helper that took a second one while the first was
+// still held would put two objects with *disjoint* buffers into one pool, and
+// whichever came back in the other's role next frame would have to grow the
+// other's buffers. That is a per-row allocation on the path whose whole point
+// is not having one, and it is invisible until the allocation gate is looked
+// at — see [eachGroup], which takes the caller's scratch for this reason.
 type scratch struct {
 	ok    []bool
 	segs  []series

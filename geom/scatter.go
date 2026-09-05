@@ -44,15 +44,18 @@ func (g *scatterGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
+	sc := acquire(f)
+	defer sc.release()
+
 	if g.gs.grouped() {
-		return eachGroup(f, &g.gs, g.s, func(seg series, grp int) error {
-			return g.build(b, f, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupMarker(f, grp))
+		return eachGroup(sc, &g.gs, g.s, func(seg series, grp int) error {
+			return g.build(b, f, sc, seg, g.cfg.groupColor(f, &g.gs, grp), g.cfg.groupMarker(f, grp))
 		})
 	}
-	return g.build(b, f, g.s, g.cfg.colorFor(f), g.cfg.markerFor(f))
+	return g.build(b, f, sc, g.s, g.cfg.colorFor(f), g.cfg.markerFor(f))
 }
 
-func (g *scatterGeom) build(b ir.Backend, f Frame, s series, col ir.Color, marker ir.Marker) error {
+func (g *scatterGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Color, marker ir.Marker) error {
 	style := ir.MarkerStyle{
 		Size: pick(g.cfg.size, f.Theme.MarkerSize),
 		Fill: col,
@@ -61,9 +64,6 @@ func (g *scatterGeom) build(b ir.Backend, f Frame, s series, col ir.Color, marke
 		style.Fill = *g.cfg.fill
 		style.Stroke = ir.Stroke{Color: col, Width: pick(g.cfg.width, 1)}
 	}
-
-	sc := acquire(f)
-	defer sc.release()
 
 	// Missing rows are simply not drawn. Unlike a line, a scatter has no
 	// connectivity to break, so Gap and Interpolate are the same thing here.

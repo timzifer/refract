@@ -413,10 +413,30 @@ table with the row removed.
 group index, the row lists and the derived bounds are refilled by every `Train`
 out of memory the geom keeps: `Train` runs as often as `Build` does, and a chart
 redrawn over a live table would otherwise allocate its group index per frame.
-`TestAStackedLayerDoesNotAllocatePerPoint` and `BenchmarkStacked1k` against
-`BenchmarkStacked100k` are what hold that. Note that the rows of each group are
-listed once, in `groups.split`, rather than found by scanning the table per
-group — the scan is what makes a chart with many series quadratic.
+`TestAStackedLayerDoesNotAllocatePerPoint` is what holds that. Note that the
+rows of each group are listed once, in `groups.split`, rather than found by
+scanning the table per group — the scan is what makes a chart with many series
+quadratic.
+
+**There is exactly one scratch per `Build`, and a helper takes the caller's
+rather than acquiring its own.** Two scratches held at once put two objects with
+*disjoint* buffers into one pool; whichever comes back in the other's role next
+frame has to grow the other's buffers, which is a per-row allocation on the path
+whose whole point is not having one. `geom.eachGroup` therefore takes a
+`*scratch` parameter. This shipped broken for exactly one commit and cost a
+grouped frame 127 kB and seven allocations it did not need; nothing failed
+except the allocation gate, which is what the gate is for.
+
+**A benchmark's allocation count is not stable enough to compare across sizes
+when a pool miss is in play.** `sync.Pool` is emptied by every collection, and
+how many collections land inside `-benchtime=10x` depends on the garbage the
+*other* benchmarks in that process left behind — so `BenchmarkStacked100k`
+comes out at 91, 98 or 106 for the same code. The flat comparison therefore
+lives in `TestAStackedLayerDoesNotAllocatePerPoint`, which averages twenty runs
+in a process running nothing else, and `.github/scripts/allocgate.awk` pins a
+*budget* for that benchmark instead. Reach for `atMost` rather than a wider
+`flat` slack the next time a pair will not sit still: a gate that flakes is a
+gate people learn to ignore.
 
 **Group order is order of first appearance, and `geom.Order` is the only thing
 that changes it.** Map iteration order is not an order; ADR 0012 requires a
