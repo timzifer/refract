@@ -50,6 +50,7 @@ type rectGeom struct {
 	s    series
 	x2   []float64
 	pull []float64
+	gaps []float64 // the buffer a slot-sized edge is measured out of
 	err  error
 }
 
@@ -101,7 +102,9 @@ func (g *rectGeom) Train(x, y scale.Scale) error {
 // halfWidth is how far a slot-sized edge reaches on each side of its value, in
 // data units.
 func (g *rectGeom) halfWidth(vs []float64) float64 {
-	return smallestGap(vs) * g.widthFraction() / 2
+	gap, buf := smallestGap(g.gaps, vs)
+	g.gaps = buf
+	return gap * g.widthFraction() / 2
 }
 
 func (g *rectGeom) widthFraction() float64 {

@@ -31,6 +31,7 @@ type barGeom struct {
 	x2    []float64
 	pull  []float64
 	gap   float64
+	gaps  []float64 // the buffer the slot is measured out of
 	gs    groups
 	err   error
 }
@@ -70,7 +71,7 @@ func (g *barGeom) Train(x, y scale.Scale) error {
 	// rather than of a row, and finding it sorts a copy of the column — so it
 	// is found once here rather than once per bar, which is what it cost while
 	// [barGeom.halfWidth] asked for it inside the drawing loop.
-	g.gap = smallestGap(g.s.x)
+	g.gap, g.gaps = smallestGap(g.gaps, g.s.x)
 	trainColumn(x, g.s.x)
 	if g.x2 != nil {
 		trainColumn(x, g.x2)

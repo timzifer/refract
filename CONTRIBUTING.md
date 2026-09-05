@@ -286,6 +286,16 @@ the modules that have benchmarks. It gates allocation counts and never times: a 
 has nothing reliable to say about times, and a gate that flakes is a gate people
 learn to ignore.
 
+**The gated benchmarks measure on one processor**, and that is what makes their
+counts reproducible rather than merely typical. `sync.Pool` keeps a private slot
+per P; a frame takes milliseconds, the scheduler preempts every ten of them, and
+a goroutine that resumes on another P leaves its pooled scratch behind in a slot
+nothing can steal from — so one iteration in a few dozen refills every buffer it
+needs and is charged sixty allocations nobody wrote. `onOnePGate` in
+`alloc_test.go` pins the measurement; `testing.AllocsPerRun` already did the
+same for the test half, which is why the tests were steady while the benchmarks
+were not. Add it to any benchmark whose count the gate reads.
+
 When either fails, find the culprit rather than raising the bar:
 
 ```sh
@@ -293,8 +303,10 @@ go test -run=XXX -bench=Frame -memprofile=mem.out .
 go tool pprof -sample_index=alloc_objects -top mem.out
 ```
 
-The usual causes are a new buffer that should have come from `geom.scratch`, and
-a variadic interface method being called once per row.
+The usual causes are a new buffer that should have come from `geom.scratch`, a
+buffer sized by the data being rebuilt in `Train` — which runs on every frame,
+so a column copied there is a copy per frame — and a variadic interface method
+being called once per row.
 
 A new benchmark goes wherever the thing it measures lives, and needs no
 registration — the CI job runs `-bench=.` across every package, which also means

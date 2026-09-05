@@ -187,6 +187,8 @@ func TestRowsBoxplotHasNone(t *testing.T) {
 // watched: the marks are indexed either way, and this is the position and row
 // number kept on top of them.
 func benchmarkRows(b *testing.B, track bool) {
+	onOnePGate(b)
+
 	const n = 100_000
 	x := make([]float64, n)
 	y := make([]float64, n)

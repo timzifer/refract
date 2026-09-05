@@ -2,6 +2,7 @@ package refract_test
 
 import (
 	"math"
+	"runtime"
 	"testing"
 
 	"github.com/timzifer/refract"
@@ -142,7 +143,36 @@ func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
 	return p
 }
 
+// onOnePGate pins a benchmark's measurement to a single processor, and is what
+// makes an allocation count reproducible rather than merely typical.
+//
+// The noise it removes is sync.Pool's, and it is worth writing down because it
+// is invisible in a profile. A pool keeps a private slot per P. A render Gets
+// its scratch and Puts it back on the same goroutine — but a frame here takes
+// milliseconds, the scheduler preempts asynchronously every ten of them, and a
+// goroutine that comes back on a different P finds its own scratch stranded in
+// the old P's private slot, which nothing can steal from. The frame then
+// refills every buffer it needs: about sixty allocations that have nothing to
+// do with the data, landing in one iteration out of a few dozen. Measured over
+// ten iterations that is the difference between 54 and 68 allocs/op for the
+// same code, which is exactly the flake that makes a gate ignorable.
+//
+// One P has one private slot and nothing to migrate to, so the count is the
+// same on every run. This is not a thumb on the scale: a pool miss is a real
+// cost that a real chart pays occasionally, and it is simply not the cost this
+// gate measures — the gate asks whether a frame allocates *per row*.
+// testing.AllocsPerRun does the same thing for the test half of the gate, which
+// is why the tests were steady all along while the benchmarks were not.
+//
+// The parallel benchmarks below are deliberately not pinned: what they measure
+// is panels drawn on several goroutines, and nothing gates their counts.
+func onOnePGate(b *testing.B) {
+	prev := runtime.GOMAXPROCS(1)
+	b.Cleanup(func() { runtime.GOMAXPROCS(prev) })
+}
+
 func benchmarkFrame(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := signal(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -158,6 +188,7 @@ func benchmarkFrame(b *testing.B, rows int) {
 }
 
 func benchmarkStacked(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := stackedSeries(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -179,6 +210,7 @@ func BenchmarkStacked1k(b *testing.B)   { benchmarkStacked(b, 1_000) }
 func BenchmarkStacked100k(b *testing.B) { benchmarkStacked(b, 100_000) }
 
 func benchmarkPolar(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := polarSignal(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -199,6 +231,7 @@ func BenchmarkPolar1k(b *testing.B)   { benchmarkPolar(b, 1_000) }
 func BenchmarkPolar100k(b *testing.B) { benchmarkPolar(b, 100_000) }
 
 func benchmarkBrokenRing(b *testing.B, rows int) {
+	onOnePGate(b)
 	p := brokenRing(rows)
 	target := irtest.NullTarget()
 	if err := p.Render(target); err != nil {
@@ -216,15 +249,8 @@ func benchmarkBrokenRing(b *testing.B, rows int) {
 // The v0.8 sugar's path: a slice's radii come from two columns and its
 // break-out from a third, and the displacement of every mark is collected and
 // carried through the batching out of pooled memory.
-//
-// There is no hundred-thousand-slice twin of this on purpose. A ring that size
-// holds the biggest pooled buffers in the suite, and the garbage it leaves
-// empties the pool for every benchmark that runs after it in the same process
-// — which is measured as *their* allocations and would make gates that have
-// nothing to do with this one flake. The size comparison is made in
-// TestABrokenOutLayerDoesNotAllocatePerPoint, which averages twenty runs in a
-// process running nothing else.
-func BenchmarkBrokenRing1k(b *testing.B) { benchmarkBrokenRing(b, 1_000) }
+func BenchmarkBrokenRing1k(b *testing.B)   { benchmarkBrokenRing(b, 1_000) }
+func BenchmarkBrokenRing100k(b *testing.B) { benchmarkBrokenRing(b, 100_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }

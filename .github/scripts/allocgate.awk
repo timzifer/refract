@@ -7,7 +7,13 @@
 #
 # Times are deliberately not checked. A shared CI runner has nothing reliable
 # to say about them, and a gate that flakes is a gate people learn to ignore.
-# Allocation counts are deterministic, which is why they are what is pinned.
+# Allocation counts are deterministic, which is why they are what is pinned —
+# and they are deterministic because the benchmarks behind them pin their
+# measurement to one processor. See onOnePGate in alloc_test.go: without it a
+# goroutine that migrates between processors leaves its pooled scratch in the
+# old one's private slot, and the frame that refills it is charged sixty
+# allocations nobody wrote. That was this file's flake, and it is why three
+# comparisons below used to be budgets.
 #
 # Usage:
 #   go test -run='^$' -bench=. -benchtime=10x ./... | awk -f .github/scripts/allocgate.awk
@@ -78,23 +84,15 @@ END {
 	# keeps between frames — so a long table costs what a short one costs. See
 	# docs/adr/0019-position-adjustments.md.
 	#
-	# This one is a budget rather than a comparison, and the reason is worth
-	# writing down. A grouped layer draws one series at a time out of a dozen
-	# pooled buffers, so a collection that empties the pool mid-run costs about
-	# seven allocations per frame to grow them all back — and how many
-	# collections land inside ten iterations depends on the garbage every
-	# *other* benchmark in the process left behind. Measured here, the large
-	# side comes out at 91, 98 or 106 depending on nothing this repository
-	# controls. A flat() over that pair would be a gate that goes red on an
-	# unlucky Tuesday, which this file exists not to be.
-	#
-	# The comparison is still made, where it can be made properly:
-	# TestAStackedLayerDoesNotAllocatePerPoint averages twenty runs in a
-	# process running nothing else. What is pinned here is the ceiling, which is
-	# what catches the regression that matters — a per-row cost over 100k rows
-	# is four orders of magnitude away from this number, not four allocations.
+	# This pair was a budget until the benchmarks were pinned to one processor,
+	# because the large side came out at 91, 98 or 106 for the same code. It
+	# comes out at exactly the small side's count now, so it is compared like
+	# every other pair — a hundred times the rows for no allocations at all is
+	# the claim, and the claim is worth stating exactly. The ceiling stays
+	# beside it: it is what catches a frame that grows tenfold without growing
+	# per row.
+	flat("BenchmarkStacked1k", "BenchmarkStacked100k", 8)
 	atMost("BenchmarkStacked100k", 128)
-	require("BenchmarkStacked1k")
 
 	# The polar path, added in v0.8. A coord sits between every mapped pair and
 	# the device point it becomes, and a polar one does not decimate — so this
@@ -108,15 +106,11 @@ END {
 	# carried through the colour and group batching, all of it out of the
 	# scratch pool.
 	#
-	# There is one size here rather than a pair, and it is a budget rather than
-	# a comparison. A ring of a hundred thousand annular sectors is the
-	# grouped layer's problem from BenchmarkStacked100k one size worse — 96,
-	# 137 and 348 allocations on three consecutive runs of the same code — and
-	# the garbage it leaves empties the pool for whatever benchmark runs next,
-	# so pinning it would make gates that have nothing to do with it flake as
-	# well. TestABrokenOutLayerDoesNotAllocatePerPoint is where the size
-	# comparison is made properly, averaging twenty runs in a quiet process.
-	atMost("BenchmarkBrokenRing1k", 128)
+	# The slack is wider than the others by four, and the four are tick labels:
+	# a ring of a hundred thousand slices has a longer angular domain than a
+	# ring of a thousand, so its axis has more ticks and each label is a string.
+	# That is a cost per *tick*, which is what an axis is allowed to cost.
+	flat("BenchmarkBrokenRing1k", "BenchmarkBrokenRing100k", 12)
 
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not

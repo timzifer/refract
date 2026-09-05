@@ -739,15 +739,24 @@ func extent(vs []float64) (lo, hi float64, ok bool) {
 // smallestGap is the spacing between adjacent positions in data units: the
 // smallest distance between distinct values. Using the smallest rather than
 // the average means marks never overlap on irregularly spaced data.
-func smallestGap(vs []float64) float64 {
-	xs := make([]float64, 0, len(vs))
+//
+// It sorts, so it needs somewhere to sort: buf is the caller's own buffer,
+// which the plottable values are gathered into and which is handed back grown
+// for the next call. That is the same bargain every buffer sized by the data
+// makes here, and it is not decoration — a layer measures its slot on every
+// Train, Train runs on every frame, and a copy of the column per frame is most
+// of what a hundred-thousand-row frame would otherwise allocate. The buffer
+// lives on the layer rather than in the frame's pool for the reason the group
+// index does: Train runs outside a Build, where there is no scratch to take.
+func smallestGap(buf, vs []float64) (float64, []float64) {
+	xs := buf[:0]
 	for _, v := range vs {
 		if finite(v) {
 			xs = append(xs, v)
 		}
 	}
 	if len(xs) < 2 {
-		return 1
+		return 1, xs
 	}
 	sort.Float64s(xs)
 	gap := math.Inf(1)
@@ -757,9 +766,9 @@ func smallestGap(vs []float64) float64 {
 		}
 	}
 	if math.IsInf(gap, 0) {
-		return 1
+		return 1, xs
 	}
-	return gap
+	return gap, xs
 }
 
 // markSpan returns the mapped edges of a mark centred on data position x —

@@ -19,6 +19,12 @@ import (
 // allocsPerFrame is the average number of allocations one steady-state render
 // makes, into a backend that does nothing — so what is measured is refract's
 // own work rather than an emitter's.
+//
+// [testing.AllocsPerRun] measures on one processor, which is what keeps the
+// count reproducible: a goroutine that migrated between processors would leave
+// its pooled scratch in the old one's private slot and be charged for refilling
+// it. The benchmark half of the gate pins itself the same way — see onOnePGate
+// in alloc_test.go, which is a note about why this half never needed one.
 func allocsPerFrame(t *testing.T, p *refract.Plot) float64 {
 	t.Helper()
 	target := irtest.NullTarget()
