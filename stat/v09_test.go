@@ -173,6 +173,16 @@ func TestAnECDFIgnoresWhatIsNotANumber(t *testing.T) {
 	}
 }
 
+func TestAnECDFAccumulatesTheSameWayTwice(t *testing.T) {
+	vs := scatterOf(400, 13)
+	slices.Sort(vs)
+	a := stat.ECDF(vs)
+	b := stat.ECDF(vs)
+	if !reflect.DeepEqual(a, b) {
+		t.Error("two runs of ECDF over one column disagree")
+	}
+}
+
 func TestLoessFollowsALineExactly(t *testing.T) {
 	// A locally linear fit through data that is already a line is that line,
 	// wherever the window happens to fall.
