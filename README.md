@@ -924,6 +924,8 @@ of every mark and a window shows what a file would
 - [CONCEPT.md](CONCEPT.md) — the design document: motivation, positioning,
   architecture, roadmap.
 - [docs/adr](docs/adr) — why the open questions were answered the way they were.
+- [docs/v1-api-audit.md](docs/v1-api-audit.md) — every exported identifier
+  with a verdict before the API freeze: freeze, change before v1, or defer.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, and
   how to regenerate golden files and figures.
 
