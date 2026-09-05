@@ -7,6 +7,9 @@
 package render
 
 import (
+	"sync"
+
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/layout"
@@ -26,6 +29,15 @@ type Chart struct {
 	YTitle string
 
 	X, Y scale.Scale
+
+	// Coord is the stage between the scales and the IR: what the interval a
+	// scale maps into means. Nil is [coord.Cartesian], which is the identity,
+	// so a chart that names no coord draws exactly what it always drew.
+	//
+	// It belongs to the chart rather than to a panel: the panels of a facet are
+	// the same plot over different rows, and one of them in a different
+	// coordinate system would be a different chart.
+	Coord coord.Coord
 
 	Layers []geom.Geom
 
@@ -83,9 +95,12 @@ type Chart struct {
 // not landed on anything.
 type Observer interface {
 	// Panel opens a panel: its index in the chart, the rectangle it occupies,
-	// and the scales that place values in it. The scales are ranged for this
-	// panel and must not be modified.
-	Panel(i int, area ir.Rect, x, y scale.Scale)
+	// the scales that place values in it, and the coord that turns a pair of
+	// mapped positions into a point there. The scales are ranged for this
+	// panel and must not be modified; the coord is framed for it and is what
+	// turns a device position back into a pair — which is the only way a
+	// tooltip over a pie slice names a value rather than a pixel.
+	Panel(i int, area ir.Rect, x, y scale.Scale, cd coord.Coord)
 
 	// Layer opens a layer within the panel just announced: its index among
 	// that panel's layers, and its legend label if it has one.
@@ -103,6 +118,16 @@ type Panel struct {
 	// X and Y are this panel's scales. Panels sharing an axis share the scale
 	// object, which is what makes the axis shared rather than merely similar.
 	X, Y scale.Scale
+
+	// Coord overrides the chart's coordinate system for this panel, and is nil
+	// for the panels that use it — which is every panel of a facet, because
+	// the panels of a facet are one plot over different rows and one of them
+	// in a different coordinate system would be a different chart.
+	//
+	// A grid of subplots is the case that needs it: those panels are separate
+	// plots that happen to share a canvas, each with its own scales and its
+	// own axes, so a pie beside a bar chart is two coords beside each other.
+	Coord coord.Coord
 	// Layers are this panel's marks.
 	Layers []geom.Geom
 
@@ -181,15 +206,19 @@ func Draw(b ir.Backend, c Chart) error {
 	}
 	drawBackground(b, canvas, th)
 
+	fur := acquireFurniture()
 	for i, p := range panels {
 		area := lay.Areas[i]
-		xTicks, yTicks := p.rangeTo(area, th)
+		cd, xTicks, yTicks := p.rangeTo(c.coordOf(p), area, th)
+		fur.Reset()
+		cd.Furniture(fur, area, metricsOf(th), xTicks, yTicks)
 		drawPanelFill(b, area, th)
-		drawGrid(b, area, th, p, xTicks, yTicks)
-		drawAxes(b, area, th, p, xTicks, yTicks)
+		drawGrid(b, th, p, fur, xTicks, yTicks)
+		drawAxes(b, th, p, fur, xTicks, yTicks)
 		drawStrip(b, lay.Strips[i], th, p.Strip, 0)
 		drawStrip(b, lay.RightStrips[i], th, p.RightStrip, halfPi)
 	}
+	releaseFurniture(fur)
 
 	drawTitles(b, lay, th, c)
 
@@ -210,6 +239,23 @@ func Draw(b ir.Backend, c Chart) error {
 	return nil
 }
 
+// coord is the chart's coordinate system, which is [coord.Cartesian] when it
+// names none.
+func (c Chart) coord() coord.Coord {
+	if c.Coord == nil {
+		return coord.Cartesian()
+	}
+	return c.Coord
+}
+
+// coordOf is the coord one panel is drawn in: its own, or the chart's.
+func (c Chart) coordOf(p Panel) coord.Coord {
+	if p.Coord != nil {
+		return p.Coord
+	}
+	return c.coord()
+}
+
 // panels resolves the chart into a panel list, wrapping a single-panel chart
 // into a one-by-one grid so that there is one code path rather than two.
 func (c Chart) panels() ([]Panel, int, int) {
@@ -226,22 +272,25 @@ func (c Chart) panels() ([]Panel, int, int) {
 	}}, 1, 1
 }
 
-// rangeTo gives the panel's scales their real device range and returns the
-// ticks that fall in it. Y is inverted: larger values are higher on screen.
+// rangeTo gives the panel's scales their real range, returns the coord framed
+// in the panel, and returns the ticks that fall in it.
+//
+// Which interval each scale maps into is the coord's decision now: Cartesian
+// sets the rectangle's edges, with Y inverted so that larger values are higher
+// on screen, and Polar sets an angle range and a radius range.
 //
 // It is called again before the data pass because panels sharing a scale share
 // one object, so the range left behind by the last panel of the furniture pass
 // is not this panel's.
-func (p Panel) rangeTo(area ir.Rect, th theme.Theme) (xTicks, yTicks []scale.Tick) {
-	p.setRange(area)
-	return p.X.Ticks(th.TickCountHintX), p.Y.Ticks(th.TickCountHintY)
+func (p Panel) rangeTo(cd coord.Coord, area ir.Rect, th theme.Theme) (coord.Coord, []scale.Tick, []scale.Tick) {
+	framed := p.setRange(cd, area)
+	return framed, p.X.Ticks(th.TickCountHintX), p.Y.Ticks(th.TickCountHintY)
 }
 
 // setRange is rangeTo without the ticks, for the data pass, which needs the
 // range and has no use for the tick list the furniture pass already drew.
-func (p Panel) setRange(area ir.Rect) {
-	p.X.SetRange(area.Min.X, area.Max.X)
-	p.Y.SetRange(area.Max.Y, area.Min.Y)
+func (p Panel) setRange(cd coord.Coord, area ir.Rect) coord.Coord {
+	return cd.Frame(area, p.X, p.Y)
 }
 
 // measurePanels reports what each panel will write, so the solver can size the
@@ -257,10 +306,12 @@ func measurePanels(panels []Panel, th theme.Theme) []layout.Panel {
 			Strip:      p.Strip,
 			RightStrip: p.RightStrip,
 		}
-		if p.ShowX {
+		// A panel that writes no tick labels needs no gutter for them, which is
+		// what gives a pie with its axes turned off the whole panel to fill.
+		if p.ShowX && th.ShowTicksX {
 			out[i].XLabels = labelsOf(p.X.Ticks(th.TickCountHintX))
 		}
-		if p.ShowY {
+		if p.ShowY && th.ShowTicksY {
 			out[i].YLabels = labelsOf(p.Y.Ticks(th.TickCountHintY))
 		}
 	}
@@ -338,6 +389,36 @@ func legendEntries(c Chart, panels []Panel, area ir.Rect) []geom.LegendEntry {
 	return out
 }
 
+// Furniture is per panel and sized by the tick count rather than by the data,
+// but a chart redrawn every frame still asks for it every frame — so it comes
+// out of a pool, like everything else here that is refilled rather than
+// rebuilt. One is held for the whole furniture pass and reset between panels.
+var furniturePool sync.Pool
+
+func acquireFurniture() *coord.Furniture {
+	f, _ := furniturePool.Get().(*coord.Furniture)
+	if f == nil {
+		return new(coord.Furniture)
+	}
+	return f
+}
+
+func releaseFurniture(f *coord.Furniture) {
+	f.Reset()
+	furniturePool.Put(f)
+}
+
+// metricsOf hands a coord the theme lengths it needs to place furniture. A
+// coord must not know what a theme is, so the three numbers travel rather than
+// the theme.
+func metricsOf(th theme.Theme) coord.Metrics {
+	return coord.Metrics{
+		TickLen:      th.TickLength,
+		MinorTickLen: th.TickLength * minorTickScale,
+		LabelPad:     th.TickLabelPad,
+	}
+}
+
 func drawBackground(b ir.Backend, canvas ir.Rect, th theme.Theme) {
 	if th.Background.A == 0 {
 		return
@@ -383,10 +464,7 @@ func drawStrip(b ir.Backend, box ir.Rect, th theme.Theme, label string, rotation
 	})
 }
 
-func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, c Panel, xTicks, yTicks []scale.Tick) {
-	if plot.Empty() {
-		return
-	}
+func drawGrid(b ir.Backend, th theme.Theme, c Panel, fur *coord.Furniture, xTicks, yTicks []scale.Tick) {
 	stroke := ir.Stroke{Color: th.GridColor, Width: th.GridWidth, Dash: th.GridDash}
 	if !stroke.Visible() {
 		return
@@ -395,21 +473,43 @@ func drawGrid(b ir.Backend, plot ir.Rect, th theme.Theme, c Panel, xTicks, yTick
 	// them per decade; drawing a grid line for each would turn the plot area
 	// into a hatch and bury the data it is there to support.
 	if th.ShowGridX && !banded(c.X) {
-		for _, t := range xTicks {
-			if t.Minor || !inRange(t.Pos, plot.Min.X, plot.Max.X) {
-				continue
-			}
-			b.Polyline([]ir.Point{{X: t.Pos, Y: plot.Min.Y}, {X: t.Pos, Y: plot.Max.Y}}, stroke)
+		for i := range xTicks {
+			strokeShape(b, shapeAt(fur.GridX, i), stroke)
 		}
 	}
 	if th.ShowGridY && !banded(c.Y) {
-		for _, t := range yTicks {
-			if t.Minor || !inRange(t.Pos, plot.Min.Y, plot.Max.Y) {
-				continue
-			}
-			b.Polyline([]ir.Point{{X: plot.Min.X, Y: t.Pos}, {X: plot.Max.X, Y: t.Pos}}, stroke)
+		for i := range yTicks {
+			strokeShape(b, shapeAt(fur.GridY, i), stroke)
 		}
 	}
+}
+
+// strokeShape draws one piece of furniture: as a polyline where the coord
+// reported a straight run, and as a path where it reported a curve.
+//
+// The polyline is not a shortcut. A Cartesian grid line has reached the
+// backend as a two-point Polyline since v0.1, and the golden files, the damage
+// rectangles and the SVG in the documentation are all written in those terms.
+func strokeShape(b ir.Backend, s *coord.Shape, stroke ir.Stroke) {
+	if s == nil {
+		return
+	}
+	if len(s.Pts) >= 2 {
+		b.Polyline(s.Pts, stroke)
+		return
+	}
+	if !s.Path.Empty() {
+		b.StrokePath(&s.Path, stroke)
+	}
+}
+
+// shapeAt is the i'th shape of a per-tick list, or nil where the coord had
+// nothing to report for that tick.
+func shapeAt(shapes []coord.Shape, i int) *coord.Shape {
+	if i >= len(shapes) {
+		return nil
+	}
+	return &shapes[i]
 }
 
 // banded reports whether an axis positions categories in slots.
@@ -423,101 +523,101 @@ func banded(s scale.Scale) bool {
 	return ok
 }
 
-// tickLength is how far a tick mark reaches out of the axis. A minor tick is
-// drawn shorter so that the labelled ticks stay the ones the eye lands on.
-func tickLength(th theme.Theme, t scale.Tick) float32 {
-	if t.Minor {
-		return th.TickLength * minorTickScale
-	}
-	return th.TickLength
-}
-
-// minorTickScale is how long a minor tick is relative to a major one.
+// minorTickScale is how long a minor tick is relative to a major one. A minor
+// tick is drawn shorter so that the labelled ticks stay the ones the eye lands
+// on; it travels to the coord as part of [coord.Metrics], because the coord is
+// what decides where a tick mark goes and a coord must not know what a theme
+// is.
 const minorTickScale = 0.55
 
-func drawAxes(b ir.Backend, plot ir.Rect, th theme.Theme, p Panel, xTicks, yTicks []scale.Tick) {
-	if plot.Empty() {
-		return
-	}
+func drawAxes(b ir.Backend, th theme.Theme, p Panel, fur *coord.Furniture, xTicks, yTicks []scale.Tick) {
 	axis := ir.Stroke{Color: th.AxisColor, Width: th.AxisWidth, Cap: ir.CapButt}
 	tickFont := th.Font(th.TickSize)
 
 	if th.ShowAxisLineX {
-		b.Polyline([]ir.Point{{X: plot.Min.X, Y: plot.Max.Y}, {X: plot.Max.X, Y: plot.Max.Y}}, axis)
+		strokeShape(b, &fur.AxisX, axis)
 	}
 	if th.ShowAxisLineY {
-		b.Polyline([]ir.Point{{X: plot.Min.X, Y: plot.Min.Y}, {X: plot.Min.X, Y: plot.Max.Y}}, axis)
+		strokeShape(b, &fur.AxisY, axis)
 	}
 
-	// X ticks. Labels are centred on the tick, so a dense axis will collide;
-	// drop the labels that would overlap rather than let them run together.
-	keep := selectXLabels(b, xTicks, tickFont, th.TickLabelPad)
+	// X ticks. Where the labels sit along one line they will collide on a
+	// dense axis; drop the ones that would overlap rather than let them run
+	// together. Labels arranged around a ring share no line and are all kept.
+	keep := selectXLabels(b, fur, xTicks, tickFont, th.TickLabelPad)
 	for i, t := range xTicks {
-		if !inRange(t.Pos, plot.Min.X, plot.Max.X) {
+		if !inFurniture(fur.InX, i) || !th.ShowTicksX {
 			continue
 		}
-		if l := tickLength(th, t); axis.Visible() && l > 0 {
-			b.Polyline([]ir.Point{
-				{X: t.Pos, Y: plot.Max.Y},
-				{X: t.Pos, Y: plot.Max.Y + l},
-			}, axis)
+		if axis.Visible() {
+			strokeShape(b, shapeAt(fur.TickX, i), axis)
 		}
 		if t.Label == "" || !keep[i] || !p.ShowX {
 			continue
 		}
-		b.Text(ir.TextRun{
-			Text:  t.Label,
-			Font:  tickFont,
-			At:    ir.Point{X: t.Pos, Y: plot.Max.Y + th.TickLength + th.TickLabelPad},
-			H:     ir.AlignCenter,
-			V:     ir.AlignTop,
-			Color: th.TickColor,
-		})
+		b.Text(labelRun(t.Label, tickFont, fur.LabelX[i], th.TickColor))
 	}
 
-	// Y ticks. These stack vertically and are right-aligned against the axis,
-	// so they collide far less often; the theme's tick count hint is enough.
-	for _, t := range yTicks {
-		if !inRange(t.Pos, plot.Min.Y, plot.Max.Y) {
+	// Y ticks. On a Cartesian axis these stack vertically and are right-
+	// aligned against the axis, so they collide far less often; the theme's
+	// tick count hint is enough.
+	for i, t := range yTicks {
+		if !inFurniture(fur.InY, i) || !th.ShowTicksY {
 			continue
 		}
-		if l := tickLength(th, t); axis.Visible() && l > 0 {
-			b.Polyline([]ir.Point{
-				{X: plot.Min.X - l, Y: t.Pos},
-				{X: plot.Min.X, Y: t.Pos},
-			}, axis)
+		if axis.Visible() {
+			strokeShape(b, shapeAt(fur.TickY, i), axis)
 		}
 		if t.Label == "" || !p.ShowY {
 			continue
 		}
-		b.Text(ir.TextRun{
-			Text:  t.Label,
-			Font:  tickFont,
-			At:    ir.Point{X: plot.Min.X - th.TickLength - th.TickLabelPad, Y: t.Pos},
-			H:     ir.AlignEnd,
-			V:     ir.AlignMiddle,
-			Color: th.TickColor,
-		})
+		b.Text(labelRun(t.Label, tickFont, fur.LabelY[i], th.TickColor))
+	}
+}
+
+// inFurniture reports whether tick i falls inside the panel. A coord that
+// reported no answer for it has nothing to draw.
+func inFurniture(in []bool, i int) bool { return i < len(in) && in[i] }
+
+// labelRun is one tick label, placed where the coord put it.
+func labelRun(text string, font ir.FontRef, at coord.Label, col ir.Color) ir.TextRun {
+	return ir.TextRun{
+		Text:     text,
+		Font:     font,
+		At:       at.At,
+		H:        at.H,
+		V:        at.V,
+		Rotation: at.Rotation,
+		Color:    col,
 	}
 }
 
 // selectXLabels greedily keeps every label that clears the previous kept one.
 // Greedy left-to-right is the right policy here: it always keeps the first and
 // preserves even spacing on a regular axis, which is what a reader expects.
-func selectXLabels(m layout.Measurer, ticks []scale.Tick, font ir.FontRef, pad float32) []bool {
+func selectXLabels(m layout.Measurer, fur *coord.Furniture, ticks []scale.Tick, font ir.FontRef, pad float32) []bool {
 	keep := make([]bool, len(ticks))
+	if !fur.XLabelsShareARow {
+		// Two labels on opposite sides of a ring can share an x and still be a
+		// finger apart, so the overlap test does not apply and every label is
+		// kept.
+		for i := range keep {
+			keep[i] = true
+		}
+		return keep
+	}
 	prevRight := float32(-1e30)
 	for i, t := range ticks {
-		if t.Label == "" {
+		if t.Label == "" || !inFurniture(fur.InX, i) || i >= len(fur.LabelX) {
 			continue
 		}
 		w := m.Measure(ir.TextRun{Text: t.Label, Font: font}).Advance
-		left := t.Pos - w/2
+		left := fur.LabelX[i].At.X - w/2
 		if left < prevRight+pad {
 			continue
 		}
 		keep[i] = true
-		prevRight = t.Pos + w/2
+		prevRight = fur.LabelX[i].At.X + w/2
 	}
 	return keep
 }
@@ -558,17 +658,19 @@ func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 // rotation of -90 degrees in screen coordinates.
 const halfPi = 1.5707963267948966
 
-func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer, rows geom.Rows) error {
+func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer, rows geom.Rows, cd coord.Coord) error {
 	if plot.Empty() || len(p.Layers) == 0 {
 		return nil
 	}
+	// What a panel clips to is the coord's answer: the rectangle, or the disc
+	// inscribed in it.
 	var clip ir.Path
-	clip.Rect(plot)
+	cd.Clip(&clip, plot)
 	b.Push(&clip, ir.Identity)
 	defer b.Pop()
 
 	for i, g := range p.Layers {
-		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Theme: th, Index: i, Rows: rows}
+		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Coord: cd, Theme: th, Index: i, Rows: rows}
 		if obs != nil {
 			obs.Layer(i, layerLabel(g, f))
 		}

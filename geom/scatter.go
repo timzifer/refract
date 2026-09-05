@@ -75,15 +75,20 @@ func (g *scatterGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir
 		return g.rasterize(b, f, sc, s, ok, style.Fill)
 	}
 
-	pts := sc.pts[:0]
+	// The rows that survive are gathered into a contiguous pair first, so the
+	// coord places the whole cloud in one call rather than one per marker.
+	cd := f.Coords()
+	sc.kx, sc.ky = grow(sc.kx, len(s.x))[:0], grow(sc.ky, len(s.x))[:0]
 	rows := sc.rows[:0]
 	for i := range s.x {
 		if !ok[i] {
 			continue
 		}
-		pts = append(pts, ir.Point{X: f.X.Map(s.x[i]), Y: f.Y.Map(s.y[i])})
+		sc.kx = append(sc.kx, f.X.Map(s.x[i]))
+		sc.ky = append(sc.ky, f.Y.Map(s.y[i]))
 		rows = append(rows, i)
 	}
+	pts := cd.Points(grow(sc.pts, len(rows))[:0], sc.kx, sc.ky)
 	sc.pts, sc.rows = pts, rows
 	if len(pts) == 0 {
 		return nil
@@ -128,11 +133,13 @@ func (g *scatterGeom) rasterize(b ir.Backend, f Frame, sc *scratch, s series, ok
 		float64(area.Min.X), float64(area.Min.Y),
 		float64(area.Max.X), float64(area.Max.Y),
 	)
+	cd := f.Coords()
 	for i := range s.x {
 		if !ok[i] {
 			continue
 		}
-		sc.grid.Add(float64(f.X.Map(s.x[i])), float64(f.Y.Map(s.y[i])))
+		at := cd.Point(f.X.Map(s.x[i]), f.Y.Map(s.y[i]))
+		sc.grid.Add(float64(at.X), float64(at.Y))
 	}
 	if sc.grid.N == 0 {
 		return nil

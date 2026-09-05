@@ -48,6 +48,10 @@ func (s Spec) Chart() (Chart, error) {
 		}
 	}
 
+	if c.Coord, err = decodeCoord(s.Coord); err != nil {
+		return Chart{}, err
+	}
+
 	shared, err := decodeData(s.Data)
 	if err != nil {
 		return Chart{}, err
@@ -215,6 +219,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Tension:   l.Mark.Tension,
 		Marker:    markerShape(l.Mark.Shape),
 		MarkerSet: l.Mark.Shape != "",
+		Closed:    l.Mark.Closed,
 		Steps:     stepPos(l.Mark.Interpolate),
 		HAlign:    hAlignOf(l.Mark.Align),
 		VAlign:    vAlignOf(l.Mark.Baseline),

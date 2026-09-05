@@ -41,18 +41,26 @@ type Theme struct {
 	TickColor  ir.Color
 
 	// Axes and grid.
-	AxisColor      ir.Color
-	AxisWidth      float32
-	GridColor      ir.Color
-	GridWidth      float32
-	GridDash       []float32
-	TickLength     float32
-	TickLabelPad   float32
-	AxisTitlePad   float32
-	ShowGridX      bool
-	ShowGridY      bool
-	ShowAxisLineX  bool
-	ShowAxisLineY  bool
+	AxisColor     ir.Color
+	AxisWidth     float32
+	GridColor     ir.Color
+	GridWidth     float32
+	GridDash      []float32
+	TickLength    float32
+	TickLabelPad  float32
+	AxisTitlePad  float32
+	ShowGridX     bool
+	ShowGridY     bool
+	ShowAxisLineX bool
+	ShowAxisLineY bool
+	// ShowTicksX and ShowTicksY turn each axis's tick marks and tick labels on
+	// or off. They are the third of the three furniture switches, and the one
+	// a chart drawn in a coordinate system that does not want an axis reaches
+	// for: a pie has no radial quantity to label, and the numbers a linear
+	// scale puts round the outside of one are noise about a slot rather than
+	// information about the data.
+	ShowTicksX     bool
+	ShowTicksY     bool
 	TickCountHintX int
 	TickCountHintY int
 
@@ -324,6 +332,12 @@ func Grid(x, y bool) Option {
 // AxisLines turns the axis rules on or off.
 func AxisLines(x, y bool) Option {
 	return func(t *Theme) { t.ShowAxisLineX, t.ShowAxisLineY = x, y }
+}
+
+// Ticks turns each axis's tick marks and tick labels on or off. It is what a
+// pie or a donut asks for: neither has an axis worth labelling.
+func Ticks(x, y bool) Option {
+	return func(t *Theme) { t.ShowTicksX, t.ShowTicksY = x, y }
 }
 
 // TickCounts sets how many ticks each axis aims for. They are hints: a scale

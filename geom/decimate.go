@@ -5,6 +5,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
 	"github.com/timzifer/refract/stat"
@@ -115,6 +116,13 @@ const overplotFactor = 4
 // reduction resolves the reduction for one Build: which one, and how many
 // marks it may leave behind.
 func (c config) reduction(shape markShape, s series, f Frame) (Decimation, int) {
+	// A reduction is defined over pixel columns, and under a coord where a
+	// column of screen is not a column of data it would be measuring something
+	// else. The coord says so rather than every geom guessing — see
+	// docs/adr/0018-coordinate-systems.md.
+	if !f.Coords().Decimates() {
+		return NoDecimation, 0
+	}
 	cols := plotColumns(f.Area)
 	mode := c.decimate
 	if mode == AutoDecimation {
@@ -209,9 +217,13 @@ type scratch struct {
 	gy    []float64
 	gz    []float64
 	grows []int
-	dx    []float32 // device-space columns
+	dx    []float32 // mapped columns, which are device columns under Cartesian
 	dy    []float32
 	dz    []float32
+	kx    []float32 // the surviving columns, gathered for the coord's batch form
+	ky    []float32
+	sx    []float32 // a staircase, in the space the scales map into
+	sy    []float32
 	keep  []int
 	rows  []int
 	mrows []int // source rows behind the marks, when someone asked
@@ -275,8 +287,13 @@ func (sc *scratch) plottable(s series, x, y scale.Scale) []bool {
 	return sc.ok
 }
 
-// project maps one segment into device space. z is the band's lower edge, nil
+// project maps one segment through the scales. z is the band's lower edge, nil
 // when the segment has none.
+//
+// What comes back is the interval position each scale chose, which under
+// [coord.Cartesian] is already the device coordinate and under another coord is
+// an angle or a radius. The reduction runs here, on those numbers, and it is
+// the coord that decides whether that is meaningful at all.
 //
 // Reducing happens here rather than in data space because a pixel column is
 // the unit the whole exercise is about: on a log axis, equal steps in data are
@@ -353,37 +370,41 @@ func (sc *scratch) gather(s series, rows []int) series {
 	return out
 }
 
-// marks gathers a projected segment into points, keeping only the given rows —
-// or every row when keep is nil.
-func (sc *scratch) marks(x, y []float32, keep []int) []ir.Point {
-	if keep == nil {
-		sc.pts = grow(sc.pts, len(x))
-		for i := range x {
-			sc.pts[i] = ir.Point{X: x[i], Y: y[i]}
+// marks turns a projected segment into device points through the coord,
+// keeping only the given rows — or every row when keep is nil.
+//
+// The surviving pair is gathered into a contiguous column first so that the
+// coord is asked once for the whole run. That is what [coord.Coord.Points] is
+// for: an interface method called per row is the shape that cost a million
+// allocations on a million-row column once already, and this is exactly the
+// path it would reappear on.
+func (sc *scratch) marks(cd coord.Coord, x, y []float32, keep []int) []ir.Point {
+	if keep != nil {
+		sc.kx, sc.ky = grow(sc.kx, len(keep)), grow(sc.ky, len(keep))
+		for i, row := range keep {
+			sc.kx[i], sc.ky[i] = x[row], y[row]
 		}
-		return sc.pts
+		x, y = sc.kx, sc.ky
 	}
-	sc.pts = grow(sc.pts, len(keep))
-	for i, row := range keep {
-		sc.pts[i] = ir.Point{X: x[row], Y: y[row]}
-	}
+	sc.pts = cd.Points(grow(sc.pts, len(x))[:0], x, y)
 	return sc.pts
 }
 
 // lowerEdge gathers a band's second edge in reverse order, so that appending it
 // to the upper edge closes the shape.
-func (sc *scratch) lowerEdge(x, z []float32, keep []int) []ir.Point {
+func (sc *scratch) lowerEdge(cd coord.Coord, x, z []float32, keep []int) []ir.Point {
 	n := len(x)
 	if keep != nil {
 		n = len(keep)
 	}
-	sc.edge = grow(sc.edge, n)
+	sc.kx, sc.ky = grow(sc.kx, n), grow(sc.ky, n)
 	for i := range n {
 		row := n - 1 - i
 		if keep != nil {
 			row = keep[n-1-i]
 		}
-		sc.edge[i] = ir.Point{X: x[row], Y: z[row]}
+		sc.kx[i], sc.ky[i] = x[row], z[row]
 	}
+	sc.edge = cd.Points(grow(sc.edge, n)[:0], sc.kx[:n], sc.ky[:n])
 	return sc.edge
 }

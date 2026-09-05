@@ -1,6 +1,7 @@
 package geom
 
 import (
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
@@ -119,10 +120,11 @@ func (g *areaGeom) build(b ir.Backend, f Frame, sc *scratch, s series, fill, lin
 	}
 	mode, budget := g.cfg.reduction(shape, s, f)
 
+	cd := f.Coords()
 	for _, seg := range sc.segments(s, sc.plottable(s, f.X, f.Y), g.cfg.missing) {
 		x, y, z := sc.project(seg, f)
 		keep := sc.reduce(mode, budget, x, y, z)
-		top := sc.marks(x, y, keep)
+		top := sc.marks(cd, x, y, keep)
 		if len(top) < 2 {
 			continue
 		}
@@ -132,12 +134,21 @@ func (g *areaGeom) build(b ir.Backend, f Frame, sc *scratch, s series, fill, lin
 		f.Marks(top, sc.rowsOf(seg, keep, len(x)))
 		if fill.A != 0 {
 			sc.fill.Reset()
-			appendCurve(&sc.fill, top, tension, true)
-			if z != nil {
-				appendCurve(&sc.fill, sc.lowerEdge(x, z, keep), tension, false)
-			} else {
-				sc.fill.LineTo(top[len(top)-1].X, base)
-				sc.fill.LineTo(top[0].X, base)
+			appendCurve(&sc.fill, cd, top, tension, true)
+			switch {
+			case z != nil:
+				appendCurve(&sc.fill, cd, sc.lowerEdge(cd, x, z, keep), tension, false)
+			case g.cfg.closed:
+				// A closed contour is its own boundary: a filled radar is the
+				// polygon through the marks, not the polygon plus a detour to
+				// the baseline.
+				cd.Edge(&sc.fill, top[len(top)-1], top[0])
+			default:
+				// The floor of an area is the baseline run back under it,
+				// which is a pair of mapped positions like any other: under a
+				// polar coord it is the arc at the baseline radius, not a
+				// chord across the middle of the chart.
+				g.appendFloor(&sc.fill, cd, x, keep, base)
 			}
 			sc.fill.Close()
 			b.FillPath(&sc.fill, ir.Solid(fill), ir.NonZero)
@@ -146,15 +157,40 @@ func (g *areaGeom) build(b ir.Backend, f Frame, sc *scratch, s series, fill, lin
 			continue
 		}
 		sc.line.Reset()
-		appendCurve(&sc.line, top, tension, true)
+		appendCurve(&sc.line, cd, top, tension, true)
+		if g.cfg.closed && z == nil {
+			closeLoop(&sc.line, cd, top)
+		}
 		b.StrokePath(&sc.line, stroke)
 		if z != nil {
 			sc.line.Reset()
-			appendCurve(&sc.line, sc.lowerEdge(x, z, keep), tension, true)
+			appendCurve(&sc.line, cd, sc.lowerEdge(cd, x, z, keep), tension, true)
 			b.StrokePath(&sc.line, stroke)
 		}
 	}
 	return nil
+}
+
+// appendFloor closes an area over a baseline: back along the baseline from the
+// last mark to the first.
+//
+// Under a Cartesian coord that is the two corners it has always been. Under
+// one that bends its edges the baseline is a curve of its own, so the run is
+// walked at the same resolution the top edge was drawn at.
+func (g *areaGeom) appendFloor(p *ir.Path, cd coord.Coord, x []float32, keep []int, base float32) {
+	first, last := x[0], x[len(x)-1]
+	if keep != nil {
+		first, last = x[keep[0]], x[keep[len(keep)-1]]
+	}
+	if cd.Straight() {
+		end, start := cd.Point(last, base), cd.Point(first, base)
+		p.LineTo(end.X, end.Y)
+		p.LineTo(start.X, start.Y)
+		return
+	}
+	end, start := cd.Point(last, base), cd.Point(first, base)
+	p.LineTo(end.X, end.Y)
+	cd.Edge(p, end, start)
 }
 
 func (g *areaGeom) Legends(f Frame) []LegendEntry {

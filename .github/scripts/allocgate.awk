@@ -96,6 +96,13 @@ END {
 	atMost("BenchmarkStacked100k", 128)
 	require("BenchmarkStacked1k")
 
+	# The polar path, added in v0.8. A coord sits between every mapped pair and
+	# the device point it becomes, and a polar one does not decimate — so this
+	# draws every row through coord.Coord.Points. The batch form is why that is
+	# flat; a per-row interface call is the shape that would break it, and it
+	# has broken exactly this way once before. See docs/adr/0018.
+	flat("BenchmarkPolar1k", "BenchmarkPolar100k", 8)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

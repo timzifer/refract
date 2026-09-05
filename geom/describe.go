@@ -109,21 +109,24 @@ type Desc struct {
 	// the second.
 	Marker    ir.Marker
 	MarkerSet bool
-	Size      float32
-	BarWidth  float64
-	Baseline  float64
-	Opacity   float64
-	Steps     StepPos
-	Whisker   float64
-	Outliers  bool
-	Decimate  Decimation
-	Budget    int
-	CellSize  float64
-	FontSize  float64
-	HAlign    ir.HAlign
-	VAlign    ir.VAlign
-	Rotation  float64
-	Extend    bool
+	// Closed reports a connected layer that joins its last mark back to its
+	// first — the radar contour of [Closed].
+	Closed   bool
+	Size     float32
+	BarWidth float64
+	Baseline float64
+	Opacity  float64
+	Steps    StepPos
+	Whisker  float64
+	Outliers bool
+	Decimate Decimation
+	Budget   int
+	CellSize float64
+	FontSize float64
+	HAlign   ir.HAlign
+	VAlign   ir.VAlign
+	Rotation float64
+	Extend   bool
 }
 
 // Describer is implemented by a layer that can say what it is.
@@ -221,6 +224,7 @@ func (d Desc) options() []Option {
 		Rotate(d.Rotation),
 		Extend(d.Extend),
 		Order(d.Order),
+		Closed(d.Closed),
 	}
 	if d.StackSet {
 		opts = append(opts, Stack(d.Stack))
@@ -304,6 +308,7 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Missing:    c.missing,
 		Marker:     c.marker,
 		MarkerSet:  c.markerSet,
+		Closed:     c.closed,
 		Size:       c.size,
 		BarWidth:   c.barWidth,
 		Baseline:   c.baseline,

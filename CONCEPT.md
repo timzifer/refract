@@ -825,7 +825,7 @@ one. And a group index is per layer, so a facet whose panels hold different
 groups wants an explicit `scale.Qualitative` — a shared scale is what makes one
 colour mean one thing across panels, and the palette index cannot be.
 
-### v0.8 — Coordinates
+### v0.8 — Coordinates — **shipped**
 
 - `coord/`, at last: the stage [§8](#8-model-layer-gog-lite) has promised since
   v0.1. A scale still maps into an interval; a coord decides what the interval
@@ -848,7 +848,35 @@ colour mean one thing across panels, and the palette index cannot be.
   over a slice names its category and its row rather than a pixel; a donut's
   hole is an explicit annulus; the spec round-trips the coord; the allocation
   gates are unchanged and the per-point call has a batch form so that they stay
-  that way.
+  that way. ✔
+
+Two things the interface grew beyond what
+[ADR 0018](docs/adr/0018-coordinate-systems.md) sketched, both for reasons the
+sketch could not have known. `Frame` **returns** the coord positioned in a panel
+rather than moving the receiver into it, because panels are built concurrently
+and a coord that remembered which panel it was in would be a data race — the
+same problem `scale.Snapshotter` exists for, answered without a second
+interface. And `Furniture` **fills** a struct the caller owns rather than
+returning one: a Cartesian panel's furniture is two dozen little slices, and
+allocating them per frame would have cost more than the whole rest of the frame
+does. The record carries both as an amendment.
+
+Not in v0.8, in case they look like oversights. There is no **geographic
+projection**: a projection transforms every point with no linear interval
+underneath it, which is a wider seam than this one, and ADR 0018 says it is to
+be argued on its own evidence rather than smuggled in as a third `Coord`. A
+polar coord **does not decimate** — a bucket of equal angle is not a bucket of
+equal width, so a reduction defined over pixel columns would be measuring the
+wrong thing, and nothing polar is a big-data chart. `layout` is **untouched**: a
+polar coord inscribes itself in whatever rectangle the solver gives it, and
+gutter rules that understand a radial axis are a later milestone. A radar's
+contour closes because `geom.Closed` says so rather than because the coord
+guessed: whether a series wraps is a fact about the series, and a polar time
+series spiralling through three revolutions does not. And a **hit on a filled
+mark is decided against the outline the drawing call carried**, so a shape whose
+edge is a curve can be hit a little way outside its ink at a bulge — the convex
+hull of a cubic, which is the same slack a vertex already gets and the opposite
+error from missing a slice the pointer is plainly inside.
 
 ### v0.9 — Distributions, density and size
 
@@ -878,7 +906,7 @@ colour mean one thing across panels, and the palette index cannot be.
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
-- More coordinate systems: geographic and map projections. Polar arrives in v0.8
+- More coordinate systems: geographic and map projections. Polar arrived in v0.8
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam
   — it transforms every point with no linear interval underneath it — and is
   argued on its own evidence rather than smuggled in as a third `Coord`.
@@ -919,8 +947,8 @@ nothing at all, and GoGPU enters only through the nested `backend/gg` module.
 
 Every package below exists; the milestone each arrived in is marked. `coord/`
 was the last one outstanding — the pluggable stage the Cartesian mapping used to
-be hard-coded into — and [ADR 0018](docs/adr/0018-coordinate-systems.md) settles
-what it is.
+be hard-coded into — and it landed in v0.8, settled by
+[ADR 0018](docs/adr/0018-coordinate-systems.md).
 
 ```
 refract/                     # core module — pure Go, STDLIB ONLY (no requires)
@@ -1031,8 +1059,9 @@ remains genuinely open, and is marked so.
    now explicit: `geom.Frame` and the `Geom` interface are part of what freezes,
    so anything that has to widen them has to land first. The coordinate stage is
    one such thing — a `Frame` frozen as a rectangle with an X scale and a Y
-   scale is a library that is Cartesian forever
-   ([ADR 0018](docs/adr/0018-coordinate-systems.md)) — and a multi-entry legend
+   scale is a library that is Cartesian forever — and it landed in v0.8 for
+   exactly that reason ([ADR 0018](docs/adr/0018-coordinate-systems.md)). A
+   multi-entry legend
    is deliberately *not*, because an optional interface widens nothing
    ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)). That
    is the test to apply to anything else queued behind this item: does it change

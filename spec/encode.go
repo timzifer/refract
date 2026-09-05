@@ -36,6 +36,10 @@ func Of(c Chart) (Spec, error) {
 		s.Encoding = enc
 	}
 
+	if s.Coord, err = encodeCoord(c.Coord); err != nil {
+		return Spec{}, err
+	}
+
 	shared, hoist := commonSource(c.Layers)
 	if hoist {
 		if s.Data, err = encodeData(shared); err != nil {
@@ -304,11 +308,19 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		}
 	}
 
+	// A contour that joins back to its start is a property of the connected
+	// marks and of nothing else, so it is written by those three and not by
+	// the six that would ignore it.
+	loop := func() {
+		m.Closed = d.Closed
+	}
+
 	switch d.Mark {
 	case geom.MarkLine:
 		stroke()
 		rows()
 		group()
+		loop()
 		if d.Tension > 0 {
 			m.Interpolate, m.Tension = "cardinal", d.Tension
 		}
@@ -316,6 +328,7 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		stroke()
 		rows()
 		group()
+		loop()
 		m.Interpolate = stepName(d.Steps)
 	case geom.MarkScatter:
 		stroke()
@@ -345,6 +358,7 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		fill()
 		rows()
 		group()
+		loop()
 		m.Origin = d.Baseline
 		if d.Tension > 0 {
 			m.Interpolate, m.Tension = "cardinal", d.Tension

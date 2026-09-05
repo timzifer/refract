@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/timzifer/refract"
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/irtest"
@@ -70,6 +71,28 @@ func stackedSeries(n int) *refract.Plot {
 	return p
 }
 
+// polarSignal is [signal] drawn in a polar coord: the fourth data path, and
+// the one that puts an interface call between a mapped pair and a device
+// point.
+//
+// A polar coord does not decimate — see docs/adr/0018 — so this draws every
+// row, which is exactly why it is worth measuring: if the per-point call ever
+// stops going through the batch form, this is where it shows.
+func polarSignal(n int) *refract.Plot {
+	x := make([]float64, n)
+	y := make([]float64, n)
+	for i := range n {
+		x[i] = float64(i)
+		y[i] = 2 + math.Sin(float64(i)/50)
+	}
+	src := refract.Float64Columns(map[string][]float64{"x": x, "y": y})
+	p := refract.New(refract.Size(800, 500), refract.Coord(coord.Polar(coord.Chord())))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Line(src, geom.X("x"), geom.Y("y")))
+	return p
+}
+
 func facetedSignal(panels, rows int) *refract.Plot { return facetedSignalWith(panels, rows, true) }
 
 func facetedSignalWith(panels, rows int, parallel bool) *refract.Plot {
@@ -124,6 +147,26 @@ func benchmarkStacked(b *testing.B, rows int) {
 // where a buffer that escaped the layer's own memory would show up.
 func BenchmarkStacked1k(b *testing.B)   { benchmarkStacked(b, 1_000) }
 func BenchmarkStacked100k(b *testing.B) { benchmarkStacked(b, 100_000) }
+
+func benchmarkPolar(b *testing.B, rows int) {
+	p := polarSignal(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// The polar path measured the same way. Every row goes through
+// coord.Coord.Points, and the batch form is the reason that costs nothing.
+func BenchmarkPolar1k(b *testing.B)   { benchmarkPolar(b, 1_000) }
+func BenchmarkPolar100k(b *testing.B) { benchmarkPolar(b, 100_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }

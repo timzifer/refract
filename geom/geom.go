@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
@@ -36,6 +37,11 @@ type Frame struct {
 	Area ir.Rect
 	// X and Y are the trained, ranged scales.
 	X, Y scale.Scale
+	// Coord decides what the interval a scale maps into means, and therefore
+	// where a mapped pair lands. A nil Coord is [coord.Cartesian], so a Frame
+	// built by code that never heard of coordinate systems draws the chart it
+	// always drew — reach for [Frame.Coords] rather than the field.
+	Coord coord.Coord
 	// Theme supplies defaults the geom did not override.
 	Theme theme.Theme
 	// Index is the geom's position among the chart's layers, used to pick a
@@ -46,6 +52,23 @@ type Frame struct {
 	// geom draws. It is nil for an ordinary render and a geom must check it
 	// before doing the bookkeeping — see [Rows] and [Frame.Marks].
 	Rows Rows
+}
+
+// Coords is the frame's coordinate system, which is [coord.Cartesian] framed
+// in the plot rectangle when it has none.
+//
+// A geom asks for it once at the top of Build and uses what comes back: the
+// answer never changes within one frame, and the nil check is not worth
+// repeating per row. Framing the fallback rather than handing back a bare
+// Cartesian is what makes a Frame built by hand — in a test, or by a caller
+// driving a geom directly — behave as it always did: the coord it gets can
+// answer [coord.Coord.Extent], which is where a rule that spans the plot finds
+// the far edge.
+func (f Frame) Coords() coord.Coord {
+	if f.Coord == nil {
+		return coord.Cartesian().Frame(f.Area, nil, nil)
+	}
+	return f.Coord
 }
 
 // SwatchKind is how a legend entry draws its sample.
@@ -122,6 +145,7 @@ type config struct {
 	budget     int
 	cellSize   float64
 
+	closed    bool
 	dashSet   bool
 	markerSet bool
 	extend    bool
@@ -213,6 +237,20 @@ const (
 
 // Steps sets where a [Step] geom changes value.
 func Steps(where StepPos) Option { return func(c *config) { c.steps = where } }
+
+// Closed joins the last mark of a connected layer back to the first.
+//
+// It is what turns a [Line] over an angular axis into a radar contour and an
+// [Area] over one into a filled one: five axes drawn as an open line leave a
+// gap between the last and the first, which is a hole in a shape that has none.
+// It applies to [Line], [Area] and [Step]; a layer whose marks are not
+// connected ignores it.
+//
+// It is an option rather than something [coord.Polar] decides, because whether
+// a series wraps is a fact about the series and not about the transform: a
+// radar covers every axis and closes, and a polar time series spiralling
+// through three revolutions does not.
+func Closed(on bool) Option { return func(c *config) { c.closed = on } }
 
 // ColorBy maps a column through a colour scale, giving every mark its own
 // colour. It applies to [Scatter], [Bar] and [Rect]; geoms whose mark is one
@@ -695,8 +733,9 @@ func smallestGap(vs []float64) float64 {
 	return gap
 }
 
-// markSpan returns the device-space edges of a mark centred on data position
-// x.
+// markSpan returns the mapped edges of a mark centred on data position x —
+// device coordinates under a Cartesian coord, and an angle or a radius under
+// another one, which is the coord's business rather than the geom's.
 //
 // A band scale knows the width of a slot and is asked for it. On a continuous
 // axis the width is halfWidth in data units on each side, mapped through the

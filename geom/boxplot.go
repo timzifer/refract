@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
@@ -95,6 +96,8 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 	}
 	fill := g.cfg.fillFor(f, boxFillOpacity)
 	half := g.slot() * g.widthFraction() / 2
+	cd := f.Coords()
+	var box, run ir.Path
 
 	for _, grp := range g.groups {
 		x0, x1 := markSpan(f, grp.at, half)
@@ -104,8 +107,8 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 			q1, q3 = q3, q1
 		}
 
-		var box ir.Path
-		box.Rect(ir.R(x0, q3, x1, q1))
+		box.Reset()
+		cd.Area(&box, x0, q3, x1, q1)
 		if fill.A != 0 {
 			b.FillPath(&box, ir.Solid(fill), ir.NonZero)
 		}
@@ -117,7 +120,7 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 		// The median is the one number a reader takes off a boxplot without
 		// measuring, so it is drawn heavier than the box around it.
 		med := f.Y.Map(grp.median)
-		b.Polyline([]ir.Point{{X: x0, Y: med}, {X: x1, Y: med}}, ir.Stroke{
+		g.span(b, cd, &run, x0, x1, med, ir.Stroke{
 			Color: stroke.Color,
 			Width: stroke.Width * 2,
 			Cap:   ir.CapButt,
@@ -131,8 +134,8 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 			if w > grp.median {
 				from = q3
 			}
-			b.Polyline([]ir.Point{{X: mid, Y: from}, {X: mid, Y: end}}, stroke)
-			b.Polyline([]ir.Point{{X: cap0, Y: end}, {X: cap1, Y: end}}, stroke)
+			strokeRun(b, cd, &run, []ir.Point{cd.Point(mid, from), cd.Point(mid, end)}, stroke, false)
+			g.span(b, cd, &run, cap0, cap1, end, stroke)
 		}
 
 		if !g.cfg.outliers || len(grp.outliers) == 0 {
@@ -140,7 +143,7 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 		}
 		pts := make([]ir.Point, 0, len(grp.outliers))
 		for _, v := range grp.outliers {
-			pts = append(pts, ir.Point{X: mid, Y: f.Y.Map(v)})
+			pts = append(pts, cd.Point(mid, f.Y.Map(v)))
 		}
 		b.Markers(g.cfg.marker, pts, ir.MarkerStyle{
 			Size: pick(g.cfg.size, f.Theme.MarkerSize*0.7),
@@ -148,6 +151,13 @@ func (g *boxGeom) Build(b ir.Backend, f Frame) error {
 		})
 	}
 	return nil
+}
+
+// span strokes the run from x0 to x1 at a constant y, which is what a median
+// line and a whisker cap both are. It goes through the coord because a run at a
+// constant y is a straight line only where the coord says so.
+func (g *boxGeom) span(b ir.Backend, cd coord.Coord, p *ir.Path, x0, x1, y float32, st ir.Stroke) {
+	strokeRun(b, cd, p, []ir.Point{cd.Point(x0, y), cd.Point(x1, y)}, st, false)
 }
 
 // boxFillOpacity is how much of the layer's colour an inherited box fill

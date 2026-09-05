@@ -221,9 +221,13 @@ func (g *Grid) chart() (render.Chart, error) {
 			Col: cell.col,
 			// A subplot's title names its panel. There is one chart title, and
 			// it belongs to the grid.
-			Strip:  cell.plot.title,
-			X:      cell.plot.scaleX(),
-			Y:      cell.plot.scaleY(),
+			Strip: cell.plot.title,
+			X:     cell.plot.scaleX(),
+			Y:     cell.plot.scaleY(),
+			// Each cell keeps its own coordinate system: the cells of a grid
+			// are separate plots sharing a canvas, so a pie can sit beside a
+			// bar chart.
+			Coord:  cell.plot.coord,
 			Layers: cell.plot.layers,
 			// Every panel has scales of its own, so every panel writes its own
 			// axes: the numbers on one are not the numbers on the next.

@@ -59,11 +59,20 @@ func (g *ruleGeom) Build(b ir.Backend, f Frame) error {
 	if !stroke.Visible() {
 		return nil
 	}
+	// A rule spans the *other* axis end to end, and where that axis ends is
+	// what the coord decided when it framed the panel — the edge of the
+	// rectangle under Cartesian, and a whole turn of the circle under Polar,
+	// where a rule at a constant Y is a ring.
+	cd := f.Coords()
+	x0, x1, y0, y1 := cd.Extent()
+	x0, x1 = ordered(x0, x1)
+	y0, y1 = ordered(y0, y1)
 	p := s.Map(g.at)
+	var path ir.Path
 	if g.vertical {
-		b.Polyline([]ir.Point{{X: p, Y: f.Area.Min.Y}, {X: p, Y: f.Area.Max.Y}}, stroke)
+		strokeRun(b, cd, &path, []ir.Point{cd.Point(p, y0), cd.Point(p, y1)}, stroke, false)
 	} else {
-		b.Polyline([]ir.Point{{X: f.Area.Min.X, Y: p}, {X: f.Area.Max.X, Y: p}}, stroke)
+		strokeRun(b, cd, &path, []ir.Point{cd.Point(x0, p), cd.Point(x1, p)}, stroke, false)
 	}
 	return nil
 }
@@ -114,17 +123,17 @@ func (g *bandGeom) Build(b ir.Backend, f Frame) error {
 	if c < a {
 		a, c = c, a
 	}
-	r := ir.Rect{
-		Min: ir.Point{X: f.Area.Min.X, Y: a},
-		Max: ir.Point{X: f.Area.Max.X, Y: c},
-	}
+	// The band spans the other axis end to end, wherever the coord put its
+	// ends — see the same argument in [ruleGeom.Build].
+	cd := f.Coords()
+	ax0, ax1, ay0, ay1 := cd.Extent()
+	ax0, ax1 = ordered(ax0, ax1)
+	ay0, ay1 = ordered(ay0, ay1)
+	r := ir.Rect{Min: ir.Point{X: ax0, Y: a}, Max: ir.Point{X: ax1, Y: c}}
 	if g.vertical {
-		r = ir.Rect{
-			Min: ir.Point{X: a, Y: f.Area.Min.Y},
-			Max: ir.Point{X: c, Y: f.Area.Max.Y},
-		}
+		r = ir.Rect{Min: ir.Point{X: a, Y: ay0}, Max: ir.Point{X: c, Y: ay1}}
 	}
-	if r.Empty() {
+	if a == c {
 		// A band whose two bounds map to the same position has no area. It is
 		// a legitimate degenerate case — a window of zero width — and drawing
 		// a hairline instead would misreport it as having extent.
@@ -135,7 +144,7 @@ func (g *bandGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 	var p ir.Path
-	p.Rect(r)
+	area(&p, cd, r)
 	b.FillPath(&p, ir.Solid(fill), ir.NonZero)
 	return nil
 }
@@ -177,10 +186,12 @@ func (g *segmentGeom) Build(b ir.Backend, f Frame) error {
 	if !stroke.Visible() {
 		return nil
 	}
-	b.Polyline([]ir.Point{
-		{X: f.X.Map(g.x0), Y: f.Y.Map(g.y0)},
-		{X: f.X.Map(g.x1), Y: f.Y.Map(g.y1)},
-	}, stroke)
+	cd := f.Coords()
+	var path ir.Path
+	strokeRun(b, cd, &path, []ir.Point{
+		cd.Point(f.X.Map(g.x0), f.Y.Map(g.y0)),
+		cd.Point(f.X.Map(g.x1), f.Y.Map(g.y1)),
+	}, stroke, false)
 	return nil
 }
 
@@ -225,7 +236,7 @@ func (g *regionGeom) Build(b ir.Backend, f Frame) error {
 		return nil
 	}
 	var p ir.Path
-	p.Rect(r)
+	area(&p, f.Coords(), r)
 	if fill := g.cfg.annotationFill(f); fill.A != 0 {
 		b.FillPath(&p, ir.Solid(fill), ir.NonZero)
 	}
@@ -285,7 +296,7 @@ func (g *noteGeom) Build(b ir.Backend, f Frame) error {
 	b.Text(ir.TextRun{
 		Text:     g.text,
 		Font:     f.Theme.Font(size),
-		At:       ir.Point{X: f.X.Map(g.x), Y: f.Y.Map(g.y)},
+		At:       f.Coords().Point(f.X.Map(g.x), f.Y.Map(g.y)),
 		H:        g.cfg.halign,
 		V:        g.cfg.valign,
 		Rotation: g.cfg.rotation,

@@ -99,6 +99,24 @@ func TestAStackedLayerDoesNotAllocatePerPoint(t *testing.T) {
 	}
 }
 
+// A polar layer is the fourth data path, and the one v0.8 added: every mark
+// goes through the coord on its way to a device point.
+//
+// It is measured because that call is where a per-row interface method would
+// reappear — the shape that once cost a million allocations on a million-row
+// column. coord.Coord.Points is the batch form that stops it, and this is the
+// assertion that it is the form the geoms actually use. A polar coord does not
+// decimate either, so this draws every row rather than a reduction of them.
+func TestAPolarRenderDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, polarSignal(1_000))
+	large := allocsPerFrame(t, polarSignal(200_000))
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("200k polar marks allocate %.0f times per frame against %.0f for 1k: "+
+			"the coord is allocating per point", large, small)
+	}
+}
+
 // A layer coloured from a column is the other data path: one colour per mark,
 // batched into one drawing call per distinct colour. Its buffers are pooled
 // too, and this is the assertion that they stay that way.

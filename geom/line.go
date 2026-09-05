@@ -1,6 +1,7 @@
 package geom
 
 import (
+	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
@@ -65,11 +66,12 @@ func (g *lineGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Co
 	if !stroke.Visible() {
 		return nil
 	}
+	cd := f.Coords()
 	mode, budget := g.cfg.reduction(shapePath, s, f)
 	for _, seg := range sc.segments(s, sc.plottable(s, f.X, f.Y), g.cfg.missing) {
 		x, y, _ := sc.project(seg, f)
 		keep := sc.reduce(mode, budget, x, y, nil)
-		pts := sc.marks(x, y, keep)
+		pts := sc.marks(cd, x, y, keep)
 		if len(pts) < 2 {
 			continue
 		}
@@ -78,11 +80,14 @@ func (g *lineGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Co
 		// left to be read off the drawing call.
 		f.Marks(pts, sc.rowsOf(seg, keep, len(x)))
 		if g.cfg.tension <= 0 {
-			b.Polyline(pts, stroke)
+			strokeRun(b, cd, &sc.line, pts, stroke, g.cfg.closed)
 			continue
 		}
 		sc.line.Reset()
-		appendCurve(&sc.line, pts, float32(clamp01(g.cfg.tension)), true)
+		appendCurve(&sc.line, cd, pts, float32(clamp01(g.cfg.tension)), true)
+		if g.cfg.closed {
+			closeLoop(&sc.line, cd, pts)
+		}
 		b.StrokePath(&sc.line, stroke)
 	}
 	return nil
@@ -243,8 +248,18 @@ func lerp(a, b, t float64) float64 { return a + (b-a)*t }
 //
 // Continuing an existing subpath is what lets an area append its lower edge to
 // its upper one and get a single closed shape rather than two.
-func appendCurve(p *ir.Path, pts []ir.Point, tension float32, move bool) {
+//
+// A coord that bends its edges takes them over from both forms. Smoothing is a
+// curve fitted through device positions, and under a polar transform the
+// tangent it fits is not the tangent the data has — so an edge the coord
+// already knows how to draw is the better answer than a spline through points
+// it has moved.
+func appendCurve(p *ir.Path, cd coord.Coord, pts []ir.Point, tension float32, move bool) {
 	if len(pts) == 0 {
+		return
+	}
+	if !cd.Straight() {
+		appendEdges(p, cd, pts, move)
 		return
 	}
 	if move {

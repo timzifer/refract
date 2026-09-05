@@ -87,6 +87,7 @@ import (
 
 	"github.com/timzifer/refract/backend/pdf"
 	"github.com/timzifer/refract/backend/svg"
+	coordpkg "github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
@@ -130,6 +131,7 @@ type Plot struct {
 	yTitle string
 
 	x, y   scale.Scale
+	coord  coordpkg.Coord
 	layers []geom.Geom
 
 	facet *facet.Spec
@@ -234,6 +236,23 @@ func ResponsiveFrom(w, h int) Option {
 // draws its labels exactly as they were written, and pays nothing for the
 // notation it does not have. See package mathtext.
 func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } }
+
+// Coord sets the coordinate system: what the interval a scale maps into means.
+//
+// The default is [coord.Cartesian], the identity, where the interval is a
+// distance along an edge of the plot. [coord.Polar] wraps one axis around a
+// circle and reads the other as a radius, which is all a pie, a donut, a
+// radar, a rose or a gauge is — the marks are the ones that were already
+// there:
+//
+//	p := refract.New(refract.Coord(coord.Polar(coord.Theta(coord.FromY))))
+//	p.X(scale.Linear())
+//	p.Y(scale.Linear())
+//	p.Add(geom.Bar(src, geom.X("one"), geom.Y("share"), geom.GroupBy("browser")))
+//
+// A coord belongs to the chart rather than to a panel, so the panels of a
+// facet all share it.
+func Coord(c coordpkg.Coord) Option { return func(p *Plot) { p.coord = c } }
 
 // Theme sets the visual tokens. The default is [theme.Light].
 func Theme(t themepkg.Theme) Option { return func(p *Plot) { p.theme = t } }
@@ -394,6 +413,7 @@ func (p *Plot) chart() (render.Chart, error) {
 		YTitle:      p.yTitle,
 		X:           p.scaleX(),
 		Y:           p.scaleY(),
+		Coord:       p.coord,
 		Layers:      p.layers,
 		ShowLegend:  p.showLegend(),
 		Description: p.Description(),

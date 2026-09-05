@@ -210,3 +210,19 @@ func TestTokensRoundTripsTheBuiltInThemes(t *testing.T) {
 		}
 	}
 }
+
+// The third furniture switch, added in v0.8 beside Grid and AxisLines. A chart
+// drawn in a coordinate system with no axis worth labelling — a pie has no
+// radial quantity and no angular one — needs a way to say so, and until this
+// existed there was none.
+func TestTicksTurnAnAxisOffAndTheDefaultLeavesItOn(t *testing.T) {
+	for _, base := range []theme.Theme{theme.Light, theme.Dark} {
+		if !base.ShowTicksX || !base.ShowTicksY {
+			t.Errorf("%s hides its ticks by default", base.Name)
+		}
+	}
+	got := theme.Light.With(theme.Ticks(false, true))
+	if got.ShowTicksX || !got.ShowTicksY {
+		t.Errorf("ticks = %v/%v, want false/true", got.ShowTicksX, got.ShowTicksY)
+	}
+}
