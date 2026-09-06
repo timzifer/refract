@@ -9,7 +9,7 @@ constraints that are easy to break without noticing.
 **The core module must never gain a dependency.** `go.mod` at the repository
 root has no `require` block, and it stays that way. Anything that needs
 `gogpu/gg`, `gogpu/gogpu`, `x/image`, Arrow, or anything else belongs in a
-nested module — `backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow` are
+nested module — `backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow/v18` are
 the four that exist. `syscall/js` is the standard library, which is why the
 browser backend is in the core rather than beside them.
 
@@ -260,8 +260,10 @@ the six geoms that have rows. There is a test per geom.
 **Row reporting is gated on `Frame.Rows != nil` at every step.** `acquire(f)`
 records it on the scratch as `wantRows`, and `rowsOf`, `sourceRows` and the
 interpolated series' row list all check it. An ordinary render must keep
-costing exactly what it did — `BenchmarkFrame1k` is still 76 allocations, and
-`BenchmarkWatchedFrame` against `BenchmarkWatchedFrameRows` is pinned flat.
+costing exactly what it did — `BenchmarkFrame1k` did not move when row
+identity landed (76 allocations then; the current count is in
+[docs/benchmarks.md](docs/benchmarks.md)), and `BenchmarkWatchedFrame`
+against `BenchmarkWatchedFrameRows` is pinned flat.
 
 **A row is reported in the caller's table, not in the cut refract made.**
 Faceting cuts each layer with `data.Rows`, and a row number relative to that
@@ -670,11 +672,14 @@ sentence in the code as well as here.
 ## Open questions
 
 [CONCEPT.md §17](CONCEPT.md#17-open-decisions) lists the design decisions that
-were genuinely open. Seven are closed and recorded in [docs/adr](docs/adr) —
+were genuinely open. All seven are closed and recorded in [docs/adr](docs/adr):
 §17.3, Vega-Lite spec fidelity, was settled in v0.5 by
-[ADR 0014](docs/adr/0014-json-spec.md). One remains open on purpose: the
-third-party extension API (§17.7), which belongs to v1.0. Do not settle it in
-passing; it needs its own ADR.
+[ADR 0014](docs/adr/0014-json-spec.md), and §17.7, the third-party extension
+API, was the last — held open on purpose until the v1 freeze and settled there
+by [ADR 0029](docs/adr/0029-extension-model.md). A question that opens after
+v1.0 is answered the same way: with a record in `docs/adr`, never in passing.
+The most recent, [ADR 0030](docs/adr/0030-arrow-major-version.md), is the
+Arrow adapter's major version, which is why its import path ends in `/v18`.
 
 Optional interfaces are how this codebase extends a type without breaking
 everyone who implements it: `scale.Definite`, `scale.Categorical`,
@@ -697,10 +702,13 @@ scale in place for a pan or a zoom.
 ## Scope
 
 The roadmap in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones) is what this
-project is doing and in what order. Everything through v0.9 has shipped; next
-are the extension API, the docs, the gallery and a public benchmark suite for
-v1.0. Adding a stub for one of those is not progress towards it — the seams
-exist, that is enough.
+project is doing and in what order. Everything through v0.9 has shipped, and so
+has everything the v1.0 line asks for short of the tag itself: the API audit,
+the extension model, the docs, the gallery and the benchmark suite. What is
+left for v1.0 is the release — the order is in
+[CONTRIBUTING](CONTRIBUTING.md#releasing) — and everything after it is listed
+under *Beyond v1.0*. Adding a stub for one of those is not progress towards it:
+the seams exist, that is enough.
 
 Things v0.9 deliberately did not do. A **hexbin has no colourbar**, for the
 ordering reason above. A **histogram ignores `GroupBy`**. A **sized layer draws

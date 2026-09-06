@@ -12,11 +12,12 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: pre-alpha.** This is milestone **v0.9**, "distributions, density and size".
-> The API is not
-> stable; every release below `v1.0.0` may contain breaking changes without a
-> deprecation cycle. See [CONCEPT.md](CONCEPT.md) for the design and the road
-> ahead.
+> **Status: release candidate for v1.0.** Every milestone through **v0.9**,
+> "distributions, density and size", has shipped, and the
+> [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change before the
+> freeze has changed. The API freezes at the `v1.0.0` tag; until then a release
+> may still contain a breaking change without a deprecation cycle. See
+> [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
@@ -39,7 +40,7 @@ PDF. Add one module and the same specification renders to PNG and JPEG through
 | `github.com/timzifer/refract/backend/gg` | GoGPU (`gg`), `x/image` — zero CGO | PNG, JPEG, an in-memory surface |
 | `github.com/timzifer/refract/backend/window` | GoGPU (`gogpu`, `gg`) — zero CGO | a native window |
 | `github.com/timzifer/refract/backend/gg/gpu` | GoGPU (`gg/gpu`, `wgpu`) — zero CGO | — (switches the GPU tier on) |
-| `github.com/timzifer/refract/arrow` | `apache/arrow-go` — zero CGO | — (a data source) |
+| `github.com/timzifer/refract/arrow/v18` | `apache/arrow-go` — zero CGO | — (a data source) |
 
 The browser is in the core too, because it needs nothing to be: a canvas 2D
 context is reached through `syscall/js`, which is the standard library
@@ -55,7 +56,7 @@ go get github.com/timzifer/refract                  # core: SVG and PDF, stdlib 
 go get github.com/timzifer/refract/backend/gg       # raster: PNG and JPEG
 go get github.com/timzifer/refract/backend/window   # a native window
 go get github.com/timzifer/refract/backend/gg/gpu   # optional: the GPU tier
-go get github.com/timzifer/refract/arrow            # optional: plot Arrow data
+go get github.com/timzifer/refract/arrow/v18        # optional: plot Arrow data
 ```
 
 Go 1.25 or newer ([why](docs/adr/0005-go-version.md)).
@@ -134,7 +135,10 @@ picture here cannot drift away from the code that produced it.
 | ![Standard error curves labelled with typeset notation](docs/images/notation.png) | ![Revenue stacked by product, one layer over a long table](docs/images/stacked.png) |
 | ![Traffic by channel as a streamgraph](docs/images/stream.png) | ![Calls per hour as a heatmap of coloured cells](docs/images/heatmap.png) |
 | ![Browser share as a donut](docs/images/pie.png) | ![Two designs compared on five axes as a radar chart](docs/images/radar.png) |
-| ![Spend by team as a donut whose slices reach as far as each team used of its budget, with the team that went over broken out of the ring](docs/images/donut.png) | |
+| ![Spend by team as a donut whose slices reach as far as each team used of its budget, with the team that went over broken out of the ring](docs/images/donut.png) | ![Request latency as a histogram](docs/images/histogram.png) |
+| ![Latency by service as violins, one per region within each service](docs/images/violin.png) | ![A year of daily maxima as a ridgeline, one density per month](docs/images/ridgeline.png) |
+| ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
+| ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
 
 ## What it does
 
@@ -221,7 +225,7 @@ picture here cannot drift away from the code that produced it.
 - **Data** — columnar and batch-oriented, carrying numeric, time and categorical
   columns. A `[]float64`-backed source is borrowed, never copied, and so is a
   null-free `float64` column read straight out of an **Apache Arrow** record
-  through the optional `refract/arrow` module.
+  through the optional `refract/arrow/v18` module.
 - **Interaction** — `Plot.On` registers handlers for hover, click, zoom and
   pan; `Plot.Live` draws into a surface that can be redrawn; `refract.Input` is
   the state machine that turns raw pointer input into those, and `Live.Bind`
@@ -249,11 +253,10 @@ picture here cannot drift away from the code that produced it.
 - **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
   gg raster adapter, a native window, and an opt-in GPU tier.
 
-Deliberately **not** here: coordinate systems — polar, and therefore the pie
-and the radar — geographic projections, animation, and 3D.
-They are past v1.0 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), along
-with the stats — hexbin, contour, violin, KDE, regression — that would come with
-them.
+Deliberately **not** here: geographic projections, the relational layouts —
+sankey, chord, treemap, sunburst — contour and QQ plots, animation, and 3D.
+They are past v1.0 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), and
+[docs/chart-types.md](docs/chart-types.md) says what each one would need.
 
 ## Categories, distributions and orders of magnitude
 
@@ -873,7 +876,7 @@ line)
 ## Plotting Arrow data
 
 ```go
-import "github.com/timzifer/refract/arrow"
+import "github.com/timzifer/refract/arrow/v18"
 
 src := arrow.Source(rec)      // rec is an arrow.Record
 p.Add(geom.Line(src, geom.X("t"), geom.Y("p99")))
@@ -926,8 +929,14 @@ of every mark and a window shows what a file would
 - [docs/adr](docs/adr) — why the open questions were answered the way they were.
 - [docs/v1-api-audit.md](docs/v1-api-audit.md) — every exported identifier
   with a verdict before the API freeze: freeze, change before v1, or defer.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, and
-  how to regenerate golden files and figures.
+- [docs/chart-types.md](docs/chart-types.md) — every chart form, what draws it
+  today, and what the missing ones would cost.
+- [docs/benchmarks.md](docs/benchmarks.md) — the benchmark suite: what each
+  benchmark measures, which numbers are gated, and the latest results.
+- [pkg.go.dev](https://pkg.go.dev/github.com/timzifer/refract) — the API
+  reference, generated from the doc comments.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, how
+  to regenerate golden files and figures, and how a release is tagged.
 
 ## License
 

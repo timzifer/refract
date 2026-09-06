@@ -9,7 +9,7 @@ go 1.25.0
 
 use (
 	.
-	./arrow
+	./arrow/v18
 	./backend/gg
 	./backend/gg/gpu
 	./backend/window

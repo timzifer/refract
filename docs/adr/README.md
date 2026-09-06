@@ -39,11 +39,13 @@ depends on.
 | [0027](0027-size-channel-and-the-guide-column.md) | A size channel maps by area, and the guide column is generalised once | Accepted | — |
 | [0028](0028-distribution-stats.md) | A distribution stat runs in `Train`, and decides one of its own axes | Accepted | — |
 | [0029](0029-extension-model.md) | A third party's geom, scale or coord is a first-class citizen of the spec | Accepted | §17.7 |
+| [0030](0030-arrow-major-version.md) | The Arrow adapter's major version is its upstream's, and its import path says so | Accepted | — |
 
-Still open, deliberately: **§17.7** (the third-party geom and backend extension
-API). It freezes at v1.0, and freezing it well is what makes the "last plotting
-library" claim survivable — so it stays open until the milestone that has to
-answer it. 0018 and 0020 are both shaped by that deadline: the first widens
-`geom.Frame` because it must be widened before the freeze, the second declines to
-widen `Geom` because an optional interface does the same work without spending
-the freeze.
+Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
+extension API, was the last, and it was held open on purpose until the
+milestone that had to answer it: freezing it well is what makes the "last
+plotting library" claim survivable. 0018 and 0020 were both shaped by that
+deadline — the first widens `geom.Frame` because it had to be widened before
+the freeze, the second declines to widen `Geom` because an optional interface
+does the same work without spending it — and 0029 is the answer. A decision
+that opens after v1.0 gets a record here before it gets code.

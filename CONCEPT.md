@@ -236,7 +236,7 @@ type DataSource interface {
 
 - **Zero-copy common case** — a `[]float64`-backed source returns its slice
   directly.
-- **Arrow adapter as a separate module** (`refract/arrow`) so the core never links
+- **Arrow adapter as a separate module** (`refract/arrow/v18`) so the core never links
   Apache Arrow. Shipped in v0.4: a null-free `float64` column is borrowed
   outright, everything else converts once and caches, and an Arrow null becomes
   a `NaN` so that one missing-data policy covers both
@@ -645,10 +645,14 @@ contributes a colour guide instead of nothing.
   all three modules. Everything sized by the data comes from a pool, and both
   `TestARenderDoesNotAllocatePerPoint` and `.github/scripts/allocgate.awk`
   assert that a frame over a million rows allocates what a frame over a thousand
-  does — 76 either way. Along the way, feeding a column into a scale row by row
-  through a variadic interface method turned out to cost one allocation per
-  row; it is now one call per column.
-- Arrow adapter as a separate module, `refract/arrow`. A null-free `float64`
+  does — 76 either way when the pass landed, and the same count either way
+  since; the current numbers are in [docs/benchmarks.md](docs/benchmarks.md).
+  Along the way, feeding a column into a scale row by row through a variadic
+  interface method turned out to cost one allocation per row; it is now one
+  call per column.
+- Arrow adapter as a separate module, `refract/arrow` — since the v1 audit
+  `refract/arrow/v18`, because its major version is Arrow's
+  ([ADR 0030](docs/adr/0030-arrow-major-version.md)). A null-free `float64`
   column is Arrow's own buffer; everything else converts once and caches; an
   Arrow null becomes `NaN`, so the missing-data policy that was already there
   covers it ([ADR 0013](docs/adr/0013-arrow-adapter.md)).
@@ -967,9 +971,19 @@ buffer and the geom already keeps one.
   **done** ([ADR 0029](docs/adr/0029-extension-model.md)): `geom.Configure`,
   `geom.Extra`, and `Register` in `geom`, `scale` and `coord`, with the JSON
   spec carrying a registered mark's own properties.
-- Docs, gallery, public benchmark suite.
+- Docs, gallery, public benchmark suite — **done**. The docs are the
+  [README](README.md), the API reference on pkg.go.dev, the ADRs and
+  [docs/chart-types.md](docs/chart-types.md). The gallery is
+  [docs/images](docs/images), rendered by `backend/gg/cmd/gallery` from every
+  milestone's marks and checked against the code on every commit. The
+  benchmark suite is [docs/benchmarks.md](docs/benchmarks.md): every benchmark
+  in the repository, what it measures, which numbers CI gates, and a results
+  table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
+- What remains is the tag. The order — the core first, then the nested
+  modules' `require` lines, then their own tags — is in
+  [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
 ### Beyond v1.0
 
@@ -1014,9 +1028,12 @@ buffer and the geom already keeps one.
 - **Nested modules.** `backend/gg` and `backend/window` tag `v1.0.0` with the
   core: they are the supported raster and native paths, and their own APIs are
   small. `backend/gg/gpu` stays `v0.x` for as long as the GPU tier is opt-in
-  beta — the tag says what the README says. `arrow` tracks its upstream: its
-  major version follows `apache/arrow-go`'s, which is the reason it is a module
-  of its own.
+  beta — the tag says what the README says. `arrow/v18` tracks its upstream:
+  its major version follows `apache/arrow-go`'s, which is the reason it is a
+  module of its own, and Go's rule that a major version above 1 is spelled in
+  the import path is why the module is `…/arrow/v18` in a directory of that
+  name and tags as `arrow/v18.x.y`
+  ([ADR 0030](docs/adr/0030-arrow-major-version.md)).
 - **License:** permissive (e.g. MIT), and the core links only permissive deps
   (gg is MIT). This is a requirement, not a preference: refract must be embeddable
   by downstream frameworks under any license — including dual-licensed ones such
@@ -1088,11 +1105,12 @@ refract/                     # core module — pure Go, STDLIB ONLY (no requires
     show/                    # one call: show.Plot(p)                     (v0.6)
     cmd/demo/                # a signal to pan and zoom by hand           (v0.6)
 
-  arrow/                     # NESTED MODULE: Apache Arrow adapter        (v0.4)
-                             # Depends on apache/arrow-go. Zero CGO.
+  arrow/v18/                 # NESTED MODULE: Apache Arrow adapter        (v0.4)
+                             # Depends on apache/arrow-go. Zero CGO. The
+                             # directory is its major version — ADR 0030.
 ```
 
-`backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow` depend on the core,
+`backend/gg`, `backend/gg/gpu`, `backend/window` and `arrow/v18` depend on the core,
 never the reverse. A nested module is excluded from its parent's module graph, so
 importing only `refract` yields a graph with no external packages in it at all —
 CI asserts this on every commit, and the same mechanism one level down is what

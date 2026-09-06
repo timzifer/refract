@@ -19,7 +19,7 @@
 // # Shape
 //
 //	{
-//	  "$schema": "https://github.com/timzifer/refract/spec/v0.8",
+//	  "$schema": "https://github.com/timzifer/refract/spec/v1",
 //	  "width": 800, "height": 500,
 //	  "title": "Signal",
 //	  "data": {"values": [{"t": 0, "y": 1}], "format": {"parse": {"t": "number", "y": "number"}}},

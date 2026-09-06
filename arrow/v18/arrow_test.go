@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/timzifer/refract"
-	"github.com/timzifer/refract/arrow"
+	"github.com/timzifer/refract/arrow/v18"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/scale"
 )
