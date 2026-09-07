@@ -169,6 +169,11 @@ type Mark struct {
 	FontSize    float64   `json:"fontSize,omitempty"`
 	Angle       float64   `json:"angle,omitempty"`
 
+	// Elide is whether a text layer truncates a label too wide for the box its
+	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
+	// equivalent, so no name is borrowed for it.
+	Elide bool `json:"elide,omitempty"`
+
 	// Origin is the value bars and areas grow from — Vega-Lite reaches the
 	// same place through a scale's `zero`, which is a different thing.
 	Origin float64 `json:"origin,omitempty"`
@@ -306,6 +311,12 @@ type Encoding struct {
 	// which is how one slice leaves a donut and the rest stay in it. The
 	// constant form is the mark's own `explode` property.
 	Explode *Channel `json:"explode,omitempty"`
+
+	// Text is the column a text layer reads its labels from. Vega-Lite has the
+	// same channel with the same name, and it is what tells a text mark with
+	// data apart from a note placed at literal values — the way a field tells
+	// a rect apart from a region.
+	Text *Channel `json:"text,omitempty"`
 
 	// Size is the column a mark takes its size from — the bubble chart's third
 	// dimension. Vega-Lite has the same channel with the same name; what is

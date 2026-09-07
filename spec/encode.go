@@ -469,6 +469,17 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		m.Text, m.FontSize, m.Angle = d.Text, d.FontSize, degrees(d.Rotation)
 		m.Align, m.Baseline = hAlignName(d.HAlign), vAlignName(d.VAlign)
 		m.Extend = boolPtr(d.Extend)
+	case geom.MarkText:
+		// The label is a column rather than a string, so it travels on the
+		// encoding; what is left here is how the run is drawn. The alignment
+		// is written only when the layer was told, because a text layer that
+		// was not centres its labels in their boxes — writing "left" for that
+		// would pin the default and change the chart.
+		m.FontSize, m.Angle = d.FontSize, degrees(d.Rotation)
+		if d.AlignSet {
+			m.Align, m.Baseline = hAlignName(d.HAlign), vAlignName(d.VAlign)
+		}
+		m.Elide = d.Elide
 	default:
 		// A mark this package did not define. Nobody here knows which of the
 		// shared options it reads, so the ones a mark most plausibly honours
@@ -520,6 +531,9 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.ExplodeCol != "" {
 			enc.Explode = &Channel{Field: d.ExplodeCol}
+		}
+		if d.TextCol != "" {
+			enc.Text = &Channel{Field: d.TextCol}
 		}
 		if d.SizeCol != "" && d.SizeScale != nil {
 			ss, err := encodeSizeScale(d.SizeScale)

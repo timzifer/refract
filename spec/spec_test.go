@@ -92,6 +92,11 @@ func TestEveryMarkSurvivesTheRoundTrip(t *testing.T) {
 		{"segment", geom.Segment(0, 1, 3, 8)},
 		{"region", geom.Region(0.5, 1, 2.5, 6)},
 		{"note", geom.Note(1, 4, "peak", geom.Align(ir.AlignCenter, ir.AlignTop), geom.Rotate(0.5))},
+		// A text layer beside the note, because the two share a mark type in
+		// the document and it is the encoding that tells them apart.
+		{"text", geom.Text(src, geom.X("x"), geom.Y("y"), geom.TextBy("region"), geom.FontSize(9))},
+		{"text-boxed", geom.Text(src, geom.X("x"), geom.X2("z"), geom.Y("y"), geom.TextBy("region"),
+			geom.Elide(true), geom.Align(ir.AlignStart, ir.AlignBottom))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

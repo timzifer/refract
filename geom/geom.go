@@ -129,6 +129,7 @@ type config struct {
 	x2col      string
 	y2col      string
 	label      string
+	textCol    string
 
 	groupCol   string
 	widthCol   string
@@ -172,12 +173,14 @@ type config struct {
 	overlap   float64
 
 	closed    bool
+	elide     bool
 	dashSet   bool
 	markerSet bool
 	extend    bool
 	fontSize  float64
 	halign    ir.HAlign
 	valign    ir.VAlign
+	alignSet  bool
 	rotation  float64
 
 	// extra holds what a third-party option set — see [Extra]. It is nil for
@@ -317,6 +320,29 @@ func ColorBy(col string, s scale.ColorScale) Option {
 	return func(c *config) { c.colorCol, c.colorScale = col, s }
 }
 
+// TextBy names the column a [Text] layer reads its label from, one label per
+// row. Any column will do: a text column is used as it is, and a numeric or
+// temporal one is formatted the way a category name is, so an axis tick and a
+// label for the same value are the same string.
+//
+// It is the channel that makes text data rather than annotation. [Note] places
+// one literal string at one literal position; a layer that labels its rows
+// reads them from the same [data.Source] every other mark reads, and needs no
+// rebuild when the rows change.
+func TextBy(col string) Option { return func(c *config) { c.textCol = col } }
+
+// Elide lets a [Text] layer truncate a label that does not fit the box its row
+// spans, ending it with an ellipsis.
+//
+// Without it the label is dropped instead, which is the default because a
+// truncated label is a claim about a row that the row does not quite make: a
+// column of "Wareneingang", "Warenausgang" and "Wartung" elides to three
+// labels that are hard to tell apart, and no label at all is honest about it.
+// Turn it on where the first few characters are enough to identify the row.
+//
+// It does nothing in point mode, where there is no box to overrun.
+func Elide(on bool) Option { return func(c *config) { c.elide = on } }
+
 // SizeBy maps a column through a size scale, giving every mark its own size.
 // It applies to [Scatter]; geoms whose mark has a width the axes decide ignore
 // it.
@@ -424,9 +450,15 @@ func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
 func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
 
 // Align sets how a text annotation sits about its position. The default is
-// the run's start on the point, on the baseline.
+// the run's start on the point, on the baseline — except in a [Text] layer
+// that labels a box, where a label with nothing said about it is centred in
+// the box rather than hung off its left edge.
+//
+// That is why the layer records having been told: the start of the run and the
+// baseline are both the zero value and an alignment somebody may have asked
+// for, exactly as a circle is for [Shape].
 func Align(h ir.HAlign, v ir.VAlign) Option {
-	return func(c *config) { c.halign, c.valign = h, v }
+	return func(c *config) { c.halign, c.valign, c.alignSet = h, v, true }
 }
 
 // FontSize sets the type size of a text annotation in device units. The

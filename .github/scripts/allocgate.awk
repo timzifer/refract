@@ -129,6 +129,14 @@ END {
 	# at a hundred times the rows would be thousands rather than nine.
 	flat("BenchmarkBubbles1k", "BenchmarkBubbles100k", 12)
 
+	# The text mark, added after v0.9. A label is measured against its box on
+	# every frame and one that does not fit is cut, which builds a string — so
+	# this is the one path where a per-row allocation could hide behind work
+	# that has to happen anyway. The cut is remembered per row, which is what
+	# makes it flat; a cache that stopped hitting would show up here as ten
+	# thousand allocations rather than as anything visibly wrong on screen.
+	flat("BenchmarkLabelled1k", "BenchmarkLabelled10k", 8)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

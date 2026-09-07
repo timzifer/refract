@@ -7,6 +7,7 @@ import (
 
 	"github.com/timzifer/refract"
 	"github.com/timzifer/refract/coord"
+	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/irtest"
@@ -317,3 +318,54 @@ func benchmarkFacet(b *testing.B, parallel bool) {
 
 func BenchmarkFacetParallel(b *testing.B) { benchmarkFacet(b, true) }
 func BenchmarkFacetSerial(b *testing.B)   { benchmarkFacet(b, false) }
+
+// labelled is a chart whose rows carry their own text: a strip of boxes with a
+// label centred in each, which is the shape a locked terminal chart takes when
+// a tooltip is not available to name a bar.
+func labelled(n int) *refract.Plot {
+	lo := make([]float64, n)
+	hi := make([]float64, n)
+	y := make([]float64, n)
+	y2 := make([]float64, n)
+	names := make([]string, n)
+	for i := range n {
+		lo[i], hi[i] = float64(i), float64(i)+0.9
+		y[i], y2[i] = float64(i%8), float64(i%8)+0.9
+		names[i] = labelNames[i%len(labelNames)]
+	}
+	src := data.NewTable().
+		Float64("start", lo).Float64("end", hi).
+		Float64("lo", y).Float64("hi", y2).
+		String("label", names)
+
+	opts := []geom.Option{geom.X("start"), geom.X2("end"), geom.Y("lo"), geom.Y2("hi")}
+	p := refract.New(refract.Size(800, 500), refract.Title("Labelled"))
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.Linear(scale.Nice()))
+	p.Add(geom.Rect(src, opts...))
+	p.Add(geom.Text(src, append(opts, geom.TextBy("label"), geom.Elide(true))...))
+	return p
+}
+
+// Names of a length that straddles the boxes: some fit, some are cut, some are
+// dropped, so a frame exercises all three answers rather than the cheap one.
+var labelNames = []string{"a", "Wareneingang", "Halle 3", "Wareneingangsprüfung Süd", "ok"}
+
+func benchmarkLabelled(b *testing.B, rows int) {
+	onOnePGate(b)
+	p := labelled(rows)
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkLabelled1k(b *testing.B)  { benchmarkLabelled(b, 1_000) }
+func BenchmarkLabelled10k(b *testing.B) { benchmarkLabelled(b, 10_000) }

@@ -125,7 +125,7 @@ func builtin(m Mark) bool {
 	switch m {
 	case MarkLine, MarkScatter, MarkBar, MarkArea, MarkStep, MarkBoxplot, MarkRect,
 		MarkHistogram, MarkViolin, MarkRidgeline, MarkHexbin, MarkBeeswarm, MarkECDF, MarkTrend,
-		MarkHLine, MarkVLine, MarkHBand, MarkVBand, MarkSegment, MarkRegion, MarkNote:
+		MarkHLine, MarkVLine, MarkHBand, MarkVBand, MarkSegment, MarkRegion, MarkNote, MarkText:
 		return true
 	}
 	return false
