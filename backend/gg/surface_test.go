@@ -98,11 +98,22 @@ func TestTheGenerationTracksThePixels(t *testing.T) {
 		t.Error("an unchanged frame advanced the pixel generation")
 	}
 
+	// A pan repaints the same buffer rather than allocating a new one, which
+	// is what a generation stamped only at allocation would miss: the window
+	// would go on showing the frame before the pan.
+	if err := live.PanBy(20, 0); err != nil {
+		t.Fatalf("PanBy: %v", err)
+	}
+	panned := s.Generation()
+	if panned == drawn {
+		t.Error("a repaint in place did not advance the pixel generation")
+	}
+
 	if err := live.Resize(240, 200); err != nil {
 		t.Fatalf("Resize: %v", err)
 	}
-	if s.Generation() == drawn {
-		t.Error("a repaint did not advance the pixel generation")
+	if s.Generation() == panned {
+		t.Error("a resize did not advance the pixel generation")
 	}
 }
 
