@@ -204,3 +204,30 @@ func missing[T any]() T {
 	}
 	return zero
 }
+
+// nullMask reads a column's validity bitmap as one flag per row, or ok ==
+// false when nothing in it is null.
+//
+// Saying no for a null-free column is what the interface asks for and is not
+// an optimisation detail: a reader that gets a mask has to decide what to do
+// with it, and for the column this package borrows rather than copies the
+// answer has to be "there is nothing to decide".
+func nullMask(chunks []arrow.Array, n int) ([]bool, bool) {
+	any := false
+	for _, c := range chunks {
+		if c.NullN() != 0 {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return nil, false
+	}
+	out := make([]bool, 0, n)
+	for _, c := range chunks {
+		for i := range c.Len() {
+			out = append(out, c.IsNull(i))
+		}
+	}
+	return out, true
+}
