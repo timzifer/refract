@@ -11,8 +11,12 @@ go 1.25.0
 // enables a tier inside that build of it rather than a separate renderer.
 require github.com/gogpu/gg v0.52.5
 
+// wgpu is held below v0.33, which turned the render-pass calls into struct
+// arguments; gg v0.52.5 above still makes the old calls, so a newer wgpu fails
+// to build gg rather than this package. See backend/window/go.mod, which
+// carries the same ceiling, and .github/dependabot.yml.
 require (
-	github.com/gogpu/wgpu v0.31.6
+	github.com/gogpu/wgpu v0.32.1
 	github.com/timzifer/refract v1.0.0
 	github.com/timzifer/refract/backend/gg v1.0.2
 )
@@ -20,9 +24,9 @@ require (
 require (
 	github.com/go-webgpu/goffi v0.6.3 // indirect
 	github.com/go-webgpu/webgpu v0.5.5 // indirect
-	github.com/gogpu/gpucontext v0.28.0 // indirect
-	github.com/gogpu/gputypes v0.5.2 // indirect
-	github.com/gogpu/naga v0.18.0 // indirect
+	github.com/gogpu/gpucontext v0.29.0 // indirect
+	github.com/gogpu/gputypes v0.6.0 // indirect
+	github.com/gogpu/naga v0.19.0 // indirect
 	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
