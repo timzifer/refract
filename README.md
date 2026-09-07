@@ -149,6 +149,7 @@ picture here cannot drift away from the code that produced it.
 | ![Latency by service as violins, one per region within each service](docs/images/violin.png) | ![A year of daily maxima as a ridgeline, one density per month](docs/images/ridgeline.png) |
 | ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
+| ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
 
 ## What it does
 

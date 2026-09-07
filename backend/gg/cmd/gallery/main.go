@@ -687,6 +687,49 @@ func figures() []figure {
 			},
 		},
 		{
+			name: "errorbars", width: 700, high: 400, theme: theme.Light,
+			title: "Mean latency, with its 95 % interval",
+			build: func(p *refract.Plot) {
+				src := refract.NewTable().
+					String("service", []string{"auth", "search", "cart", "checkout", "media"}).
+					Float64("mean", []float64{42, 118, 63, 91, 210}).
+					Float64("ci", []float64{6, 22, 9, 14, 38})
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("# ms")))
+				// The bars are faded and the intervals are not, because the
+				// interval is the reading this figure is about and a solid
+				// bar behind it hides the marker at the mean.
+				ink := palette.OkabeIto.At(0)
+				p.Add(
+					geom.Bar(src, geom.X("service"), geom.Y("mean"),
+						geom.Fill(palette.Lerp(ir.RGB(255, 255, 255), ink, 0.3)),
+						geom.Label("mean")),
+					geom.ErrorBar(src, geom.X("service"), geom.Y("mean"), geom.ErrorBy("ci"),
+						geom.Color(ink), geom.Width(1.5)),
+				)
+			},
+		},
+		{
+			name: "twoaxes", width: 760, high: 420, theme: theme.Light,
+			title: "Revenue and margin",
+			opts:  []refract.Option{refract.YTitle("revenue (k€)"), refract.Y2Title("margin")},
+			build: func(p *refract.Plot) {
+				src := refract.NewTable().
+					String("month", []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"}).
+					Float64("revenue", []float64{820, 910, 870, 1040, 1180, 1120}).
+					Float64("margin", []float64{0.11, 0.13, 0.09, 0.15, 0.18, 0.16})
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("#,")))
+				p.Y2(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("#.0%")))
+				p.Add(
+					geom.Bar(src, geom.X("month"), geom.Y("revenue"),
+						geom.Color(palette.OkabeIto.At(0)), geom.Label("revenue")),
+					geom.Line(src, geom.X("month"), geom.Y("margin"), geom.OnY2(),
+						geom.Color(palette.OkabeIto.At(1)), geom.Width(2), geom.Label("margin")),
+				)
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)

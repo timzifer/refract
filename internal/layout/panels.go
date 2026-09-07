@@ -208,9 +208,9 @@ func Panels(g Grid, m Measurer) GridResult {
 	for _, gd := range guides {
 		guideW = maxOf(guideW, gd.w)
 	}
-	right := rightTitleH
+	right := float32(0)
 	if guideW > 0 {
-		right += guideW + th.LegendPad
+		right = guideW + th.LegendPad
 	} else if last := lastXLabel(g); last != "" {
 		// Without a guide the rightmost tick label, which is centred on the
 		// axis end, would otherwise run off the canvas. A second axis already
@@ -224,7 +224,12 @@ func Panels(g Grid, m Measurer) GridResult {
 	regionLeft := area.Min.X + leftTitleH
 	regionRight := area.Max.X - right
 	usableW := regionRight - regionLeft
-	availW := usableW - sum(colGutter) - sum(rightGutter) - sum(rightStripW) - float32(g.Cols-1)*th.PanelGap
+	// The secondary axis's title sits between its labels and whatever is
+	// outside them, which is the mirror of the left: a title belongs beside
+	// the numbers it names rather than past a legend that has nothing to do
+	// with it.
+	availW := usableW - sum(colGutter) - sum(rightGutter) - rightTitleH -
+		sum(rightStripW) - float32(g.Cols-1)*th.PanelGap
 	colW, _ := extents(g.ColWidths, g.Cols, availW)
 
 	r.Region = ir.Rect{
@@ -301,7 +306,10 @@ func Panels(g Grid, m Measurer) GridResult {
 	}
 	if g.Y2Title != "" {
 		mm := m.Measure(ir.TextRun{Text: g.Y2Title, Font: labelFont})
-		r.Y2Title = ir.Point{X: area.Max.X - mm.Descent, Y: (span.Min.Y + span.Max.Y) / 2}
+		r.Y2Title = ir.Point{
+			X: outerRight(g, span, rightGutter, rightStripW) + th.AxisTitlePad + mm.Ascent,
+			Y: (span.Min.Y + span.Max.Y) / 2,
+		}
 	}
 
 	// The guides sit outside everything the last column owns, which now
@@ -310,9 +318,20 @@ func Panels(g Grid, m Measurer) GridResult {
 	// against a width that already reserved the gutter, so the anchor has to
 	// move with it.
 	guideSpan := span
-	guideSpan.Max.X += givenExtent(rightGutter, g.Cols-1)
+	guideSpan.Max.X = outerRight(g, span, rightGutter, rightStripW) + rightTitleH
 	r.Guides = placeGuides(guides, guideSpan, th)
 	return r
+}
+
+// outerRight is the right-hand edge of everything the last column owns: the
+// panel, its second axis's labels, and its strip.
+//
+// The guides and the secondary axis's title are both placed against it rather
+// than against the panel edge, because the width they were measured with
+// already reserved those — anchoring on the panel would put a legend on top of
+// the axis labels.
+func outerRight(g Grid, span ir.Rect, rightGutter, rightStripW []float32) float32 {
+	return span.Max.X + givenExtent(rightGutter, g.Cols-1) + givenExtent(rightStripW, g.Cols-1)
 }
 
 func inGrid(g Grid, p Panel) bool {
