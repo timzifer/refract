@@ -39,10 +39,20 @@
 //
 // # When there is no GPU
 //
-// Registration fails quietly and gg falls back to the CPU: a chart still
-// renders on a machine with no usable device, which is the only acceptable
-// behaviour for a plotting library. [Enabled] reports which way it went, for a
-// program that would rather say so than wonder.
+// A chart still renders on a machine with no usable device, which is the only
+// acceptable behaviour for a plotting library. [Enabled] reports which way it
+// went, for a program that would rather say so than wonder.
+//
+// That is not free, because gg's registration says nothing about the hardware:
+// it happens in an init, before a device has been asked for. Up to and
+// including gg v0.52.5 the path operations queue a draw without establishing
+// that a device can be had and gg drops the queue when the flush finds none,
+// so a chart came back with its labels and none of its geometry — text takes a
+// path that does check. Importing this package therefore proves the
+// accelerator before trusting it: one stroke into a small buffer, and an
+// accelerator whose pixels do not arrive is given back, which puts everything
+// on the CPU rasterizer. The cost is one device probe at startup, which is the
+// probe the first chart pays anyway.
 //
 // [ADR 0006]: https://github.com/timzifer/refract/blob/main/docs/adr/0006-gg-coupling-surface.md
 package gpu
