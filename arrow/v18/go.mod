@@ -7,7 +7,7 @@ go 1.25.0
 // it adapts, and says which.
 require (
 	github.com/apache/arrow-go/v18 v18.7.0
-	github.com/timzifer/refract v1.0.0
+	github.com/timzifer/refract v1.1.0
 )
 
 require (
