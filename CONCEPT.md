@@ -981,18 +981,19 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- Tagged. The core was `v1.0.0` and is `v1.1.0`; `backend/gg` and
-  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.3`
+- Tagged. The core was `v1.0.0` and is `v1.2.0`; `backend/gg` and
+  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.4`
   — it stays at `v0` for as long as it is opt-in beta, whatever the core does
-  — and the Arrow adapter is `arrow/v18.0.1`, whose major is Arrow's. The
+  — and the Arrow adapter is `arrow/v18.0.2`, whose major is Arrow's. The
   milestones before `v1.0.0` were tagged at the same time as it, so every one
   of them names a commit. The order — the core first, then the nested modules'
   `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
-  Both post-freeze milestones below shipped in `v1.1.0`, and both are additive:
-  no interface gained a method, no struct lost a field, and every option they
-  add is one an existing mark accepts and ignores.
+  The post-freeze milestones below shipped in `v1.1.0` — tracks and the text
+  mark — and in `v1.2.0`, the Smith chart. All three are additive: no interface
+  gained a method, no struct lost a field, and every option they add is one an
+  existing mark accepts and ignores.
 
 ### v0.10 — Tracks: a band at a panel's edge — **shipped**
 
