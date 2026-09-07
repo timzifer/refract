@@ -38,6 +38,20 @@ const (
 	MarkECDF      Mark = "ecdf"
 	MarkTrend     Mark = "trend"
 
+	// The relational and hierarchical marks. Each reads an edge table rather
+	// than a pair of axes, and each places its own layout in the unit square —
+	// which is what lets the coordinate stage decide what it looks like. An
+	// icicle under a polar coord is a sunburst, and an arc diagram under one is
+	// a chord diagram; neither is a mark of its own. See
+	// docs/adr/0039-relational-layouts.md.
+	MarkTreemap Mark = "treemap"
+	MarkIcicle  Mark = "icicle"
+	MarkSankey  Mark = "sankey"
+	// MarkArc is the arc diagram, and it is spelled out rather than "arc"
+	// because Vega-Lite's arc is a pie wedge — a document naming that would
+	// round-trip into a mark this package cannot rebuild.
+	MarkArc Mark = "arc-diagram"
+
 	// MarkErrorBar is the interval mark: a rule between two bounds, with a cap
 	// at each end and a marker at the measurement.
 	MarkErrorBar Mark = "errorbar"
@@ -126,6 +140,19 @@ type Desc struct {
 	// answers it per row. Zero and "" are a layer that stays where it is.
 	Explode    float64
 	ExplodeCol string
+
+	// From and To name an edge's two ends, ID and Parent a hierarchy's, and
+	// Value the magnitude of either. They are what a relational or
+	// hierarchical mark reads instead of X and Y — see [From] and [ID] for why
+	// the two pairs are spelled apart.
+	From, To      string
+	ID, ParentCol string
+	ValueCol      string
+	// Padding is the gap between the shapes such a layout places, as a
+	// fraction of the plot, and Thickness how much of its slot a node fills.
+	// Both are zero when the layer left them to the mark.
+	Padding   float64
+	Thickness float64
 
 	// Label names the layer in the legend.
 	Label string
@@ -295,6 +322,14 @@ func FromDesc(d Desc) (Geom, error) {
 		return Trend(d.Source, opts...), nil
 	case MarkErrorBar:
 		return ErrorBar(d.Source, opts...), nil
+	case MarkTreemap:
+		return Treemap(d.Source, opts...), nil
+	case MarkIcicle:
+		return Icicle(d.Source, opts...), nil
+	case MarkSankey:
+		return Sankey(d.Source, opts...), nil
+	case MarkArc:
+		return Arc(d.Source, opts...), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownMark, d.Mark)
 }
@@ -312,6 +347,8 @@ func (d Desc) options() []Option {
 		Tension(d.Tension),
 		BarWidth(d.BarWidth),
 		Baseline(d.Baseline),
+		Padding(d.Padding),
+		Thickness(d.Thickness),
 		Opacity(d.Opacity),
 		Steps(d.Steps),
 		Whisker(d.Whisker),
@@ -354,6 +391,21 @@ func (d Desc) options() []Option {
 	}
 	if d.Group != "" {
 		opts = append(opts, GroupBy(d.Group))
+	}
+	if d.From != "" {
+		opts = append(opts, From(d.From))
+	}
+	if d.To != "" {
+		opts = append(opts, To(d.To))
+	}
+	if d.ID != "" {
+		opts = append(opts, ID(d.ID))
+	}
+	if d.ParentCol != "" {
+		opts = append(opts, Parent(d.ParentCol))
+	}
+	if d.ValueCol != "" {
+		opts = append(opts, Value(d.ValueCol))
 	}
 	if d.WidthCol != "" {
 		opts = append(opts, WidthBy(d.WidthCol))
@@ -442,6 +494,13 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		DodgePad:   c.dodgePad,
 		Order:      c.order,
 		WidthCol:   c.widthCol,
+		From:       c.fromCol,
+		To:         c.toCol,
+		ID:         c.idCol,
+		ParentCol:  c.parentCol,
+		ValueCol:   c.valCol,
+		Padding:    c.padding,
+		Thickness:  c.thickness,
 		Explode:    c.explode,
 		ExplodeCol: c.explodeCol,
 		Label:      c.label,

@@ -54,7 +54,13 @@ the one drawing path that sorts per frame
 strip of boxes carrying their own text: every label is measured against its box
 on every frame and one that does not fit is cut, which builds a string — so it
 is the one path where a per-row allocation could hide behind work that has to
-happen anyway, and the cut is remembered per row for exactly that reason. Their
+happen anyway, and the cut is remembered per row for exactly that reason.
+`Sankey` and `Treemap` are the relational layouts, which build a structure
+sized by the data on every `Train` — a node per distinct name, a depth and a
+total per node, a relaxation or a squarify on top
+([ADR 0039](adr/0039-relational-layouts.md)); the layer keeps those buffers and
+the interning map is cleared rather than replaced, and a map made per `Train`
+is what would break it. Their
 slack against the small side is eight, or twelve where the large frame is big
 enough to provoke a pool miss; `allocgate.awk` says which and why.
 

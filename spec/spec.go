@@ -202,6 +202,12 @@ type Mark struct {
 	Origin float64 `json:"origin,omitempty"`
 	// BarWidth is the fraction of the slot a bar fills.
 	BarWidth *float64 `json:"barWidth,omitempty"`
+	// Padding is the gap a layout leaves between the shapes it places, as a
+	// fraction of the plot, and Thickness how much of its slot a node fills.
+	// Both are refract's own, and both are zero when the layer left the
+	// question to the mark.
+	Padding   float64 `json:"padding,omitempty"`
+	Thickness float64 `json:"thickness,omitempty"`
 	// Missing is the NaN policy: "gap", "interpolate" or "error".
 	Missing string `json:"missing,omitempty"`
 	// Decimate is the reduction: "auto", "none", "lttb", "minmax" or
@@ -337,6 +343,21 @@ type Encoding struct {
 	// Width is refract's: the column a bar takes its width from. Vega-Lite has
 	// no equivalent channel, so no name is borrowed for it.
 	Width *Channel `json:"width,omitempty"`
+
+	// From, To, ID, Parent and Value are the relational and hierarchical
+	// channels: the two ends of an edge, the two ends of a hierarchy's, and the
+	// magnitude of either. They are refract's own — Vega-Lite has no relational
+	// layouts and therefore no names to borrow.
+	//
+	// The two pairs are spelled apart although both are edge tables, because a
+	// hierarchy's edge runs from the child to its parent and a flow's from
+	// source to target: a document that called both "from" and "to" would read
+	// a treemap as a flow.
+	From   *Channel `json:"from,omitempty"`
+	To     *Channel `json:"to,omitempty"`
+	ID     *Channel `json:"id,omitempty"`
+	Parent *Channel `json:"parent,omitempty"`
+	Value  *Channel `json:"value,omitempty"`
 
 	// Explode is refract's too: the column each mark's break-out is read from,
 	// which is how one slice leaves a donut and the rest stay in it. The

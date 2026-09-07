@@ -133,6 +133,12 @@ func describeLayer(i int, g geom.Geom, c Chart) Series {
 		out.Label = d.Y
 	}
 	if out.Label == "" {
+		// A layer that reads an edge table has no Y column to be named after,
+		// so it is named after what it measures. "Sankey" is what it draws, not
+		// what it is about.
+		out.Label = d.ValueCol
+	}
+	if out.Label == "" {
 		out.Label = string(d.Mark)
 	}
 	// The layer's own vertical axis, which is not always the chart's first:

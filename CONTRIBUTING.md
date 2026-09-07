@@ -235,6 +235,15 @@ Wiring one into a geom means adding a case to `geom.config.reduction`, not a new
 option namespace — `geom.Decimate` and `geom.Budget` are shared like every other
 option. Reduce in `Build`, never in `Train`.
 
+**A layout** — a treemap's packing, a flow's node placement, a chord's arcs —
+goes in `stat/` too, and sees numbers and never a name: node ids are `[]int`,
+because interning a string is where the order of everything downstream is
+decided and that order has to come from the caller's table rather than from a
+map. A layout with working state the size of the data is a struct with a
+`Reset`, the way `stat.Hex` and `stat.Sankey` are, so a chart redrawn every
+frame reuses it. Any relaxation runs a fixed number of sweeps rather than to
+convergence — see [ADR 0039](docs/adr/0039-relational-layouts.md).
+
 **A distribution stat** — a binner, a density, a fit — goes in `stat/` under the
 same rules and runs on the *other* side of that line: in `Train`, in data space,
 with the scales trained on its output. Its answer is what the axis has to

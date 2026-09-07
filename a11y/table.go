@@ -163,7 +163,15 @@ func (t *tableWriter) table(label string, d geom.Desc) {
 func fields(d geom.Desc) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, name := range []string{d.X, d.Y, d.X2, d.Y2, d.ColorCol, d.Group, d.WidthCol} {
+	// The relational channels are here beside the positional ones because a
+	// layer that reads an edge table names none of the latter: without them a
+	// sankey's table has no columns, and table() returns before writing a
+	// single row — an empty answer to "what is actually in this chart", which
+	// is the one thing docs/adr/0024-accessibility.md asks it not to give.
+	for _, name := range []string{
+		d.X, d.Y, d.X2, d.Y2, d.ColorCol, d.Group, d.WidthCol,
+		d.From, d.To, d.ID, d.ParentCol, d.ValueCol,
+	} {
 		if name == "" || seen[name] {
 			continue
 		}

@@ -49,6 +49,18 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		return "ecdf", "", nil
 	case geom.MarkTrend:
 		return "trend", "", nil
+	// The relational layouts. Vega-Lite has none of them, so these are
+	// refract's own names — and the arc diagram is spelled out rather than
+	// "arc" because Vega-Lite's arc is a pie wedge. Borrowing it would make a
+	// Vega-Lite document decode into a mark that draws something else.
+	case geom.MarkTreemap:
+		return "treemap", "", nil
+	case geom.MarkIcicle:
+		return "icicle", "", nil
+	case geom.MarkSankey:
+		return "sankey", "", nil
+	case geom.MarkArc:
+		return "arc-diagram", "", nil
 	case geom.MarkHLine:
 		return "rule", "horizontal", nil
 	case geom.MarkVLine:
@@ -119,6 +131,14 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		return geom.MarkTrend, nil
 	case "errorbar":
 		return geom.MarkErrorBar, nil
+	case "treemap":
+		return geom.MarkTreemap, nil
+	case "icicle":
+		return geom.MarkIcicle, nil
+	case "sankey":
+		return geom.MarkSankey, nil
+	case "arc-diagram":
+		return geom.MarkArc, nil
 	case "rule":
 		switch m.Orient {
 		case "horizontal":
@@ -168,7 +188,8 @@ func hasField(enc *Encoding) bool {
 	if enc == nil {
 		return false
 	}
-	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text, enc.Mid, enc.Error, enc.ErrorX} {
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text, enc.Mid, enc.Error, enc.ErrorX,
+		enc.From, enc.To, enc.ID, enc.Parent, enc.Value} {
 		if ch != nil && ch.Field != "" {
 			return true
 		}

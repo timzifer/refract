@@ -250,6 +250,9 @@ type scratch struct {
 	line  ir.Path
 	grid  stat.Grid
 	hex   stat.Hex
+	tiles []stat.Tile // every node's box, while a treemap is packed
+	pack  []stat.Tile // one sibling group's, as squarify hands them back
+	queue []int       // the nodes whose children a treemap has still to pack
 	cells []stat.Cell
 	verts []stat.Point
 	img   *image.NRGBA

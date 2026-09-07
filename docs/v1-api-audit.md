@@ -370,7 +370,7 @@ beside the frozen surface rather than through it.
 |---|---|---|
 | Animation and transitions | A `Live` method, an `ir.Partial` already there | v1.x |
 | Geographic projections | A third `Coord` behind the same interface; ADR 0018 already argues it | v1.x |
-| Relational layouts (sankey, treemap, chord) | New geoms; `data.Source` already returns an edge list | v1.x |
+| Relational layouts (sankey, treemap, chord) | **shipped in v1.4** — four geoms; `data.Source` already returned an edge list, and it did not change ([ADR 0039](adr/0039-relational-layouts.md)) | — |
 | 3D | Its own module | later |
 | Contour, QQ, more stats | New pure functions in `stat`, new geoms that call them | v1.x |
 | Brush, linked views | `Select EventKind`, `Event.Rows []int` | v1.x |

@@ -133,6 +133,13 @@ type config struct {
 
 	groupCol   string
 	widthCol   string
+	fromCol    string
+	toCol      string
+	idCol      string
+	parentCol  string
+	valCol     string
+	padding    float64
+	thickness  float64
 	midCol     string
 	errCol     string
 	errXCol    string
@@ -273,6 +280,80 @@ func Y2(col string) Option { return func(c *config) { c.y2col = col } }
 // came from a column or from the slot: dodging is about sharing a mark's width,
 // and a row that named its own edges named the width to share.
 func X2(col string) Option { return func(c *config) { c.x2col = col } }
+
+// From and To name the two ends of an edge, and [Value] what flows along it.
+// The three are the whole encoding of a [Sankey] and an [Arc]: one row per
+// edge, two names and a number.
+//
+//	geom.Sankey(src, geom.From("stage"), geom.To("next"), geom.Value("units"))
+//
+// The names are read as they are written — [github.com/timzifer/refract/data.Labels]
+// spells a numeric or temporal column the same way a categorical axis does —
+// and a node is created the first time a row mentions it. That first mention is
+// what fixes the order of everything downstream: the columns a sankey stacks,
+// the arcs a chord diagram goes round in, and which colour of the palette each
+// node takes. It is the order of the table and never the order of a map, so a
+// chart whose panels are built on separate goroutines draws what a serial one
+// drew — see docs/adr/0012-parallel-panels.md.
+//
+// An edge naming a node only on one side still creates it: a stage nothing
+// leaves is a sink, and dropping it would lose the end of the flow.
+func From(col string) Option { return func(c *config) { c.fromCol = col } }
+
+// To is [From]'s other end.
+func To(col string) Option { return func(c *config) { c.toCol = col } }
+
+// ID and Parent name a hierarchy: one row per node, the name it is known by and
+// the name of the node above it. With [Value] they are the whole encoding of a
+// [Treemap] and an [Icicle].
+//
+//	geom.Treemap(src, geom.ID("path"), geom.Parent("under"), geom.Value("bytes"))
+//
+// A row whose parent is empty, or names a node no row declares, is a root.
+// There may be several, and they divide the whole between them.
+//
+// They are spelled apart from [From] and [To] on purpose, although a hierarchy
+// is an edge table too: a hierarchy's edge runs from the child to its parent
+// and a flow's runs from source to target, so a document that called both
+// "from" and "to" would read a treemap as a flow. The columns are the same
+// shape; what they mean is not.
+func ID(col string) Option { return func(c *config) { c.idCol = col } }
+
+// Parent is [ID]'s other end: the node this row hangs under.
+func Parent(col string) Option { return func(c *config) { c.parentCol = col } }
+
+// Value names the column carrying the magnitude of an edge or of a node: the
+// units flowing along a link, the bytes in a directory, the weight of a chord.
+//
+// For a hierarchy it is usually the leaves that carry a number and the internal
+// nodes that carry none, because an internal node's size is what is under it.
+// A row that carries one anyway keeps it, and its share shows as the part of
+// its box its children do not cover — which is how an unaccounted-for remainder
+// becomes visible rather than invisible.
+func Value(col string) Option { return func(c *config) { c.valCol = col } }
+
+// Padding is the gap left between adjacent shapes of a layout that places its
+// own: the space between a treemap's cells, between a sunburst's rings, between
+// a sankey's nodes and between a chord diagram's arcs. It is a fraction of the
+// plot, in [0, 1), and zero — the default — means the shapes touch.
+//
+// It is a gap rather than a stroke on purpose. A border drawn round a cell is
+// ink a reader has to discount from the area they are being asked to compare,
+// and under hit-testing a stroked outline sits *above* the shape it outlines,
+// so a pointer on the border reports the border — see
+// docs/adr/0015-hit-testing.md.
+func Padding(f float64) Option { return func(c *config) { c.padding = f } }
+
+// Thickness is how much of its slot a node fills, in (0, 1]: the width of a
+// sankey's columns and the depth of a chord diagram's ring of arcs. Zero — the
+// default — means the mark's own, which differs between them because a sankey's
+// node is a landmark and a chord's is a rim.
+//
+// It is not [BarWidth], although it means something close, because BarWidth's
+// default is 0.8 rather than zero: a mark could not tell a caller who asked for
+// 0.8 from one who asked for nothing, and a default that cannot be told from a
+// choice is the trap [Dash] and [Stack] each carry a companion flag to avoid.
+func Thickness(f float64) Option { return func(c *config) { c.thickness = f } }
 
 // Opacity scales the fill alpha, in [0, 1]. The default is 1 for an explicit
 // [Fill] colour and 0.25 for an area that takes its colour from the palette —

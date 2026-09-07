@@ -1,9 +1,9 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws sixteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
+refract draws twenty data-bearing marks today — `Line`, `Scatter`, `Bar`,
 `Area`, `Step`, `Boxplot`, `Rect`, `Text`, `ErrorBar`, `Histogram`, `Violin`,
-`Ridgeline`, `Hexbin`, `Beeswarm`, `ECDF` and `Trend`, plus the annotations in
-`geom/annotate.go`. This document is the catalogue of what it does not draw
+`Ridgeline`, `Hexbin`, `Beeswarm`, `ECDF`, `Trend`, `Treemap`, `Icicle`,
+`Sankey` and `Arc`, plus the annotations in `geom/annotate.go`. This document is the catalogue of what it does not draw
 yet, sorted **by the machinery each form needs** rather than by how popular it
 is. Sorted that way the list stops being a wish list and becomes a schedule:
 half of these charts share four pieces of plumbing, and once those exist the
@@ -26,7 +26,7 @@ mark that does not exist yet, and the catalogue says which.
 | A size channel (`geom.SizeBy` + a size scale) | **shipped in v0.9** — [ADR 0027](adr/0027-size-channel-and-the-guide-column.md) | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | A Smith coordinate system (`coord.Smith`) + pinned ticks (`scale.TickValues`) | **shipped in v1.2** — [ADR 0033](adr/0033-smith-charts.md) | Smith chart, admittance (Y) chart, matching-network locus, impedance region |
-| Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
+| Relational layouts (squarify, sankey, chord) | **shipped in v1.4** — [ADR 0039](adr/0039-relational-layouts.md) | treemap, icicle, sunburst, flame graph, sankey, alluvial, chord, arc diagram |
 
 ## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
 
@@ -144,29 +144,59 @@ v0.8 — spokes and rings the coord reports and `render` strokes — and paralle
 coordinates would want the same shape of answer from a coord of its own rather
 than a second one drawn by a geom.
 
-## E — needs a relational layout
+## E — needs a relational layout — **shipped in v1.4**, except node-link and Venn
 
 Sankey/alluvial, chord, arc diagram, node-link, treemap, sunburst/icicle,
 Venn/UpSet.
 
-**The data layer does not change.** An edge list is `StringColumn("from")`,
+The last bucket, and the one `CONCEPT §14` called the only family that shares no
+machinery with the rest. Three of the four things it was said to need — its own
+data shape, its own solver, its own legend, its own hit-testing — turned out to
+be two: the legend and the hit test were already general enough, which is what
+[ADR 0039](adr/0039-relational-layouts.md) records.
+
+| Chart | Mark | Coord |
+|---|---|---|
+| Treemap | `geom.Treemap` | Cartesian |
+| Icicle, flame graph | `geom.Icicle` | Cartesian |
+| **Sunburst** | `geom.Icicle` | `coord.Polar()` |
+| Sankey, alluvial | `geom.Sankey` | Cartesian |
+| Arc diagram | `geom.Arc` | Cartesian |
+| **Chord diagram** | `geom.Arc` | `coord.Polar()` + `geom.Baseline(1)` |
+| Node-link | missing | — |
+| Venn / UpSet | missing | — |
+
+**Four marks, six charts.** Every layout here fills the unit square — a span
+across, a height out — and the coordinate stage decides what that looks like.
+That is the v0.8 move made twice: an icicle wrapped round a circle is a
+sunburst, and an arc diagram with its rail at the rim is a chord diagram.
+Neither is a mark of its own, for the same reason a pie is not a second
+implementation of a bar.
+
+**The data layer did not change.** An edge list is `StringColumn("from")`,
 `StringColumn("to")`, `Float64Column("value")` — three columns, exactly what
 `data.Source` already returns. A hierarchy is `(id, parent, value)`, a
-self-referential edge table, equally columnar. Widening the `Source` interface
-for this would be a breaking change for no gain.
+self-referential edge table, equally columnar. What was added is five *channels*
+— `geom.From`, `geom.To`, `geom.ID`, `geom.Parent`, `geom.Value` — and the two
+pairs are spelled apart because a hierarchy's edge runs from the child to its
+parent and a flow's from source to target.
 
-**The layout algorithms belong in `stat`.** A squarified treemap is values plus a
-rectangle in, rectangles out. Sankey node placement is an edge list in,
-coordinates in the unit square out. A chord layout is a matrix in, arcs and
-ribbons out. All of it is numbers in, numbers out, which is exactly what
-AGENTS.md scopes `stat` to — "no scales, no theme, no geoms". They return plain
-`float64` tuples rather than `ir.Rect`, so `stat` still does not import `ir`.
+**The layout algorithms are in `stat`.** `Depth`, `Rollup` and `Partition` for a
+hierarchy, `Squarify` for a treemap's packing, and `Sankey` and `Chord` as
+structs with a `Reset`, the way `Hex` is, because a flow layout keeps a cursor
+per node and a chart redrawn every frame should reuse it. All of it is numbers
+in, numbers out — none of them ever sees a string, because interning a name is
+where the order is decided and that belongs in the geom.
 
-Two properties these must have, because both are ADR 0012's business: node and
-link order comes from first appearance in the source table, never from map
-iteration, and any relaxation loop runs a fixed number of sweeps rather than to
-convergence — so the result is a pure function of its input and a parallel render
-stays byte-identical to a serial one.
+Both of ADR 0012's properties hold and are tested: node and link order comes
+from first appearance in the source table, never from map iteration, and the
+sankey's relaxation runs `stat.SankeySweeps` sweeps rather than to convergence.
+
+**What is still missing, and why.** A node-link layout is a force simulation,
+whose whole method is to run until it settles — so it cannot be a pure function
+of its input at a bounded sweep count that also looks good, and ADR 0012 has to
+be answered on its own terms before it lands. Venn is a circle-packing
+optimiser, and UpSet is a matrix chart rather than a relational layout at all.
 
 ## F — needs new stats — **shipped in v0.9**, except contour
 
@@ -299,10 +329,16 @@ The dependency order is not a preference:
    brushing across panels needs before anything else; and a **de-overlap pass
    for labels**, which [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a
    layout question rather than a mark's.
-10. **Relational layouts** — E, the only bucket that shares nothing with the
-   others and therefore the only one that can be moved without cost.
+10. ~~**Relational layouts**~~ — E, shipped in v1.4
+   ([ADR 0039](adr/0039-relational-layouts.md)): the only bucket that shared
+   nothing with the others, and therefore the only one that could be moved
+   without cost.
 
-**Sankey deliberately sits last.** It is the single most-requested form in this
-catalogue that benefits from none of the plumbing above: its own data shape, its
-own solver, its own legend, its own hit-testing. Pulling it forward would delay
-the four pieces that unlock everything else.
+**Sankey deliberately sat last, and the order was right.** It was the single
+most-requested form in this catalogue that benefits from none of the plumbing
+above, and pulling it forward would have delayed the four pieces that unlock
+everything else. What the wait bought is visible in the diff: the multi-entry
+legend of v0.7, the coordinate stage of v0.8 and the subpath-per-mark hit test
+of v0.5 were all already general enough, so two of the four things this bucket
+was said to need turned out to need nothing at all — and the two recipes,
+sunburst and chord, cost no code whatsoever.

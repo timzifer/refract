@@ -28,7 +28,11 @@ everywhere — built on the GoGPU stack.**
 > **On `main` since:** the six gaps that were not chart types — a null that is
 > a missing value in a text or temporal column, a tick format and a language a
 > *document* can choose, an interval mark, a second axis in either direction,
-> and a PDF that carries the font its labels need. All additive; see
+> and a PDF that carries the font its labels need — and **bucket E, the last
+> one in the catalogue**: `geom.Treemap`, `geom.Icicle`, `geom.Sankey` and
+> `geom.Arc`, which are also a sunburst and a chord diagram once the
+> coordinate stage has had them
+> ([ADR 0039](docs/adr/0039-relational-layouts.md)). All additive; see
 > [CONCEPT §14](CONCEPT.md#14-roadmap--milestones).
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
@@ -153,6 +157,9 @@ picture here cannot drift away from the code that produced it.
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
 | ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
 | ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) |
+| ![Disk usage by directory as a treemap, one rectangle per file sized by its share](docs/images/treemap.png) | ![The same directory tree as a sunburst, the root at the middle and the files at the rim](docs/images/sunburst.png) |
+| ![Requests per second through a service, drawn as a sankey diagram](docs/images/sankey.png) | ![The same traffic as an arc diagram, each service a segment of the rail and each route a band arcing over it](docs/images/arc.png) |
+| ![The same traffic again as a chord diagram, each service an arc and each route a ribbon crossing the disc](docs/images/chord.png) | |
 
 ## What it does
 
@@ -179,6 +186,14 @@ picture here cannot drift away from the code that produced it.
   regression — with a determinism test, drawn by a mark that trains its axis on
   the summary rather than on the rows
   ([ADR 0028](docs/adr/0028-distribution-stats.md)).
+- **Relational and hierarchical marks** — **`Treemap`**, **`Icicle`**,
+  **`Sankey`** and **`Arc`**, which read an edge table rather than a pair of
+  axes: `geom.From`/`geom.To` for a flow, `geom.ID`/`geom.Parent` for a
+  hierarchy, and `geom.Value` for the magnitude of either. Each places its own
+  layout in the unit square and hands it to the coordinate stage, so an
+  `Icicle` under `coord.Polar` is a **sunburst** and an `Arc` under one is a
+  **chord diagram** — four marks, six charts, and no second implementation of
+  anything ([ADR 0039](docs/adr/0039-relational-layouts.md)).
 - **Series in one layer** — `geom.GroupBy` splits a long table into N series
   drawn by one layer, each with its own colour and its own legend entry.
 - **Position adjustments** — `geom.Stack` (from zero, to 100 %, about a
@@ -276,9 +291,9 @@ picture here cannot drift away from the code that produced it.
 - **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
   gg raster adapter, a native window, and an opt-in GPU tier.
 
-Deliberately **not** here: geographic projections, the relational layouts —
-sankey, chord, treemap, sunburst — contour and QQ plots, animation, and 3D.
-They are past v1.0 in [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), and
+Deliberately **not** here: geographic projections, node-link and Venn diagrams,
+contour and QQ plots, animation, and 3D. They are past v1.0 in
+[CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), and
 [docs/chart-types.md](docs/chart-types.md) says what each one would need.
 
 ## Categories, distributions and orders of magnitude
@@ -478,6 +493,90 @@ place.
 
 A runnable version of the sweep above, a two-element matching network and the
 admittance chart is in [`examples/smith`](examples/smith).
+
+## An edge table is a chart too
+
+The last family of charts refract could not draw read neither a pair of axes nor
+a summary of a column: they read a *relationship*. A treemap and a sunburst read
+a hierarchy, `(id, parent, value)`; a sankey and a chord diagram read an edge
+list, `(from, to, value)`. Both are ordinary columns, which is why `data.Source`
+did not change to accommodate them.
+
+```go
+p := refract.New(refract.Size(700, 420), refract.Theme(bare))
+p.X(scale.Linear())
+p.Y(scale.Linear())
+p.Add(geom.Treemap(src,
+    geom.ID("path"), geom.Parent("under"), geom.Value("kb"),
+    geom.Padding(0.006)))
+```
+
+![Disk usage by directory as a treemap](docs/images/treemap.png)
+
+Each mark lays its own geometry out in the unit square — a span across, a height
+out — and hands it to the coordinate stage. Which means the polar half of this
+family is not new drawing code at all. An icicle is a hierarchy's span across
+and its depth out; wrapped round a circle, the root is at the middle and the
+leaves are at the rim, and that is a **sunburst**:
+
+```go
+p := refract.New(refract.Size(520, 460), refract.Theme(bare),
+    refract.Coord(coord.Polar(coord.Hole(0.12))))
+p.X(scale.Linear())
+p.Y(scale.Linear())
+p.Add(geom.Icicle(src, geom.ID("path"), geom.Parent("under"), geom.Value("kb")))
+```
+
+![The same directory tree as a sunburst](docs/images/sunburst.png)
+
+It is `coord.Polar` and not `coord.Pie`, because a pie sweeps the *Y* axis round
+the circle and this chart's Y is its depth.
+
+A **sankey** reads the other shape. Nothing declares a node: a node exists
+because a row mentioned it, it stands one column past the deepest source that
+reaches it, and it is as thick as the greater of what enters and what leaves.
+
+```go
+p.Add(geom.Sankey(src, geom.From("from"), geom.To("to"), geom.Value("rps")))
+```
+
+![Requests per second through a service, as a sankey diagram](docs/images/sankey.png)
+
+And the same trick again: `geom.Arc` puts the nodes on a rail with the ribbons
+rising off it, which is an arc diagram. Each band is as thick as what it
+carries and arcs as high as it reaches, so the height reads as distance:
+
+```go
+p.Add(geom.Arc(src, geom.From("from"), geom.To("to"), geom.Value("rps")))
+```
+
+![The same traffic as an arc diagram](docs/images/arc.png)
+
+Move the rail to the rim and wrap it round a circle, and the ribbons cross the
+middle — a **chord diagram**, from the same layer with one option and one coord
+different.
+
+```go
+p := refract.New(refract.Size(520, 460), refract.Theme(bare),
+    refract.Coord(coord.Polar()))
+p.Add(geom.Arc(src, geom.From("from"), geom.To("to"), geom.Value("rps"),
+    geom.Baseline(1)))
+```
+
+![The same traffic as a chord diagram](docs/images/chord.png)
+
+Four marks, six charts, and no second implementation of anything — the same
+thing the coordinate stage bought for the pie, one bucket later. The layouts
+themselves are pure functions in [`stat/`](stat), each with a determinism test:
+node order comes from the order the rows first named them and never from a map,
+and the sankey's relaxation runs a fixed number of sweeps rather than to
+convergence, so a chart whose panels are built on several goroutines draws
+exactly what a serial one draws
+([ADR 0039](docs/adr/0039-relational-layouts.md)).
+
+Both axes describe the unit square, which is nothing a reader needs to see — so
+these charts want the same bare theme a pie does. A runnable version of all six
+is in [`examples/relational`](examples/relational).
 
 ## Boxes bounded by their own row
 

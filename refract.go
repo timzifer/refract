@@ -700,7 +700,15 @@ func (p *Plot) showLegend() bool {
 		return true
 	}
 	for _, g := range p.layers {
-		if d, ok := geom.Describe(g); ok && d.Group != "" {
+		d, ok := geom.Describe(g)
+		if !ok {
+			continue
+		}
+		// A relational layer is the same case under a different name: its
+		// nodes are its series, and nothing declares them but the edge table,
+		// so a chart of one sankey needs the legend for exactly the reason a
+		// chart of one stack does.
+		if d.Group != "" || d.From != "" || d.ID != "" {
 			return true
 		}
 	}

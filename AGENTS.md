@@ -854,6 +854,56 @@ annotation.
 for every chart in the process, once per render. There is a reason that is a
 sentence in the code as well as here.
 
+### A relational layout is in the unit square, and the two coords disagree about Y
+
+`Treemap`, `Icicle`, `Sankey` and `Arc` all put their span on X in `[0, 1]` and
+their height on Y in `[0, 1]`, and both scales are trained on exactly that. Four
+things about that will bite.
+
+**The rim is `y = 1` and the hub is `y = 0`, and the choice is not free.** A
+Cartesian panel flips Y — `y.SetRange(area.Max.Y, area.Min.Y)` in
+`coord/coord.go` — so `y = 1` is the top of the plot. A polar one does not —
+`rad.SetRange(q.r0, q.r1)` in `coord/polar.go` — so `y = 1` is the outer rim.
+`rim = y1` is the one convention that makes a sunburst and a chord diagram work
+with one pair of scales. It also means the Cartesian readings are unusually
+oriented: an icicle grows upward from a root along the bottom. That is the
+price, and it is written down in
+[ADR 0039](docs/adr/0039-relational-layouts.md) rather than worked around.
+
+**A recipe wants `coord.Polar()` and never `coord.Pie()`.** `Pie` is
+`Polar(Theta(FromY))`, which sweeps the *Y* axis round the circle. These marks'
+Y is their depth, so a sunburst under `Pie` draws concentric wedges of the depth
+axis — which is nonsense that renders without erroring.
+
+**The interning is in the geom, not in `stat`.** `stat` takes `[]int` node ids
+and never sees a name. Which node is "first" decides everything downstream —
+the column a sankey's node stands in, the way round a chord diagram goes, the
+palette entry each node takes — and that order has to come from the table rather
+than from a map ([ADR 0012](docs/adr/0012-parallel-panels.md)). The map in
+`geom/relational.go` is only ever asked *whether* it has seen a name, never what
+it holds, and it is `clear`ed rather than replaced so the buckets survive a
+frame. A map made per `Train` is the allocation the gate exists to catch.
+
+**A treemap squarifies in `Build`, against the panel.** It optimises an aspect
+ratio *on screen*, so packing the unit square and stretching the result into a
+wide panel defeats the algorithm. It is the third instance of
+[ADR 0028](docs/adr/0028-distribution-stats.md)'s exception, after the hexagonal
+lattice and the beeswarm. It walks the tree breadth-first out of a pooled queue
+rather than recursing, and writes only to the scratch — `Build` has to be safe
+to run concurrently with itself.
+
+**`coord.Edge` takes device points.** Handing it the values the scales produced
+asks a polar coord to read an angle as an abscissa, and it draws a shape nobody
+can recognise — which is exactly the bug the chord diagram's first golden file
+caught and no unit test did. `geom.edgeAlong` is the shared spelling, and it
+splits a wide span because `Edge` joins two points the *short* way round.
+
+**A stroked outline hit-tests above the shape it outlines.** `interact` ranks a
+vertex above an area, so bordering a treemap cell would make every hover report
+a corner. That is why the separation between cells is `geom.Padding` — room —
+and not ink, and why these marks stroke only when the caller named both a
+`Fill` and a `Color`. `geom.Rect` has the same rule for the same reason.
+
 ## Open questions
 
 [CONCEPT.md §17](CONCEPT.md#17-open-decisions) lists the design decisions that
@@ -894,6 +944,25 @@ left for v1.0 is the release — the order is in
 [CONTRIBUTING](CONTRIBUTING.md#releasing) — and everything after it is listed
 under *Beyond v1.0*. Adding a stub for one of those is not progress towards it:
 the seams exist, that is enough.
+
+Things v1.4 deliberately did not do. There is **no node-link layout**: a force
+simulation's whole method is to run until it settles, so it cannot be a pure
+function of its input at a bounded sweep count that also looks good, and
+[ADR 0012](docs/adr/0012-parallel-panels.md) has to be answered on its own terms
+first. There is **no Venn and no UpSet** — the first is a circle-packing
+optimiser, the second a matrix chart rather than a relational layout. A
+relational mark **ignores `geom.SizeBy`**, because a size per node is
+meaningless when the value already is the size. A **sankey does not reorder its
+nodes to reduce crossings**: that means a sort per sweep, and a sort is where a
+layout stops being a pure function of its input and starts depending on how a
+tie was broken — `geom.Order` is how a caller asks for a different order, by
+sorting its own rows. A **treemap draws its leaves only**, because an internal
+node's rectangle is the union of its children's and the nesting shows as
+padding. And a **hit on one of these reports the layout's own coordinates**
+rather than anything in the table: for these marks the row is the reading, which
+is the first time that has been true and is
+[ADR 0015](docs/adr/0015-hit-testing.md)'s revisit clause rather than this
+record's.
 
 Things v0.9 deliberately did not do. A **hexbin has no colourbar**, for the
 ordering reason above. A **histogram ignores `GroupBy`**. A **sized layer draws

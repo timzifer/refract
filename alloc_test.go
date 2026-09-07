@@ -3,6 +3,7 @@ package refract_test
 import (
 	"math"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/timzifer/refract"
@@ -13,6 +14,7 @@ import (
 	"github.com/timzifer/refract/internal/irtest"
 	"github.com/timzifer/refract/palette"
 	"github.com/timzifer/refract/scale"
+	"github.com/timzifer/refract/theme"
 )
 
 // signal is a plot of one line over n rows, ready to render repeatedly.
@@ -296,6 +298,99 @@ func benchmarkBubbles(b *testing.B, rows int) {
 
 func BenchmarkBubbles1k(b *testing.B)   { benchmarkBubbles(b, 1_000) }
 func BenchmarkBubbles100k(b *testing.B) { benchmarkBubbles(b, 100_000) }
+
+// flowOf is an edge list of the given size: a wide bipartite graph, which is
+// the shape whose layout costs the most — every node is reached in one step, so
+// one column holds half of them and the relaxation has the most to do.
+func flowOf(rows int) *refract.Plot {
+	from := make([]string, rows)
+	to := make([]string, rows)
+	value := make([]float64, rows)
+	for i := range rows {
+		from[i] = "s" + strconv.Itoa(i%64)
+		to[i] = "t" + strconv.Itoa(i%97)
+		value[i] = float64(1 + i%13)
+	}
+	p := refract.New(refract.Size(900, 500), refract.Theme(bareLayoutTheme()), refract.Legend(false))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Sankey(refract.NewTable().
+		String("from", from).String("to", to).Float64("rps", value),
+		geom.From("from"), geom.To("to"), geom.Value("rps")))
+	return p
+}
+
+// treeOf is a hierarchy of the given size: one root, a fan of directories, and
+// the rest leaves under them.
+func treeOf(rows int) *refract.Plot {
+	path := make([]string, rows)
+	under := make([]string, rows)
+	kb := make([]float64, rows)
+	const dirs = 32
+	for i := range rows {
+		path[i] = "n" + strconv.Itoa(i)
+		switch {
+		case i == 0:
+			under[i] = ""
+		case i <= dirs:
+			under[i] = "n0"
+		default:
+			under[i] = "n" + strconv.Itoa(1+i%dirs)
+			kb[i] = float64(1 + i%29)
+		}
+	}
+	p := refract.New(refract.Size(900, 500), refract.Theme(bareLayoutTheme()), refract.Legend(false))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Treemap(refract.NewTable().
+		String("path", path).String("under", under).Float64("kb", kb),
+		geom.ID("path"), geom.Parent("under"), geom.Value("kb")))
+	return p
+}
+
+func bareLayoutTheme() theme.Theme {
+	return theme.Light.With(
+		theme.Grid(false, false),
+		theme.AxisLines(false, false),
+		theme.Ticks(false, false),
+	)
+}
+
+func benchmarkSankey(b *testing.B, rows int) {
+	onOnePGate(b)
+	benchmarkPlot(b, flowOf(rows))
+}
+
+func benchmarkTreemap(b *testing.B, rows int) {
+	onOnePGate(b)
+	benchmarkPlot(b, treeOf(rows))
+}
+
+func benchmarkPlot(b *testing.B, p *refract.Plot) {
+	b.Helper()
+	target := irtest.NullTarget()
+	if err := p.Render(target); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := p.Render(target); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// The relational layouts. Both build a structure sized by the data on every
+// Train — a node table, a depth per node, a total per node — so this is where a
+// buffer that was allocated per frame rather than kept on the layer would show
+// up, and it is the only thing keeping the interning map's buckets alive
+// between frames.
+func BenchmarkSankey1k(b *testing.B)   { benchmarkSankey(b, 1_000) }
+func BenchmarkSankey100k(b *testing.B) { benchmarkSankey(b, 100_000) }
+
+func BenchmarkTreemap1k(b *testing.B)   { benchmarkTreemap(b, 1_000) }
+func BenchmarkTreemap100k(b *testing.B) { benchmarkTreemap(b, 100_000) }
 
 func BenchmarkFrame1k(b *testing.B)   { benchmarkFrame(b, 1_000) }
 func BenchmarkFrame100k(b *testing.B) { benchmarkFrame(b, 100_000) }
