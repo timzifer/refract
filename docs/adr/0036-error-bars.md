@@ -1,4 +1,4 @@
-# 0035 — An interval is a mark, and the encoding says which way it runs
+# 0036 — An interval is a mark, and the encoding says which way it runs
 
 **Status:** Accepted · **Date:** 2026-09-07
 
@@ -109,7 +109,7 @@ the same argument `boxGeom.span` already makes about a median line.
   quietly drew nothing would be found by nobody.
 - **`docs/chart-types.md` grew a bucket G.** The catalogue sorted by machinery
   could not hold this, and could not hold the three gaps beside it — a tick
-  label a document can choose ([ADR 0034](0034-label-format-and-locale.md)), a
+  label a document can choose ([ADR 0035](0035-label-format-and-locale.md)), a
   chart in a language, absence in a text column
-  ([ADR 0033](0033-null-values.md)). None of them is a shape; all of them were
+  ([ADR 0034](0034-null-values.md)). None of them is a shape; all of them were
   the difference between a chart being drawable and being usable.

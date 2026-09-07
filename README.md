@@ -12,16 +12,18 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: v1.1.0, released.** Every milestone through **v1.0** has shipped,
+> **Status: v1.2.0, released.** Every milestone through **v1.0** has shipped,
 > and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
 > before the freeze has changed. The API was frozen at the `v1.0.0` tag and
 > follows semver from here, so a breaking change means a major version and a
-> deprecation cycle precedes it — `v1.1.0` adds two marks and takes nothing
-> away: `Plot.Track`, a band at a panel's edge on a scale it shares, and
-> `geom.Text`, a label per row read from a column. The nested modules are
-> tagged alongside: `backend/gg` and `backend/window` at `v1.1.0`, the opt-in
-> GPU tier at `v0.1.3`, and the Arrow adapter at `arrow/v18.0.1`, whose major
-> is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
+> deprecation cycle precedes it — `v1.2.0` adds a third coordinate system and
+> takes nothing away: `coord.Smith`, which maps a normalised impedance onto the
+> unit disc and draws its grid out of the two axes' own ticks, with
+> `scale.TickValues` to pin them where a paper chart prints them. The nested
+> modules are tagged alongside: `backend/gg` and `backend/window` at `v1.2.0`,
+> the opt-in GPU tier at `v0.1.4`, and the Arrow adapter at `arrow/v18.0.2`,
+> whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
+> road ahead.
 >
 > **On `main` since:** the six gaps that were not chart types — a null that is
 > a missing value in a text or temporal column, a tick format and a language a
@@ -150,7 +152,7 @@ picture here cannot drift away from the code that produced it.
 | ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
 | ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
-| ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | |
+| ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) |
 
 ## What it does
 
@@ -161,6 +163,9 @@ picture here cannot drift away from the code that produced it.
   merely evenly spaced. Time ticks step in calendar units. Log and symlog
   subdivide each decade with unlabelled minor ticks; symlog is linear near zero,
   so signed data spanning orders of magnitude is plottable at all.
+  `scale.TickValues` pins the sequence outright, for an axis whose ticks are a
+  convention rather than a reading — the 0.2 / 0.5 / 1 / 2 / 5 of a Smith chart,
+  the five points of a Likert item.
 - **Geoms** — `Line` (optionally tension-smoothed), `Scatter` (six marker
   shapes), `Bar`, **`Area`** (to a baseline, or a band between two series),
   **`Step`** (pre/mid/post), **`Boxplot`** (Tukey whiskers, type-7 quartiles,
@@ -198,7 +203,13 @@ picture here cannot drift away from the code that produced it.
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)). A slice's inner and outer
   radius are columns like its share is (`geom.X` and `geom.X2`), and
   `geom.ExplodeBy` breaks one out of the ring without changing what it says
-  ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
+  ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)). **`coord.Smith`** is the
+  third one: it reads the pair as a complex impedance and maps it through
+  Γ = (z−1)/(z+1) onto the unit disc, which is the chart every RF engineer works
+  on and almost no plotting library draws. Its grid is the two axes' own ticks —
+  constant-resistance circles from X, constant-reactance arcs from Y — so
+  `render` was not touched for it
+  ([ADR 0033](docs/adr/0033-smith-charts.md)).
 - **Size** — `geom.SizeBy` reads a column through `scale.Size`: the bubble
   chart. The mapping is by **area**, not radius, so doubling a value multiplies
   the diameter by √2 and two bubbles compare the way a reader already reads
@@ -408,6 +419,65 @@ nothing real.
 
 A runnable version of the donut, the radar, a wind rose, a gauge and the
 broken-out donut above is in [`examples/polar`](examples/polar).
+
+## A Smith chart is a coordinate system too
+
+Almost no general-purpose plotting library draws a Smith chart, because a Smith
+chart is not a mark. It is a conformal map of the impedance half-plane onto the
+unit disc — Γ = (z−1)/(z+1) — and a library whose coordinate stage is hard-coded
+Cartesian cannot express it at any price. `refract`'s stage can, and `coord.Smith`
+is the third one:
+
+```go
+p := refract.New(refract.Coord(coord.Smith()))
+
+// The two columns are the normalised impedance: r = R/Z₀ and x = X/Z₀.
+// TickValues asks for the grid a paper chart is printed at — six values every
+// RF engineer expects in those places, which no tick-choosing algorithm
+// produces because they are not evenly spaced and are not meant to be.
+p.X(scale.Linear(scale.Domain(0, 50), scale.TickValues(0, 0.2, 0.5, 1, 2, 5)))
+p.Y(scale.Linear(scale.Domain(-50, 50),
+    scale.TickValues(-5, -2, -1, -0.5, -0.2, 0.2, 0.5, 1, 2, 5)))
+
+p.Add(geom.Line(sweep, geom.X("r"), geom.Y("x")))
+```
+
+![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png)
+
+There is no Smith geom and no Smith mark: that is a `geom.Line` from v0.1. And
+there is nothing drawing the grid, either — the constant-resistance circles are
+what the X ticks look like once the coord has had them, and the
+constant-reactance arcs are the Y ticks, so `render` draws this with the same two
+loops it draws a Cartesian grid with. Not one line of `render/` changed for it;
+see [ADR 0033](docs/adr/0033-smith-charts.md), which argues why this is the same
+seam polar is and not the wider one a map projection needs.
+
+An instrument reports S₁₁ as a reflection coefficient rather than as an
+impedance, so a measured sweep is one line at the call site:
+
+```go
+r[i], x[i] = coord.SmithZ(re[i], im[i])   // z = (1+Γ)/(1−Γ)
+```
+
+Three more things are worth knowing. **Both axes are linear**, and the domains
+are pinned rather than trained: the chart's extent is the whole disc whatever
+the data does, and a near-open reflection is a resistance in the thousands that
+would otherwise drag every tick into the last pixel before the rim. **An edge is
+a chord by default**, because a line between two measured samples asserting a
+linear sweep in impedance is an assertion the instrument did not make;
+`coord.SmithArc` draws the exact image for a locus that genuinely is straight in
+impedance, which is what a matching network's steps are. And
+**`coord.SmithAdmittance`** turns the disc through half a turn and reads the pair
+as a conductance and a susceptance — the Y chart a shunt element is read on, and
+the same physical reflection in the same place, against the other grid.
+
+Not drawn: constant-|Γ| circles, constant-Q arcs and a combined ZY overlay. Each
+is a third grid family, and a coord may draw one grid line per tick a scale
+emits — the same constraint that makes the columns an impedance in the first
+place.
+
+A runnable version of the sweep above, a two-element matching network and the
+admittance chart is in [`examples/smith`](examples/smith).
 
 ## Boxes bounded by their own row
 

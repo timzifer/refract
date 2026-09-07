@@ -27,7 +27,7 @@ package data
 // group or facet column the row belongs to no series and no panel, so it is
 // not drawn: a category named "" is not a reading, and inventing one is how
 // the zero time got onto an axis in the first place. See
-// [ADR 0033](../docs/adr/0033-null-values.md).
+// [ADR 0034](../docs/adr/0034-null-values.md).
 type Nulls interface {
 	// Nulls returns one flag per row, true where the column has no value.
 	//

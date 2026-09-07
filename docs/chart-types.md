@@ -5,8 +5,9 @@ refract draws sixteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
 `Ridgeline`, `Hexbin`, `Beeswarm`, `ECDF` and `Trend`, plus the annotations in
 `geom/annotate.go`. This document is the catalogue of what it does not draw
 yet, sorted **by the machinery each form needs** rather than by how popular it
-is. Sorted that way the list stops being a wish list and becomes a schedule: half of these charts share four pieces of
-plumbing, and once those exist the charts themselves are small.
+is. Sorted that way the list stops being a wish list and becomes a schedule:
+half of these charts share four pieces of plumbing, and once those exist the
+charts themselves are small.
 
 The milestone column follows [CONCEPT §14](../CONCEPT.md). Nothing here is a
 commitment to draw every form as a named constructor; several are recipes over a
@@ -24,6 +25,7 @@ mark that does not exist yet, and the catalogue says which.
 | A band at a panel's edge on a shared axis (`Plot.Track`) | **shipped in v0.10** — [ADR 0031](adr/0031-tracks.md) | gantt strip under a trace, rug plot, event ribbon, sparkline gutter, shift bands; beside it, colour keys and marginal distributions |
 | A size channel (`geom.SizeBy` + a size scale) | **shipped in v0.9** — [ADR 0027](adr/0027-size-channel-and-the-guide-column.md) | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
+| A Smith coordinate system (`coord.Smith`) + pinned ticks (`scale.TickValues`) | **shipped in v1.2** — [ADR 0033](adr/0033-smith-charts.md) | Smith chart, admittance (Y) chart, matching-network locus, impedance region |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
 
 ## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
@@ -207,7 +209,38 @@ and `Silverman` takes two spread measures, because sorting means a buffer and th
 geoms already keep one — one per layer, for the reason `barGeom.gaps` is on the
 layer rather than in the frame's pool.
 
-## G — what is not a chart type
+## G — needs a Smith coordinate system — **shipped in v1.2**
+
+See [ADR 0033](adr/0033-smith-charts.md). A Smith chart is a conformal map of
+the impedance half-plane onto the unit disc, Γ = (z−1)/(z+1). It is the one form
+in this catalogue that no general-purpose library draws, and it needed exactly
+one piece of plumbing — a coord — because everything else it wants shipped
+between v0.1 and v0.9.
+
+| Chart | Recipe |
+|---|---|
+| Smith chart | `Line` over two columns holding r = R/Z₀ and x = X/Z₀, in `coord.Smith` |
+| Measured sweep (S₁₁) | the same, with `coord.SmithZ` converting Γ into the pair — see `examples/smith` |
+| Matching-network locus | `Line` + `coord.SmithArc`, whose steps are straight in impedance and therefore arcs on the disc |
+| Admittance (Y) chart | `coord.SmithAdmittance(true)`, with the columns holding g and b |
+| An impedance tolerance region | `Rect` or a `Region` annotation, whose cell is curvilinear here |
+
+**Three things worth knowing.** The columns are an **impedance**, not a
+reflection coefficient, and that is forced rather than chosen: `render` takes a
+grid line's geometry from the coord and its label from the scale's own tick, so
+a coord may draw one grid line per tick and label nothing the scale did not — so
+the two tick families have to be the two things the reader wants labelled, r and
+x. Both axes are **linear** and their domains are **pinned**, because the
+chart's extent is the whole disc whatever the data does. And an edge is a
+**chord** by default: a line between two measured samples asserting a linear
+sweep in impedance is an assertion the instrument did not make.
+
+**Not drawn, and for one reason.** Constant-|Γ| (VSWR) circles, constant-Q arcs
+and a combined ZY overlay are each a third grid family, and there are two tick
+lists. That is the same constraint that chose the data model, and the two would
+be reopened together.
+
+## H — what is not a chart type
 
 The forms above are shapes. This bucket is the other kind of gap: things a
 chart says that no mark draws, and that were missing for long enough to be
@@ -217,13 +250,13 @@ something else.
 
 | Gap | Status | What it was |
 |---|---|---|
-| Two quantities in different units | **shipped** — [ADR 0036](adr/0036-secondary-axis.md) | `Plot.Y2` and `geom.OnY2`. A plot had one Y scale and a layer no way to name another, so revenue-and-margin — bars against the left axis, a percentage against the right — could not be drawn at all; normalising into the primary axis's units draws it and makes the axis, the zoom and the tooltip all read in units nobody measured. |
-| One reading with two rulers | **shipped** — [ADR 0036](adr/0036-secondary-axis.md#amendment-the-horizontal-direction) | `Plot.X2` and `geom.OnX2`, the same machinery a quarter turn round. An oven curve the operator counts in cycles and the engineer counts in minutes is one series and two ladders; an axis with no layer on it is still drawn, so that shape needs no second layer at all. |
-| An interval around a measurement | **shipped** — [ADR 0035](adr/0035-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
-| A tick label a document can choose | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
-| A chart in a language | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
-| A PDF in a script WinAnsi cannot hold | **shipped** — [ADR 0037](adr/0037-embedded-fonts.md) | `pdf.WithFont`. The PDF emitter named the base-14 Helvetica and encoded WinAnsi, so every rune outside Latin-1 became `?` — Greek, Cyrillic, Hebrew, Thai and every CJK script, in the format people send to customers. |
-| Absence in a text or temporal column | **shipped** — [ADR 0033](adr/0033-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
+| Two quantities in different units | **shipped** — [ADR 0037](adr/0037-secondary-axis.md) | `Plot.Y2` and `geom.OnY2`. A plot had one Y scale and a layer no way to name another, so revenue-and-margin — bars against the left axis, a percentage against the right — could not be drawn at all; normalising into the primary axis's units draws it and makes the axis, the zoom and the tooltip all read in units nobody measured. |
+| One reading with two rulers | **shipped** — [ADR 0037](adr/0037-secondary-axis.md#amendment-the-horizontal-direction) | `Plot.X2` and `geom.OnX2`, the same machinery a quarter turn round. An oven curve the operator counts in cycles and the engineer counts in minutes is one series and two ladders; an axis with no layer on it is still drawn, so that shape needs no second layer at all. |
+| An interval around a measurement | **shipped** — [ADR 0036](adr/0036-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
+| A tick label a document can choose | **shipped** — [ADR 0035](adr/0035-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
+| A chart in a language | **shipped** — [ADR 0035](adr/0035-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
+| A PDF in a script WinAnsi cannot hold | **shipped** — [ADR 0038](adr/0038-embedded-fonts.md) | `pdf.WithFont`. The PDF emitter named the base-14 Helvetica and encoded WinAnsi, so every rune outside Latin-1 became `?` — Greek, Cyrillic, Hebrew, Thai and every CJK script, in the format people send to customers. |
+| Absence in a text or temporal column | **shipped** — [ADR 0034](adr/0034-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
 
 ## Already possible today
 
@@ -254,19 +287,20 @@ The dependency order is not a preference:
    column generalised.
 7. ~~**The stat family**~~ — shipped in v0.9
    ([ADR 0028](adr/0028-distribution-stats.md)): F, less contour and QQ.
-8. **Relational layouts** — E, the only bucket that shares nothing with the
+8. ~~**A Smith coord**~~ — shipped in v1.2
+   ([ADR 0033](adr/0033-smith-charts.md)): G, on the seam v0.8 already cut.
+9. ~~**Bucket H**~~ — shipped: the gaps that are not chart types at all. It is
+   listed last in this order and first in nothing, because sorting by
+   machinery is what makes a schedule and these have none — each is small,
+   independent, and was blocking a whole class of charts from being *usable*
+   rather than from being drawn. What is left of the bucket is an **overlay
+   layer the chart itself owns** — a tooltip, a crosshair, a brush rectangle —
+   which `interact` cannot draw because it only reads, and which linked
+   brushing across panels needs before anything else; and a **de-overlap pass
+   for labels**, which [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a
+   layout question rather than a mark's.
+10. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
-
-9. ~~**Bucket G**~~ — shipped: the gaps that are not chart types at all. They
-   are listed above because sorting by machinery is what makes a schedule and
-   these have none — each is small, independent, and was blocking a whole
-   class of charts from being *usable* rather than from being drawn. What is
-   left of the bucket is an **overlay layer the chart itself owns** — a
-   tooltip, a crosshair, a brush rectangle — which `interact` cannot draw
-   because it only reads, and which linked brushing across panels needs before
-   anything else; and a **de-overlap pass for labels**, which
-   [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a layout question rather
-   than a mark's.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this
 catalogue that benefits from none of the plumbing above: its own data shape, its

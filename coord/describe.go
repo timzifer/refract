@@ -14,6 +14,7 @@ type Type string
 const (
 	TypeCartesian Type = "cartesian"
 	TypePolar     Type = "polar"
+	TypeSmith     Type = "smith"
 )
 
 // Desc is a coord reduced to what configures it.
@@ -39,8 +40,25 @@ type Desc struct {
 	// Counterclockwise reverses the direction the angular scale runs in.
 	Counterclockwise bool
 	// Chord reports a coord drawing an edge between two marks as the straight
-	// line between them rather than as an arc.
+	// line between them rather than as an arc. It is a polar coord's choice,
+	// whose default is the arc.
 	Chord bool
+
+	// Arc is the same choice made by a coord whose default is the other one:
+	// it reports a Smith coord drawing an edge as the true image of a straight
+	// data-space edge rather than as the chord it draws by default.
+	//
+	// The two are separate fields rather than one because a zero Desc has to
+	// mean each coord's own default, and the two coords default opposite ways
+	// — a rose petal's side is an arc, a measured locus is a chord. One field
+	// would make a document that named a type and nothing else draw something
+	// its constructor does not.
+	Arc bool
+
+	// Admittance reports a Smith coord mirrored through its centre — Γ ↦ −Γ —
+	// so that the pair reads as a conductance and a susceptance. See
+	// [SmithAdmittance].
+	Admittance bool
 }
 
 // Describe reports c's configuration, or ok == false if c cannot describe
@@ -68,6 +86,13 @@ func FromDesc(d Desc) (Coord, error) {
 			opts = append(opts, Chord())
 		}
 		return Polar(opts...), nil
+
+	case TypeSmith:
+		opts := []SmithOption{SmithRadius(d.Radius), SmithAdmittance(d.Admittance)}
+		if d.Arc {
+			opts = append(opts, SmithArc())
+		}
+		return Smith(opts...), nil
 	}
 	if build, ok := registered(d.Type); ok {
 		return build(d)

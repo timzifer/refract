@@ -187,3 +187,60 @@ func TestATimeLayoutFixesEveryLabel(t *testing.T) {
 		}
 	}
 }
+
+// The two ways an axis can have its ticks decided, meeting. A pinned sequence
+// is not the tick search's answer, so a format that takes its precision from
+// the axis has to ask the sequence — otherwise an axis printed at 0.2 / 0.5 /
+// 1 / 2 / 5 would label its ticks to a precision derived from a search over a
+// domain nobody is looking at.
+func TestAPinnedTickSequenceDecidesThePrecision(t *testing.T) {
+	s := scale.Linear(
+		scale.Domain(0, 50),
+		scale.TickValues(0, 0.2, 0.5, 1, 2, 5),
+		scale.NumberFormat("#"),
+	)
+	s.SetRange(0, 400)
+
+	want := map[float64]string{0: "0.0", 0.2: "0.2", 0.5: "0.5", 1: "1.0", 2: "2.0", 5: "5.0"}
+	for _, tk := range s.Ticks(6) {
+		if w, ok := want[tk.Value]; ok && tk.Label != w {
+			t.Errorf("tick %v is labelled %q, want %q", tk.Value, tk.Label, w)
+		}
+	}
+	// And a value asked for outside the sequence is written to the same
+	// precision, so a tooltip and the axis beside it agree.
+	if got := scale.LabelOf(s, 0.5); got != "0.5" {
+		t.Errorf("LabelOf(0.5) is %q, want the sequence's own precision", got)
+	}
+}
+
+// A pinned sequence and a format and a language all survive one Desc, because
+// they are three independent things a document says about one axis.
+func TestAPinnedSequenceAFormatAndALocaleRoundTripTogether(t *testing.T) {
+	d := scale.Desc{
+		Kind:       scale.KindLinear,
+		Fixed:      true,
+		Min:        0,
+		Max:        50,
+		TickValues: []float64{0, 0.2, 0.5, 1, 2, 5},
+		Format:     "# Ω",
+		Locale:     "de",
+	}
+	s, err := scale.FromDesc(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := scale.Describe(s)
+	if !ok {
+		t.Fatal("the scale cannot describe itself")
+	}
+	if len(got.TickValues) != len(d.TickValues) {
+		t.Errorf("the tick sequence came back as %v, want %v", got.TickValues, d.TickValues)
+	}
+	if got.Format != d.Format || got.Locale != d.Locale {
+		t.Errorf("format %q locale %q, want %q and %q", got.Format, got.Locale, d.Format, d.Locale)
+	}
+	if label := scale.LabelOf(s, 0.5); label != "0,5 Ω" {
+		t.Errorf("label is %q, want the German separator and the unit", label)
+	}
+}

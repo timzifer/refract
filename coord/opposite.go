@@ -13,9 +13,11 @@ import (
 // since v0.8 has been one: [Coord] is implemented outside it and never gains a
 // method ([CONCEPT §15](../CONCEPT.md#15-versioning--stability)). A coord that
 // does not implement it draws no second axis, which is the honest answer for
-// [Polar]: a ring has one angular axis and one radial one and no far side to
-// put another on, and a second one drawn over the first would be two scales
-// sharing one line.
+// both of the others: a ring has one angular axis and one radial one and no
+// far side to put another on, and a [Smith] chart's two axes are already drawn
+// *inside* the disc as its grid, so a second one would be a fourth family of
+// curves through the same ink. In each case a second axis drawn over the first
+// would be two scales sharing one line.
 //
 // The two methods are one interface rather than two because they are one
 // capability — "this coord has edges opposite its axes" — and a coord that can
@@ -26,7 +28,7 @@ import (
 // layers read it and whether the panel writes its labels are all decisions
 // render already owns, exactly as they are for the first one — a coord reports
 // where things go and does not draw. See
-// [ADR 0036](../docs/adr/0036-secondary-axis.md).
+// [ADR 0037](../docs/adr/0037-secondary-axis.md).
 type Opposite interface {
 	// FurnitureY2 fills dst with the axis line, tick marks and tick label
 	// positions of a second vertical axis, opposite the one [Coord.Furniture]

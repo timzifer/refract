@@ -1,4 +1,4 @@
-# 0036 — A second axis is a scale on the chart and a binding on the layer
+# 0037 — A second axis is a scale on the chart and a binding on the layer
 
 **Status:** Accepted · **Date:** 2026-09-07 · **Amended:** 2026-09-07 (see
 [Amendment](#amendment-the-horizontal-direction))

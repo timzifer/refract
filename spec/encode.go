@@ -138,7 +138,7 @@ func encodeScale(d scale.Desc) *Scale {
 	out := &Scale{Nice: d.Nice, Zero: d.Zero, Format: d.Format, Locale: d.Locale}
 	switch d.Kind {
 	case scale.KindLinear:
-		out.Type = "linear"
+		out.Type, out.TickValues = "linear", d.TickValues
 	case scale.KindLog:
 		out.Type, out.Base = "log", d.Base
 		out.MinorTicks = boolPtr(d.MinorTicks)

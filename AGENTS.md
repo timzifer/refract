@@ -142,6 +142,26 @@ and the guide column is measured against that total. Rewriting it as the
 obvious loop moves every golden file in the repository by an ulp — which the
 structural comparison will *not* catch, because it tolerates exactly that.
 
+**A Smith coord makes a scale's range its own domain.** `coord.Smith.Frame`
+calls `SetRange(lo, hi)` with the scale's *own domain*, so that `Map` is the
+identity and the pair reaching `Point` is a normalised impedance rather than a
+pixel. Choosing what the interval means is what a coord does — Cartesian chooses
+a distance along an edge, Polar chooses radians and pixels — so this is the
+mechanism and not an exception to it. Two consequences: the coord assumes an
+**affine** scale on each axis (a log Smith axis is a different chart, and the
+coord does not guess which), and a zoom moves nothing, because the next `Frame`
+re-derives the range from the domain it was just handed. Anything new that
+assumes "a scale's range is in pixels" is wrong under this coord and probably
+under the next one. See [ADR 0033](docs/adr/0033-smith-charts.md).
+
+**A coord may draw one grid line per tick, and may label nothing the scale did
+not.** `render.drawAxes` walks `for i, t := range xTicks`, takes the geometry
+from `fur.GridX[i]` and the *text* from `t.Label`. That is why a Smith chart's
+columns are an impedance rather than the reflection coefficient an instrument
+reports: with Γ on the axes the impedance grid would have no tick behind it. It
+is also why there are no VSWR circles. Before reaching for a second grid family,
+read ADR 0033's "Revisit if" — widening this is one decision, not several.
+
 **PDF is refract's own emitter, not `gg-pdf`.** That library cannot draw
 geometry — its path operations reach a stub in `gxpdf` — so the roadmap's plan
 of routing PDF through gg's recording API would have produced pages with tick
@@ -153,7 +173,7 @@ See [ADR 0009](docs/adr/0009-pdf-backend.md) for the evidence.
 is.** `internal/fontmetrics` carries Helvetica's advance table and PDF's
 base-14 Helvetica is that font; an *embedded* face measures through
 `embeddedFace`, out of its own `hmtx` and `hhea`
-([ADR 0037](docs/adr/0037-embedded-fonts.md)). Every other backend
+([ADR 0038](docs/adr/0038-embedded-fonts.md)). Every other backend
 approximates; this one does not, and the promise has to survive the font
 changing — measuring against Helvetica and drawing in Noto Sans sizes every
 margin from a typeface the document does not contain. Do not "improve" either
@@ -323,7 +343,7 @@ alone stops *training*; `pinned` also stops *framing*.
 places had to learn it.** `render.Panel.axesOf` asks the layer through
 `geom.Describe` — not a method on `Geom`, which never gains one — so the chart
 and the document agree by construction
-([ADR 0036](docs/adr/0036-secondary-axis.md)). The two directions are
+([ADR 0037](docs/adr/0037-secondary-axis.md)). The two directions are
 independent: a layer may name `OnX2` and `OnY2` together. Four consequences are
 load-bearing. `Panel.setRange` frames the coord against the **secondary** pair as
 well as the primary one, or the layers on a second axis map through a scale
@@ -354,7 +374,7 @@ gains a third.
 `Train`.** `Y2`/`ErrorBy` runs it vertically and `X2`/`ErrorXBy` horizontally —
 the rule `Rect` already follows about its edges, which is why there is no
 orientation option to contradict — and naming both is `ErrBothAxes` rather than
-a guess that depends on option order ([ADR 0035](docs/adr/0035-error-bars.md)).
+a guess that depends on option order ([ADR 0036](docs/adr/0036-error-bars.md)).
 The bounds are computed in `Train` because the axis has to describe them: an
 interval whose top runs off the plot is the reading the chart was opened for,
 which is the same boundary ADR 0019 draws for a stack's totals. `errorGeom.half`
@@ -367,7 +387,7 @@ would be a straight line under a polar coord, where the mark is an arc.
 down.** `scale.Format` takes a function and `scale.NumberFormat` takes a spec;
 `Desc` carries `Formatted` *and* `Format`, because a Desc that dropped the spec
 when a function was present would silently change the chart the day somebody
-deleted the Go code — [ADR 0034](docs/adr/0034-label-format-and-locale.md). Two
+deleted the Go code — [ADR 0035](docs/adr/0035-label-format-and-locale.md). Two
 things there are easy to break. A spec that names no precision must keep the
 axis's own, which is derived from the tick *step* and is what keeps a column of
 labels aligned: that is why `autoFor` returns a description rather than a
@@ -389,7 +409,7 @@ from then on and never written, so there is nothing for `Snapshotter` to fix.
 **A null is a missing value, and only a numeric column can say so by itself.**
 `""` is a string somebody may have measured and the zero time is an instant, so
 absence in a text or temporal column is stated beside the values through
-`data.Nulls` rather than inside them — [ADR 0033](docs/adr/0033-null-values.md).
+`data.Nulls` rather than inside them — [ADR 0034](docs/adr/0034-null-values.md).
 It is read in exactly one place, `geom.column`, which writes NaN whatever the
 column is stored as; every policy, traversal and mark downstream is the
 machinery that already handled a NaN, and no geom knows about nulls. Three
@@ -888,6 +908,14 @@ quantile function, which is a distribution library rather than a chart. And
 `geom.Ridgeline` is the **first geom that refuses a scale outright** — it errors
 on a continuous Y axis rather than drawing every ridge on top of the last.
 
+Things v1.2 deliberately did not do. A Smith chart has **no constant-|Γ| (VSWR)
+circles, no constant-Q arcs and no combined ZY overlay** — each is a third grid
+family against two tick lists, per the trap above — and it reads a **normalised
+impedance** rather than the reflection coefficient a VNA reports, for the same
+reason. `coord.SmithZ` is the bridge. It does not implement `coord.Exploder`:
+the middle of a Smith chart is a matched load, not an origin of magnitude, so
+there is no direction away from it that means anything. And it does not zoom.
+
 Things v0.8 deliberately did not do. There is no **geographic projection**: a
 projection transforms every point with no linear interval underneath it, which
 is a wider seam than this one, and ADR 0018 says it is argued on its own
@@ -968,7 +996,7 @@ the guide column; a horizontal one under the plot is a layout question, not a
 drawing one. The other — "a PDF is one page with no embedded font: text outside
 WinAnsi becomes `?`" — is half closed. It is still one page, and the *default*
 is still Helvetica and WinAnsi, byte for byte; `pdf.WithFont` is the way past
-it ([ADR 0037](docs/adr/0037-embedded-fonts.md)), and there is no per-glyph
+it ([ADR 0038](docs/adr/0038-embedded-fonts.md)), and there is no per-glyph
 fallback: a document draws every label in the face it was given, because a
 fallback chain is a font-matching policy and a plotting library is the wrong
 place to hold one.

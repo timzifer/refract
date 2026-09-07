@@ -54,6 +54,9 @@ type Desc struct {
 
 	// Nice and Zero are the linear and log framing options.
 	Nice, Zero bool
+	// TickValues is a linear scale's pinned tick sequence, ascending, and is
+	// empty for an axis that chooses its own. See [TickValues].
+	TickValues []float64
 	// Base is the log or symlog base, and Threshold the symlog linear region.
 	Base, Threshold float64
 	// MinorTicks reports the unlabelled subdivisions of a log or symlog axis.
@@ -136,6 +139,9 @@ func FromDesc(d Desc) (Scale, error) {
 		if d.Fixed {
 			opts = append(opts, Domain(d.Min, d.Max))
 		}
+		if len(d.TickValues) > 0 {
+			opts = append(opts, TickValues(d.TickValues...))
+		}
 		opts = append(opts, func(l *linear) { l.numFormat = f; l.loc = localeNamed(d.Locale) })
 		return Linear(opts...), nil
 
@@ -217,6 +223,9 @@ func (l *linear) Describe() Desc {
 	}
 	if l.fixed {
 		d.Min, d.Max = l.dmin, l.dmax
+	}
+	if len(l.ticks) > 0 {
+		d.TickValues = append([]float64(nil), l.ticks...)
 	}
 	return d
 }

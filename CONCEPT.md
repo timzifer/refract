@@ -981,18 +981,19 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- Tagged. The core was `v1.0.0` and is `v1.1.0`; `backend/gg` and
-  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.3`
+- Tagged. The core was `v1.0.0` and is `v1.2.0`; `backend/gg` and
+  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.4`
   — it stays at `v0` for as long as it is opt-in beta, whatever the core does
-  — and the Arrow adapter is `arrow/v18.0.1`, whose major is Arrow's. The
+  — and the Arrow adapter is `arrow/v18.0.2`, whose major is Arrow's. The
   milestones before `v1.0.0` were tagged at the same time as it, so every one
   of them names a commit. The order — the core first, then the nested modules'
   `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
-  Both post-freeze milestones below shipped in `v1.1.0`, and both are additive:
-  no interface gained a method, no struct lost a field, and every option they
-  add is one an existing mark accepts and ignores.
+  The post-freeze milestones below shipped in `v1.1.0` — tracks and the text
+  mark — and in `v1.2.0`, the Smith chart. All three are additive: no interface
+  gained a method, no struct lost a field, and every option they add is one an
+  existing mark accepts and ignores.
 
 ### v0.10 — Tracks: a band at a panel's edge — **shipped**
 
@@ -1051,14 +1052,43 @@ Neighbouring labels are not moved apart. A box too narrow drops its label
 already, and a general de-overlap pass is a layout question rather than a
 mark's. See [ADR 0032](docs/adr/0032-text-as-a-mark.md).
 
-### v1.2 — What is not a chart type — **shipped**
+### Smith charts: a third coordinate system — **shipped**
+
+`coord.Smith` reads a panel's two axes as a complex impedance — r = R/Z₀ and
+x = X/Z₀ — and maps the pair through the reflection coefficient
+Γ = (z − 1)/(z + 1), which carries the whole right half-plane, every passive
+impedance including the infinite ones, into the unit disc. It is the standard
+instrument of RF, microwave and antenna work, and no general-purpose plotting
+library draws one, because a library whose coordinate stage is hard-coded
+Cartesian cannot.
+
+It is the sharpest evidence that §8's pluggable stage was cut in the right
+place: the chart's two grid families are the images of the two axes' own grid
+lines, so the constant-resistance circles are what the X ticks look like once
+the coord has had them and the constant-reactance arcs are the Y ticks — and
+`render` was not touched at all. No new mark either: the locus is a `geom.Line`
+from v0.1.
+
+Two additions came with it. `scale.TickValues` pins a linear axis's tick
+sequence, because the 0.2 / 0.5 / 1 / 2 / 5 of a paper chart is a convention
+rather than the answer to a tick search. And `coord.SmithAdmittance` is the Y
+chart — one sign, since y = 1/z gives Γ_y = −Γ_z — applied to the picture and
+not to the data, so one load lands in one place whichever chart it is read on.
+
+Not drawn: constant-|Γ| circles, constant-Q arcs and a combined ZY overlay.
+Each is a third grid family, and a coord may draw one grid line per tick a
+scale emits — the same constraint that made the columns an impedance rather
+than the reflection coefficient an instrument reports.
+See [ADR 0033](docs/adr/0033-smith-charts.md).
+
+### v1.3 — What is not a chart type — **on `main`**
 
 Six gaps that [docs/chart-types.md](docs/chart-types.md) could not hold,
 because a catalogue sorted by machinery has no line for a mark that needs
 neither a coordinate system nor a stat, and no line at all for the three that
 are not marks. None of them is a shape; all of them were the difference
 between a chart being *drawable* and being *usable*. The catalogue grew a
-bucket G for them.
+bucket H for them.
 
 - **A null is a missing value, in every column kind.** A missing number is NaN
   and every policy refract has is written against that; a missing *category*
@@ -1067,13 +1097,13 @@ bucket G for them.
   millennia. `data.Nulls` is the optional interface `data.Source`'s own
   documentation promised, `geom.column` is the one place it is read, and
   everything downstream is the machinery that already handled a NaN
-  ([ADR 0033](docs/adr/0033-null-values.md)).
+  ([ADR 0034](docs/adr/0034-null-values.md)).
 - **A tick label is described rather than computed.** `scale.Desc` carried an
   honest field saying a document had lost the axis's formatter and gave it
   nowhere to put one, so a chart authored as JSON could not set a thousands
   separator, a currency or a decimal place at all. `scale.NumberFormat` and
   `scale.TimeLayout` are the declarative spelling, beside the Go function
-  rather than instead of it ([ADR 0034](docs/adr/0034-label-format-and-locale.md)).
+  rather than instead of it ([ADR 0035](docs/adr/0035-label-format-and-locale.md)).
 - **A chart in a language.** The time ladder rendered through Go's own English
   tables and `strconv` writes a decimal point — which for a German reader is
   not foreign but wrong, because "1.234" reads as one and a bit.
@@ -1083,13 +1113,13 @@ bucket G for them.
   tolerance carries two numbers per row and refract drew fifteen marks with
   nowhere to put the second. `geom.ErrorBar` takes either spelling a table
   comes in, and which axis it runs along follows from the encoding
-  ([ADR 0035](docs/adr/0035-error-bars.md)).
+  ([ADR 0036](docs/adr/0036-error-bars.md)).
 - **A second axis, in both directions.** A `Plot` had one scale per direction
   and a layer no way to name another. `Plot.Y2`/`geom.OnY2` and
   `Plot.X2`/`geom.OnX2` are a scale on the chart and a binding on the layer,
   and each axis reaches the layout, the coord's furniture, hit-testing,
   steering, the description and the document
-  ([ADR 0036](docs/adr/0036-secondary-axis.md)). The vertical one is two
+  ([ADR 0037](docs/adr/0037-secondary-axis.md)). The vertical one is two
   quantities in different units — revenue against margin; the horizontal one is
   most often one reading with two rulers, an oven curve counted in cycles and
   in minutes, which needs no second layer because an axis with nothing drawn on
@@ -1098,7 +1128,7 @@ bucket G for them.
   Helvetica, so every rune outside Latin-1 became `?` — in the format people
   send to customers. `pdf.WithFont` embeds a face, subset to the glyphs the
   document drew, with a `ToUnicode` map so the text is still selectable
-  ([ADR 0037](docs/adr/0037-embedded-fonts.md)). It needed an sfnt parser, and
+  ([ADR 0038](docs/adr/0038-embedded-fonts.md)). It needed an sfnt parser, and
   it is in `internal/sfnt` because the core module has no dependencies and
   keeps none.
 - *DoD:* a null in a text or temporal column is gapped rather than drawn; a
@@ -1117,9 +1147,13 @@ which is what every golden file in the repository asserts.
 
 - Harden the GPU tier as GoGPU matures.
 - More coordinate systems: geographic and map projections. Polar arrived in v0.8
-  ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam
-  — it transforms every point with no linear interval underneath it — and is
-  argued on its own evidence rather than smuggled in as a third `Coord`.
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)) and the **Smith chart** in
+  v1.2 ([ADR 0033](docs/adr/0033-smith-charts.md)) — the third `Coord`, and the
+  same shape of seam: it maps a *mapped pair* through Γ = (z−1)/(z+1), and its
+  grid is the two axes' own ticks, so `render` was not touched. A projection is
+  still the wider one — it transforms every point with no linear interval
+  underneath it, and its graticule has no tick behind it — and is argued on its
+  own evidence rather than smuggled in as a fourth.
 - Relational and hierarchical layouts: sankey/alluvial, chord, arc diagrams,
   treemap, sunburst. The one family in
   [docs/chart-types.md](docs/chart-types.md) that shares no machinery with the

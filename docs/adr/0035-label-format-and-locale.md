@@ -1,4 +1,4 @@
-# 0034 — A tick label is described rather than computed, and the description carries a language
+# 0035 — A tick label is described rather than computed, and the description carries a language
 
 **Status:** Accepted · **Date:** 2026-09-07
 

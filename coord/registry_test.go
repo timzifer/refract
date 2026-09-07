@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/timzifer/refract/coord"
+	"github.com/timzifer/refract/ir"
+	"github.com/timzifer/refract/scale"
 )
 
 // mirrored is a third-party coord: Cartesian with the axes swapped, which is
@@ -37,7 +39,7 @@ func TestAnUnregisteredTypeIsStillUnknown(t *testing.T) {
 }
 
 func TestRegisterRefusesABuiltInType(t *testing.T) {
-	for _, typ := range []coord.Type{coord.TypeCartesian, coord.TypePolar, ""} {
+	for _, typ := range []coord.Type{coord.TypeCartesian, coord.TypePolar, coord.TypeSmith, ""} {
 		func() {
 			defer func() {
 				if recover() == nil {
@@ -46,5 +48,36 @@ func TestRegisterRefusesABuiltInType(t *testing.T) {
 			}()
 			coord.Register(typ, func(coord.Desc) (coord.Coord, error) { return nil, nil })
 		}()
+	}
+}
+
+// Only a coord with edges opposite its axes can place a second one. Cartesian
+// has them; the other two do not, and a chart that names a second axis under
+// either simply does not draw it — which is the answer, not an omission.
+func TestOnlyCartesianPlacesAnOppositeAxis(t *testing.T) {
+	cases := []struct {
+		name string
+		cd   coord.Coord
+		want bool
+	}{
+		{"cartesian", coord.Cartesian(), true},
+		{"polar", coord.Polar(), false},
+		{"smith", coord.Smith(), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, got := c.cd.(coord.Opposite)
+			if got != c.want {
+				t.Errorf("%T implements Opposite = %v, want %v", c.cd, got, c.want)
+			}
+			// And the framed value a panel actually holds answers the same
+			// way: Frame hands back a coord positioned in the panel, and one
+			// that lost the interface there would draw a second axis in an
+			// unframed test and none in a chart.
+			framed := c.cd.Frame(ir.R(0, 0, 100, 100), scale.Linear(), scale.Linear())
+			if _, got := framed.(coord.Opposite); got != c.want {
+				t.Errorf("framed %T implements Opposite = %v, want %v", framed, got, c.want)
+			}
+		})
 	}
 }

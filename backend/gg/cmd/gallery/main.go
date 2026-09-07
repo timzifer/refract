@@ -766,6 +766,48 @@ func figures() []figure {
 			},
 		},
 		{
+			// The third coordinate system, and still not a new mark. A Smith
+			// chart is a geom.Line over two columns holding a normalised
+			// impedance, in a coord that maps the pair through Γ = (z−1)/(z+1)
+			// — which carries the whole right half-plane onto the disc. Its
+			// grid is not drawn by anything: the constant-resistance circles
+			// are what the X ticks look like once the coord has had them, and
+			// the constant-reactance arcs are the Y ticks, so render draws it
+			// with the same two loops it draws a Cartesian grid with.
+			// scale.TickValues asks for the six values a paper chart is printed
+			// at. See docs/adr/0033-smith-charts.md.
+			name: "smith", width: 620, high: 560, theme: theme.Light,
+			title: "A patch antenna across its band",
+			opts: []refract.Option{
+				refract.Coord(coord.Smith()),
+				// A Smith chart's one layer is the locus; there is nothing for
+				// a legend to name.
+				refract.Legend(false),
+			},
+			build: func(p *refract.Plot) {
+				re, im := s11Sweep(121)
+				r, x := make([]float64, len(re)), make([]float64, len(re))
+				for i := range re {
+					r[i], x[i] = coord.SmithZ(re[i], im[i])
+				}
+				// Pinned, not trained: the chart's extent is the whole disc
+				// whatever the data does, and a near-open reflection is a
+				// resistance in the thousands that would drag every tick into
+				// the last pixel before the rim.
+				p.X(scale.Linear(scale.Domain(0, 50),
+					scale.TickValues(0, 0.2, 0.5, 1, 2, 5)))
+				p.Y(scale.Linear(scale.Domain(-50, 50),
+					scale.TickValues(-5, -2, -1, -0.5, -0.2, 0.2, 0.5, 1, 2, 5)))
+				p.Add(geom.Line(refract.NewTable().Float64("r", r).Float64("x", x),
+					geom.X("r"), geom.Y("x"), geom.Color(palette.OkabeIto[1])))
+				best := bestMatch(re, im)
+				p.Add(geom.Scatter(refract.NewTable().
+					Float64("r", []float64{r[0], r[best], r[len(r)-1]}).
+					Float64("x", []float64{x[0], x[best], x[len(x)-1]}),
+					geom.X("r"), geom.Y("x"), geom.Color(palette.OkabeIto[0])))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -1106,4 +1148,45 @@ func noise(i int) float64 {
 		sum += float64(v>>11) / float64(uint64(1)<<53)
 	}
 	return sum - 6
+}
+
+// s11Sweep is a synthesised reflection measurement: the textbook model of a
+// patch antenna — a parallel RLC resonance behind the inductance of its feed —
+// swept across the band it is resonant in. It stands in for a Touchstone file,
+// which is a data source rather than a chart.
+//
+// The loop it traces is the shape the chart is read for: how tightly the locus
+// curls, and how close to the middle it passes.
+func s11Sweep(n int) (re, im []float64) {
+	const (
+		z0 = 50.0     // the system impedance, in ohms
+		r  = 50.0     // the resonance's shunt resistance
+		l  = 0.663e-9 // henries
+		c  = 6.63e-12 // farads
+		lf = 1.0e-9   // the feed inductance, which tilts the loop
+	)
+	re, im = make([]float64, n), make([]float64, n)
+	for i := range n {
+		f := 2.0e9 + 0.8e9*float64(i)/float64(n-1)
+		w := 2 * math.Pi * f
+		y := complex(1/r, w*c-1/(w*l))
+		z := (complex(0, w*lf) + 1/y) / z0
+		g := (z - 1) / (z + 1)
+		re[i], im[i] = real(g), imag(g)
+	}
+	return re, im
+}
+
+// bestMatch is the index of the sample closest to the middle of the chart,
+// which is the frequency the antenna is actually tuned to. It is the one
+// reading a Smith chart makes that a magnitude plot cannot: where the locus
+// passes, not merely how near it gets.
+func bestMatch(re, im []float64) int {
+	best, at := math.Inf(1), 0
+	for i := range re {
+		if d := math.Hypot(re[i], im[i]); d < best {
+			best, at = d, i
+		}
+	}
+	return at
 }

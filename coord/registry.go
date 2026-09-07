@@ -27,7 +27,7 @@ func Register(t Type, build func(Desc) (Coord, error)) {
 		panic("refract/coord: Register: a type needs a name and a builder")
 	}
 	switch t {
-	case TypeCartesian, TypePolar:
+	case TypeCartesian, TypePolar, TypeSmith:
 		panic(fmt.Sprintf("refract/coord: Register: %q is a built-in coord type", t))
 	}
 	registryMu.Lock()

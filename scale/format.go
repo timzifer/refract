@@ -355,8 +355,23 @@ func (l *linear) LabelOf(v float64) string {
 	if l.format != nil {
 		return l.format(v)
 	}
+	return l.numFormat.label(v, autoFor(l.step()), l.loc)
+}
+
+// step is the spacing a label format is derived from: the closest gap in a
+// pinned sequence, or the step the tick search chose.
+//
+// A pinned sequence has to be asked separately because it is not the search's
+// answer — an axis given the 0.2 / 0.5 / 1 / 2 / 5 grid of a Smith chart would
+// otherwise take its precision from a search over a domain nobody is looking
+// at, and label its ticks to a different number of decimals than it draws them
+// with. See [TickValues].
+func (l *linear) step() float64 {
+	if len(l.ticks) > 0 {
+		return closestSpacing(l.ticks)
+	}
 	lo, hi := l.effective()
-	return l.numFormat.label(v, autoFor(l.labelling(lo, hi, defaultTickCount).step), l.loc)
+	return l.labelling(lo, hi, defaultTickCount).step
 }
 
 // LabelOf implements [Labeller] for a log scale.

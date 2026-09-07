@@ -278,7 +278,7 @@ type Mark struct {
 // The field is absent for a Cartesian chart, which is every chart written
 // before there was a coord to write.
 type Coord struct {
-	// Type is "cartesian" or "polar".
+	// Type is "cartesian", "polar" or "smith".
 	Type string `json:"type"`
 	// Theta is the axis a polar coord sweeps around the circle: "x" or "y".
 	Theta string `json:"theta,omitempty"`
@@ -294,8 +294,16 @@ type Coord struct {
 	Sweep *float64 `json:"sweep,omitempty"`
 	// Counterclockwise reverses the direction the angular scale runs in.
 	Counterclockwise bool `json:"counterclockwise,omitempty"`
-	// Edge is how an edge between two marks is drawn: "arc", the default, or
-	// "chord", which is what a radar wants.
+	// Admittance mirrors a Smith chart through its centre — Γ ↦ −Γ — so that
+	// the pair reads as a conductance and a susceptance. It is the Y chart.
+	Admittance bool `json:"admittance,omitempty"`
+	// Edge is how an edge between two marks is drawn: "arc" or "chord".
+	//
+	// An absent field is the coord's own default, which is not the same answer
+	// for both: an arc under a polar coord, because that is what a rose petal's
+	// side is, and a chord under a Smith one, because that is what a measured
+	// locus is. So a document that names a type and nothing else draws what the
+	// constructor of that type draws.
 	Edge string `json:"edge,omitempty"`
 }
 
@@ -395,11 +403,15 @@ type Channel struct {
 
 // Scale is a positional or colour scale.
 type Scale struct {
-	Type   string  `json:"type,omitempty"`
-	Domain []any   `json:"domain,omitempty"`
-	Nice   bool    `json:"nice,omitempty"`
-	Zero   bool    `json:"zero,omitempty"`
-	Base   float64 `json:"base,omitempty"`
+	Type   string `json:"type,omitempty"`
+	Domain []any  `json:"domain,omitempty"`
+	Nice   bool   `json:"nice,omitempty"`
+	Zero   bool   `json:"zero,omitempty"`
+	// TickValues pins a linear axis's tick positions. Vega-Lite spells this
+	// `axis.values`; refract has no axis object on a channel, and `values` on a
+	// scale would read as a domain, so it is named for what it pins.
+	TickValues []float64 `json:"tickValues,omitempty"`
+	Base       float64   `json:"base,omitempty"`
 	// Constant is Vega-Lite's name for a symlog's linear threshold.
 	Constant float64  `json:"constant,omitempty"`
 	Padding  *float64 `json:"padding,omitempty"`

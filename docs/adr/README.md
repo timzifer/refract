@@ -42,11 +42,12 @@ depends on.
 | [0030](0030-arrow-major-version.md) | The Arrow adapter's major version is its upstream's, and its import path says so | Accepted | — |
 | [0031](0031-tracks.md) | A track is a panel with a fixed extent, on a scale it shares | Accepted | — |
 | [0032](0032-text-as-a-mark.md) | Text is a mark that reads a column, and it labels the box a row spans | Accepted | — |
-| [0033](0033-null-values.md) | A null is a missing value, and a column says so beside its values | Accepted | — |
-| [0034](0034-label-format-and-locale.md) | A tick label is described rather than computed, and the description carries a language | Accepted | — |
-| [0035](0035-error-bars.md) | An interval is a mark, and the encoding says which way it runs | Accepted | — |
-| [0036](0036-secondary-axis.md) | A second axis is a scale on the chart and a binding on the layer | Accepted, amended | — |
-| [0037](0037-embedded-fonts.md) | A PDF carries the font its labels need, subset to the glyphs it drew | Accepted | — |
+| [0033](0033-smith-charts.md) | A Smith chart is the polar-shaped coord seam, over normalised impedance | Accepted | — |
+| [0034](0034-null-values.md) | A null is a missing value, and a column says so beside its values | Accepted | — |
+| [0035](0035-label-format-and-locale.md) | A tick label is described rather than computed, and the description carries a language | Accepted | — |
+| [0036](0036-error-bars.md) | An interval is a mark, and the encoding says which way it runs | Accepted | — |
+| [0037](0037-secondary-axis.md) | A second axis is a scale on the chart and a binding on the layer | Accepted, amended | — |
+| [0038](0038-embedded-fonts.md) | A PDF carries the font its labels need, subset to the glyphs it drew | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

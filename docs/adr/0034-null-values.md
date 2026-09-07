@@ -1,4 +1,4 @@
-# 0033 — A null is a missing value, and a column says so beside its values
+# 0034 — A null is a missing value, and a column says so beside its values
 
 **Status:** Accepted · **Date:** 2026-09-07
 

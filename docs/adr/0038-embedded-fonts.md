@@ -1,4 +1,4 @@
-# 0037 — A PDF carries the font its labels need, subset to the glyphs it drew
+# 0038 — A PDF carries the font its labels need, subset to the glyphs it drew
 
 **Status:** Accepted · **Date:** 2026-09-07
 
