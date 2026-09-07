@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/timzifer/refract"
+	"github.com/timzifer/refract/backend/pdf"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
+	"github.com/timzifer/refract/internal/sfnttest"
 	"github.com/timzifer/refract/scale"
 )
 
@@ -174,5 +176,38 @@ func TestAnErrorBarRendersOverTheBarsItAnnotates(t *testing.T) {
 	// trained for.
 	if !strings.Contains(doc, ">14<") && !strings.Contains(doc, ">15<") {
 		t.Errorf("the axis stops short of the widest interval:\n%s", firstLabels(doc))
+	}
+}
+
+// A chart labelled in a language WinAnsi cannot hold, rendered to PDF with the
+// font that can. It is the end of the road the locale started: the labels are
+// in the reader's language, and the document can carry them.
+func TestAPDFCarriesTheFontItsLabelsNeed(t *testing.T) {
+	src := refract.NewTable().
+		String("k", []string{"A", "B", "Ä"}).
+		Float64("v", []float64{1, 2, 3})
+
+	p := refract.New(refract.Size(400, 300), refract.Locale(scale.LocaleDE))
+	p.X(scale.Ordinal())
+	p.Y(scale.Linear(scale.Nice(), scale.NumberFormat("#,.1")))
+	p.Add(geom.Bar(src, geom.X("k"), geom.Y("v")))
+
+	font := sfnttest.Font(sfnttest.Cmap4(), sfnttest.NumGlyphs)
+	var buf bytes.Buffer
+	if err := p.Render(refract.PDFWriter(&buf, pdf.Uncompressed(), pdf.WithFont(font, nil, nil))); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	doc := buf.String()
+	if !strings.Contains(doc, "/Encoding /Identity-H") {
+		t.Error("the document does not carry a CID font")
+	}
+	if strings.Contains(doc, "/BaseFont /Helvetica") {
+		t.Error("a label was still drawn in the base-14 face")
+	}
+	if !strings.Contains(doc, "/ToUnicode") {
+		t.Error("the document's text cannot be selected, copied or read aloud")
+	}
+	if strings.Contains(doc, "(?)") {
+		t.Error("a label still came out as the WinAnsi substitute")
 	}
 }

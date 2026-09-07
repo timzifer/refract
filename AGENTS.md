@@ -149,10 +149,28 @@ labels and nothing else. `gg/recording` therefore stays out of `backend/gg`,
 and [ADR 0006](docs/adr/0006-gg-coupling-surface.md)'s import rule is unchanged.
 See [ADR 0009](docs/adr/0009-pdf-backend.md) for the evidence.
 
-**The PDF backend measures with the font it draws with.** `internal/fontmetrics`
-carries Helvetica's advance table, and PDF's base-14 Helvetica is that font.
-Every other backend approximates; this one does not. Do not "improve" it by
-measuring with something else.
+**The PDF backend measures with the font it draws with, whichever font that
+is.** `internal/fontmetrics` carries Helvetica's advance table and PDF's
+base-14 Helvetica is that font; an *embedded* face measures through
+`embeddedFace`, out of its own `hmtx` and `hhea`
+([ADR 0037](docs/adr/0037-embedded-fonts.md)). Every other backend
+approximates; this one does not, and the promise has to survive the font
+changing — measuring against Helvetica and drawing in Noto Sans sizes every
+margin from a typeface the document does not contain. Do not "improve" either
+half by measuring with something else.
+
+**An embedded font's glyphs are numbered on first use, and that is what makes
+writing a PDF one pass.** A content stream names glyphs by id and a subset's
+ids depend on what the whole document drew, so a writer that waited would have
+to buffer every text run in the file. Numbering on first use inverts it, and
+`sfnt.Font.Subset` honours the order it is given — which is also the only order
+that is a pure function of the drawing, per ADR 0012. Two things there are
+load-bearing. A composite glyph's component ids are references into the same
+font and are **rewritten** to the new numbering; copying one unrewritten draws
+a plausible wrong letter, which is the worst kind of wrong. And the subset tag
+comes from the face's index rather than from a hash of the glyphs, because a
+hash would make the file depend on which labels the chart happened to draw and
+the golden tests compare bytes.
 
 **Colour ramps interpolate in linear light.** `palette.Lerp` decodes sRGB,
 blends, and re-encodes. Averaging the encoded bytes instead is about 20% too
@@ -935,7 +953,12 @@ different decision with a different shape. And the Arrow adapter does not handle
 `float16`, decimals or extension types; nothing that plots produces them yet,
 and an untested conversion is worse than an absent one.
 
-Two things v0.3 deliberately did not do, still true. A PDF is one page with no
-embedded font: text outside WinAnsi becomes `?`, and fixing that means embedding
-a font. And a colourbar is vertical, in the guide column; a horizontal one under
-the plot is a layout question, not a drawing one.
+One thing v0.3 deliberately did not do, still true: a colourbar is vertical, in
+the guide column; a horizontal one under the plot is a layout question, not a
+drawing one. The other — "a PDF is one page with no embedded font: text outside
+WinAnsi becomes `?`" — is half closed. It is still one page, and the *default*
+is still Helvetica and WinAnsi, byte for byte; `pdf.WithFont` is the way past
+it ([ADR 0037](docs/adr/0037-embedded-fonts.md)), and there is no per-glyph
+fallback: a document draws every label in the face it was given, because a
+fallback chain is a font-matching policy and a plotting library is the wrong
+place to hold one.

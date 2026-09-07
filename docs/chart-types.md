@@ -221,6 +221,7 @@ something else.
 | An interval around a measurement | **shipped** — [ADR 0035](adr/0035-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
 | A tick label a document can choose | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
 | A chart in a language | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
+| A PDF in a script WinAnsi cannot hold | **shipped** — [ADR 0037](adr/0037-embedded-fonts.md) | `pdf.WithFont`. The PDF emitter named the base-14 Helvetica and encoded WinAnsi, so every rune outside Latin-1 became `?` — Greek, Cyrillic, Hebrew, Thai and every CJK script, in the format people send to customers. |
 | Absence in a text or temporal column | **shipped** — [ADR 0033](adr/0033-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
 
 ## Already possible today
