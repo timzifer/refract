@@ -326,7 +326,7 @@ jobs:
             awk -f .github/scripts/benchtable.awk bench.txt || echo "no benchmark output"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: benchmarks
@@ -408,7 +408,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
@@ -466,7 +466,7 @@ jobs:
       # regenerated images are attached so the change can be looked at.
       - name: Publish the re-rendered figures for review
         if: steps.check.outcome == 'failure' && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rerendered-figures
           path: docs/images/
