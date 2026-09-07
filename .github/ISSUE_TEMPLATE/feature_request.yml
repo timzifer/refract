@@ -1,0 +1,28 @@
+name: Feature request
+description: A geometry, a statistic, a backend, or an API that is missing.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The API is frozen at v1.0.0 and follows semver, so an addition is easier
+        to land than a change. Say what you are trying to draw, not only what
+        function you want.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The chart or the workflow, and where refract stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: A sketch of the API or the behaviour, if you have one in mind.
+      render: go
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Workarounds, other libraries, or why the existing pieces do not compose into it.
