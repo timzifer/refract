@@ -164,3 +164,23 @@ func TestAColouredLayerDoesNotAllocatePerPoint(t *testing.T) {
 		t.Errorf("200k coloured marks allocate %.0f times per frame against %.0f for 1k", large, small)
 	}
 }
+
+// A label is measured against its box on every frame, and a label that does
+// not fit is cut — which builds a string. So the text path is the one place a
+// per-row allocation could hide behind work that has to happen anyway, and the
+// cut is remembered per row for exactly that reason: a chart redrawn at the
+// same size cuts every label where it cut it last frame.
+//
+// This is the gate on that. Ten times the rows, the same handful of
+// allocations. If it fails, the elision cache has stopped hitting — look at
+// textGeom.remember before looking anywhere else.
+func TestALabelledRenderDoesNotAllocatePerPoint(t *testing.T) {
+	small := allocsPerFrame(t, labelled(1_000))
+	large := allocsPerFrame(t, labelled(10_000))
+
+	const slack = 8
+	if large > small+slack {
+		t.Errorf("10k labelled rows allocate %.0f times per frame against %.0f for 1k: "+
+			"the text path is allocating per row", large, small)
+	}
+}

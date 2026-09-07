@@ -683,6 +683,48 @@ each other exactly where the comparison is. `Violin`, `Ridgeline` and `ECDF` are
 the three marks that answer that question without overplotting, and each takes
 the series column. Do not "fix" it by stacking or dodging bins.
 
+**A text layer measures while it builds, and that is the one call it may
+make.** `geom.Text` asks `ir.Backend.Measure` how wide each label is, because a
+label that overruns its box reads as belonging to the neighbouring row and only
+the layer knows both. `render.syncMeasurer` serialises those calls onto one font
+stack: panels build on separate goroutines, and two of them disagreeing about
+how wide a label is would draw different text in the same box. Measure is the
+*only* backend call a geom may make during `Build`; anything else belongs in the
+drawing calls it emits.
+
+**A truncated label is cached per row, and that is what keeps the text path off
+the allocation gate.** Cutting a label builds a string, which is the one place a
+per-row allocation could hide behind work that has to happen anyway.
+`textGeom.remember` hands back last frame's string when the cut has not moved, so
+a chart redrawn at the same size builds none — `BenchmarkLabelled1k` against
+`BenchmarkLabelled10k` and `TestALabelledRenderDoesNotAllocatePerPoint` are what
+hold it. The cache lives on the layer rather than in the scratch pool because it
+has to survive a `Build`, the same argument `barGeom.gaps` makes.
+
+**A text layer's box is the box `Rect` would draw, and its anchor is clamped to
+what is visible.** The same options handed to both marks label the rectangles
+exactly, which is why the slot rule for an unnamed edge is `spanOn` rather than
+anything of its own. The clamp is against `coord.Extent` rather than the plot
+rectangle — that is the interval the scales map into, so it means something
+under a polar coord too — and it is what puts the label in the middle of a bar
+that is half scrolled off the edge rather than off-screen with the box's true
+centre. The room a label has is measured as the chord between the box's mapped
+edges, because under polar the box's width is an angle and what a label needs is
+a length.
+
+**`geom.Align` records having been told, for the reason `Dash` and `Shape` do.**
+The start of a run on the baseline is the zero value *and* an alignment somebody
+may have asked for, and a text layer centres a label in its box when nobody has.
+Without `config.alignSet` and `Desc.AlignSet` a round trip through the spec turns
+that default into a pinned left edge and the chart silently changes.
+
+**A note and a text layer are both `"text"` in the document, and the encoding is
+what tells them apart.** `spec.geomMark` asks `hasField`, exactly as it does for
+a rect against a region: a text mark with a `text` *field* is data, one placed at
+literal values is an annotation. Adding a channel to `spec.Encoding` means adding
+it to `hasField` too, or a layer encoded only by that channel reads back as an
+annotation.
+
 **Responsive scaling multiplies lengths and must not mutate a shared theme.**
 `theme.Scaled` copies every dash slice it touches rather than scaling in place —
 `theme.Light` is a package variable, and scaling its grid dash would scale it

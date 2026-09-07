@@ -63,7 +63,10 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		// Both are a rect and neither is oriented, so the type does not tell
 		// them apart — the encoding does. See [geomMark].
 		return "rect", "", nil
-	case geom.MarkNote:
+	case geom.MarkNote, geom.MarkText:
+		// Both are text and neither is oriented, so the type does not tell
+		// them apart — the encoding does, exactly as it does for a rect and a
+		// region. See [geomMark].
 		return "text", "", nil
 	}
 	// A mark this package did not define — one built by [geom.Register] —
@@ -129,6 +132,9 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		}
 		return geom.MarkRegion, nil
 	case "text":
+		if hasField(enc) {
+			return geom.MarkText, nil
+		}
 		return geom.MarkNote, nil
 	}
 	if m.Type == "" {
@@ -145,7 +151,7 @@ func hasField(enc *Encoding) bool {
 	if enc == nil {
 		return false
 	}
-	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size} {
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text} {
 		if ch != nil && ch.Field != "" {
 			return true
 		}

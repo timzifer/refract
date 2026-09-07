@@ -224,6 +224,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		CellSize:  l.Mark.DensityCells,
 		Explode:   l.Mark.Explode,
 		Text:      l.Mark.Text,
+		Elide:     l.Mark.Elide,
 		FontSize:  l.Mark.FontSize,
 		Rotation:  radians(l.Mark.Angle),
 		Extend:    true,
@@ -235,6 +236,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Steps:     stepPos(l.Mark.Interpolate),
 		HAlign:    hAlignOf(l.Mark.Align),
 		VAlign:    vAlignOf(l.Mark.Baseline),
+		AlignSet:  l.Mark.Align != "" || l.Mark.Baseline != "",
 		Bins:      l.Mark.Bins,
 		Bandwidth: l.Mark.Bandwidth,
 		Span:      l.Mark.Span,
@@ -333,6 +335,9 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 		d.Datum.X1 = datumOf(enc.X2)
 	}
 
+	if enc.Text != nil && enc.Text.Field != "" {
+		d.TextCol = enc.Text.Field
+	}
 	if enc.Size != nil && enc.Size.Field != "" {
 		ss, err := decodeSizeScale(enc.Size.Scale)
 		if err != nil {

@@ -23,6 +23,7 @@ const (
 	MarkStep    Mark = "step"
 	MarkBoxplot Mark = "boxplot"
 	MarkRect    Mark = "rect"
+	MarkText    Mark = "text"
 
 	// The distribution marks. Each of them replaces the rows with a summary of
 	// where they are, so each of them decides one of its own axes: a histogram
@@ -130,6 +131,12 @@ type Desc struct {
 	Datum Datum
 	Text  string
 
+	// TextCol is the column a [Text] layer reads its labels from, and Elide
+	// whether it truncates one that does not fit rather than dropping it.
+	// Both are unused by a layer that draws no text.
+	TextCol string
+	Elide   bool
+
 	// The styling options, one field per [Option]. A nil Color or Fill means
 	// the layer takes its colour from the palette.
 	Color   *ir.Color
@@ -162,6 +169,12 @@ type Desc struct {
 	FontSize float64
 	HAlign   ir.HAlign
 	VAlign   ir.VAlign
+	// AlignSet is whether the layer was told how to align its text. The start
+	// of a run on the baseline is both the zero value and an alignment
+	// somebody may have asked for, and a [Text] layer centres a label in its
+	// box when nobody has — so without the flag a round trip would turn that
+	// default into a pinned left edge, exactly as it would for DashSet.
+	AlignSet bool
 	Rotation float64
 	Extend   bool
 
@@ -243,6 +256,8 @@ func FromDesc(d Desc) (Geom, error) {
 		return Step(d.Source, opts...), nil
 	case MarkBoxplot:
 		return Boxplot(d.Source, opts...), nil
+	case MarkText:
+		return Text(d.Source, opts...), nil
 	case MarkRect:
 		return Rect(d.Source, opts...), nil
 	case MarkHistogram:
@@ -284,7 +299,6 @@ func (d Desc) options() []Option {
 		Budget(d.Budget),
 		DensityCells(d.CellSize),
 		FontSize(d.FontSize),
-		Align(d.HAlign, d.VAlign),
 		Rotate(d.Rotation),
 		Extend(d.Extend),
 		Order(d.Order),
@@ -295,6 +309,7 @@ func (d Desc) options() []Option {
 		Span(d.Span),
 		Smooth(d.Smooth),
 		Overlap(d.Overlap),
+		Elide(d.Elide),
 	}
 	if d.StackSet {
 		opts = append(opts, Stack(d.Stack))
@@ -329,6 +344,9 @@ func (d Desc) options() []Option {
 	if d.Label != "" {
 		opts = append(opts, Label(d.Label))
 	}
+	if d.TextCol != "" {
+		opts = append(opts, TextBy(d.TextCol))
+	}
 	if d.Color != nil {
 		opts = append(opts, Color(*d.Color))
 	}
@@ -340,6 +358,9 @@ func (d Desc) options() []Option {
 	}
 	if d.MarkerSet {
 		opts = append(opts, Shape(d.Marker))
+	}
+	if d.AlignSet {
+		opts = append(opts, Align(d.HAlign, d.VAlign))
 	}
 	if d.ColorCol != "" && d.ColorScale != nil {
 		opts = append(opts, ColorBy(d.ColorCol, d.ColorScale))
@@ -392,6 +413,8 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Explode:    c.explode,
 		ExplodeCol: c.explodeCol,
 		Label:      c.label,
+		TextCol:    c.textCol,
+		Elide:      c.elide,
 		Color:      c.color,
 		Fill:       c.fill,
 		Width:      c.width,
@@ -415,6 +438,7 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		FontSize:   c.fontSize,
 		HAlign:     c.halign,
 		VAlign:     c.valign,
+		AlignSet:   c.alignSet,
 		Rotation:   c.rotation,
 		Extend:     c.extend,
 		Extra:      c.extra,
