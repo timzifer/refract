@@ -1049,7 +1049,7 @@ needs, because locked means no hover and no hover means no tooltip.
 
 Neighbouring labels are not moved apart. A box too narrow drops its label
 already, and a general de-overlap pass is a layout question rather than a
-mark's.
+mark's. See [ADR 0032](docs/adr/0032-text-as-a-mark.md).
 
 ### Beyond v1.0
 
