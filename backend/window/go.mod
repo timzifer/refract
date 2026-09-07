@@ -10,7 +10,7 @@ go 1.25.0
 require (
 	github.com/gogpu/gogpu v0.52.1
 	github.com/timzifer/refract v1.0.0
-	github.com/timzifer/refract/backend/gg v1.0.0
+	github.com/timzifer/refract/backend/gg v1.0.2
 )
 
 require github.com/gogpu/gpucontext v0.28.0
