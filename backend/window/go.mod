@@ -17,8 +17,8 @@ go 1.25.0
 // the new wgpu. Dependabot is told to hold at it in .github/dependabot.yml.
 require (
 	github.com/gogpu/gogpu v0.53.1
-	github.com/timzifer/refract v1.1.0
-	github.com/timzifer/refract/backend/gg v1.1.0
+	github.com/timzifer/refract v1.2.0
+	github.com/timzifer/refract/backend/gg v1.2.0
 )
 
 require github.com/gogpu/gpucontext v0.29.0
