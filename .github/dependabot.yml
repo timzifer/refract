@@ -1,0 +1,24 @@
+# The core module has no dependencies to update by design, so it is not listed:
+# an update to it would be a bug. The nested modules and the actions in CI are
+# what actually move.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - /backend/gg
+      - /backend/gg/gpu
+      - /backend/window
+      - /arrow/v18
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

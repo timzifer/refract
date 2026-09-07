@@ -939,6 +939,10 @@ of every mark and a window shows what a file would
   reference, generated from the doc comments.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, how
   to regenerate golden files and figures, and how a release is tagged.
+- [SECURITY.md](SECURITY.md) — which versions get fixes, and how to report a
+  vulnerability privately.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — what participating here looks
+  like.
 
 ## A note on how this was built
 

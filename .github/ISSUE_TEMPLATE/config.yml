@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/timzifer/refract/discussions
+    about: Ask how something works, or float a design before it becomes an issue.
+  - name: Security vulnerability
+    url: https://github.com/timzifer/refract/security/advisories/new
+    about: Report privately. Please do not open a public issue.

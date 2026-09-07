@@ -1,0 +1,54 @@
+name: Bug report
+description: Something renders wrong, panics, or does not build.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A program that reproduces the problem is worth
+        more than any description of it.
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      description: Which module the problem is in.
+      options:
+        - core (github.com/timzifer/refract)
+        - backend/gg (PNG, JPEG)
+        - backend/window (native window)
+        - backend/gg/gpu (GPU tier)
+        - arrow/v18 (Arrow adapter)
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The module version, or the commit if you are on a branch.
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Go version, OS and architecture
+      description: The output of `go version`.
+      placeholder: go version go1.25.0 linux/amd64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproducer
+      description: The smallest program that shows the problem.
+      render: go
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+      description: Paste the panic or the error verbatim; attach the output image if the chart is wrong.
+    validations:
+      required: true

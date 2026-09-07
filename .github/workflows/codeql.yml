@@ -1,0 +1,50 @@
+# CodeQL runs on the whole workspace rather than on the core alone: the core is
+# stdlib-only and is the least likely place for a finding, while the backends
+# are where bytes from a data set turn into an image, a document or a GPU call.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a finding in a dependency's pattern shows up without a commit.
+    - cron: "27 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyse Go
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          build-mode: manual
+
+      # go.work ties the five modules together, so one build covers them all.
+      - name: Build every module
+        run: |
+          go build ./...
+          go build ./backend/gg/...
+          go build ./backend/gg/gpu/...
+          go build ./backend/window/...
+          go build ./arrow/v18/...
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
