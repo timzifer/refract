@@ -217,6 +217,7 @@ something else.
 
 | Gap | Status | What it was |
 |---|---|---|
+| Two quantities in different units | **shipped** — [ADR 0036](adr/0036-secondary-axis.md) | `Plot.Y2` and `geom.OnY2`. A plot had one Y scale and a layer no way to name another, so revenue-and-margin — bars against the left axis, a percentage against the right — could not be drawn at all; normalising into the primary axis's units draws it and makes the axis, the zoom and the tooltip all read in units nobody measured. |
 | An interval around a measurement | **shipped** — [ADR 0035](adr/0035-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
 | A tick label a document can choose | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
 | A chart in a language | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |

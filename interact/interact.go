@@ -124,6 +124,10 @@ type Index struct {
 	layer int
 	label string
 	open  bool
+	// layerY is the vertical scale the layer currently being drawn reads, set
+	// by [Index.LayerY] and nil where the renderer did not say — which is
+	// every renderer that has one axis to say anything about.
+	layerY scale.Scale
 }
 
 // rowMark is where one source row landed.
@@ -144,6 +148,13 @@ type mark struct {
 	label        string
 	lo, hi       int // into pts
 	bounds       ir.Rect
+
+	// y is the vertical scale this mark was drawn against, when it is not the
+	// panel's own — a layer bound to the chart's secondary axis reads a
+	// different one, and inverting its marks through the panel's Y would
+	// report a value from the wrong axis. It is nil for every mark on the
+	// primary axis, which is every mark on a chart with one.
+	y scale.Scale
 }
 
 // New returns an empty index.
@@ -156,6 +167,7 @@ func (ix *Index) Reset() {
 	ix.pts = ix.pts[:0]
 	ix.rows = ix.rows[:0]
 	ix.panel, ix.layer, ix.label, ix.open = -1, -1, "", false
+	ix.layerY = nil
 }
 
 // TrackRows turns row identity on or off and returns ix, so the call can be
@@ -204,12 +216,22 @@ func (ix *Index) Panel(i int, area ir.Rect, x, y scale.Scale, cd coord.Coord) {
 	}
 	ix.panels[i] = Panel{Area: area, X: x, Y: y, Coord: cd}
 	ix.panel, ix.layer, ix.label, ix.open = i, -1, "", false
+	ix.layerY = nil
 }
 
 // Layer implements the render package's Observer.
 func (ix *Index) Layer(i int, label string) {
 	ix.layer, ix.label, ix.open = i, label, true
 }
+
+// LayerY implements the render package's LayerAxes: it records which vertical
+// scale the layer about to be drawn reads.
+//
+// A chart with a secondary axis draws some of its layers against a scale that
+// is not the panel's, and a hit has to be read back through the scale the mark
+// was placed by. It is remembered per layer rather than per panel because that
+// is where the binding is: the two axes share a panel.
+func (ix *Index) LayerY(y scale.Scale) { ix.layerY = y }
 
 // Panels reports the panels of the last watched render, in chart order.
 func (ix *Index) Panels() []Panel { return ix.panels }
@@ -257,6 +279,7 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	best := Hit{Distance: float32(math.Inf(1)), Row: -1}
 	bestRank := len(ranked)
 	var bestBounds ir.Rect
+	var bestY scale.Scale
 	found := false
 	for _, m := range ix.marks {
 		if !within(m.bounds, pt, tol) {
@@ -276,6 +299,7 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 			Panel: m.panel, Layer: m.layer, Series: m.label,
 			Kind: m.kind, At: at, Distance: d, Row: -1,
 		}, true
+		bestY = m.y
 	}
 	if !found {
 		return Hit{}, false
@@ -288,7 +312,14 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 		// the identity, and would name a pixel rather than a value anywhere
 		// else.
 		mx, my := p.Coords().Invert(best.At)
-		best.X, best.Y = p.X.Invert(mx), p.Y.Invert(my)
+		// The mark's own vertical scale where it had one, which is what makes
+		// a hit on a layer bound to the secondary axis report that axis's
+		// value rather than the primary one's reading of the same pixel.
+		y := p.Y
+		if bestY != nil {
+			y = bestY
+		}
+		best.X, best.Y = p.X.Invert(mx), y.Invert(my)
 	}
 	best.Row = ix.rowAt(best, pt, bestBounds)
 	return best, true
@@ -478,6 +509,7 @@ func (p *probe) add(kind Kind, pts []ir.Point, pad float32) {
 	ix.marks = append(ix.marks, mark{
 		panel: ix.panel, layer: ix.layer, kind: kind, label: ix.label,
 		lo: lo, hi: len(ix.pts), bounds: bounds(ix.pts[lo:], pad),
+		y: ix.layerY,
 	})
 }
 

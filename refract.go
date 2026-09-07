@@ -140,11 +140,13 @@ type Plot struct {
 	dpr           float64
 	theme         themepkg.Theme
 
-	title  string
-	xTitle string
-	yTitle string
+	title   string
+	xTitle  string
+	yTitle  string
+	y2Title string
 
 	x, y   scale.Scale
+	y2     scale.Scale
 	coord  coordpkg.Coord
 	layers []geom.Geom
 
@@ -318,6 +320,10 @@ func XTitle(s string) Option { return func(p *Plot) { p.xTitle = s } }
 // YTitle sets the vertical axis title.
 func YTitle(s string) Option { return func(p *Plot) { p.yTitle = s } }
 
+// Y2Title sets the title of the secondary vertical axis, written down the
+// chart's right-hand side. It is ignored by a chart with no [Plot.Y2].
+func Y2Title(s string) Option { return func(p *Plot) { p.y2Title = s } }
+
 // Legend forces the legend on or off. By default a legend appears once a plot
 // has more than one layer: one series does not need to be told apart from
 // anything.
@@ -402,6 +408,24 @@ func (p *Plot) X(s scale.Scale) *Plot { p.x = s; return p }
 // Y sets the vertical scale. The default is [scale.Linear] with nicing.
 func (p *Plot) Y(s scale.Scale) *Plot { p.y = s; return p }
 
+// Y2 sets the chart's secondary vertical axis: a second scale, drawn down the
+// right-hand side, read by the layers that asked for it with [geom.OnY2].
+//
+// It is the chart of two quantities in different units — revenue as bars
+// against the left axis, margin as a percentage line against the right — and
+// it is one chart with two axes rather than two charts overlaid, which is why
+// the binding is on the layer and the scale is on the plot.
+//
+// The second axis draws **no grid lines**. Two ladders of horizontal rules at
+// different values are a moiré rather than a reading, and which of the two a
+// line belongs to is unanswerable by looking; the grid stays the primary
+// axis's. See [ADR 0036](docs/adr/0036-secondary-axis.md).
+//
+// A chart with no layer on it draws the axis anyway, because an axis somebody
+// asked for is a statement about the chart even where nothing reaches it yet —
+// a live chart whose second series has not arrived is the case.
+func (p *Plot) Y2(s scale.Scale) *Plot { p.y2 = s; return p }
+
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
@@ -481,6 +505,7 @@ func (p *Plot) chart() (render.Chart, error) {
 	if p.locale != nil {
 		scale.Localize(c.X, p.locale)
 		scale.Localize(c.Y, p.locale)
+		scale.Localize(c.Y2, p.locale)
 		for i := range c.Panels {
 			scale.Localize(c.Panels[i].X, p.locale)
 			scale.Localize(c.Panels[i].Y, p.locale)
@@ -500,6 +525,8 @@ func (p *Plot) describe() (render.Chart, error) {
 		YTitle:      p.yTitle,
 		X:           p.scaleX(),
 		Y:           p.scaleY(),
+		Y2:          p.y2,
+		Y2Title:     p.y2Title,
 		Coord:       p.coord,
 		Layers:      p.layers,
 		ShowLegend:  p.showLegend(),
@@ -533,6 +560,7 @@ func (p *Plot) describe() (render.Chart, error) {
 			Layers:     fp.Layers,
 			X:          c.X,
 			Y:          c.Y,
+			Y2:         c.Y2,
 			// A shared axis is written once, at the edge of the grid — which
 			// is the last panel in the column, not the last row: a wrapped
 			// facet whose final row is short would otherwise leave the
@@ -542,6 +570,11 @@ func (p *Plot) describe() (render.Chart, error) {
 			// panel but one.
 			ShowX: freeX || outermost(panels, fp, below),
 			ShowY: freeY || outermost(panels, fp, leftOf),
+			// The second axis is written at the *right* edge of the grid,
+			// which is the mirror of where the first one is written and the
+			// same rule: a shared axis belongs at the outside, and a free one
+			// is a different axis in every panel and has to be written in each.
+			ShowY2: c.Y2 != nil && (freeY || outermost(panels, fp, rightOf)),
 		}
 		if freeX {
 			if rp.X, err = freeScale(c.X); err != nil {
@@ -551,6 +584,15 @@ func (p *Plot) describe() (render.Chart, error) {
 		if freeY {
 			if rp.Y, err = freeScale(c.Y); err != nil {
 				return render.Chart{}, err
+			}
+			if c.Y2 != nil {
+				// A free Y axis frees both of them. One panel's data must not
+				// move another panel's axis, and that is as true of the second
+				// as of the first — a shared second axis under a free first
+				// one would be half a free facet, which is not a reading.
+				if rp.Y2, err = freeScale(c.Y2); err != nil {
+					return render.Chart{}, err
+				}
 			}
 		}
 		c.Panels = append(c.Panels, rp)
@@ -569,12 +611,13 @@ func outermost(panels []facet.Panel, p facet.Panel, beyond func(a, b facet.Panel
 	return true
 }
 
-// below and leftOf are the two directions that matter. A shared X axis is
+// below, leftOf and rightOf are the three directions that matter. A shared X axis is
 // written by the last panel in its column — not by the bottom row, because a
 // wrapped facet whose final row is short would leave the panels above the gap
 // unlabelled. A shared Y axis is written by the first panel in its row.
-func below(a, b facet.Panel) bool  { return a.Col == b.Col && b.Row > a.Row }
-func leftOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col < a.Col }
+func below(a, b facet.Panel) bool   { return a.Col == b.Col && b.Row > a.Row }
+func leftOf(a, b facet.Panel) bool  { return a.Row == b.Row && b.Col < a.Col }
+func rightOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col > a.Col }
 
 // freeScale copies a scale so that one panel's data cannot move another
 // panel's axis.

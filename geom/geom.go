@@ -177,6 +177,7 @@ type config struct {
 	overlap   float64
 
 	closed    bool
+	onY2      bool
 	elide     bool
 	dashSet   bool
 	markerSet bool
@@ -452,6 +453,21 @@ func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
 // on by default: a boxplot that hides them is a boxplot that hides exactly the
 // rows a reader opened the chart to find.
 func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
+
+// OnY2 binds this layer to the chart's secondary vertical axis, the one
+// [github.com/timzifer/refract.Plot.Y2] sets, instead of to its primary one.
+//
+// It is the option a chart of two quantities in different units needs —
+// revenue as bars against a left axis, margin as a percentage line against a
+// right one — and it is on the *layer* because that is where the binding is: a
+// scale does not know which marks read it, and a chart with two Y axes is one
+// chart with two of them rather than two charts overlaid.
+//
+// A layer that asks for it in a chart with no secondary axis draws against the
+// primary one, silently, for the reason [Explode] is silent under a Cartesian
+// coord: an option every mark accepts must not make a chart's validity depend
+// on something set somewhere else.
+func OnY2() Option { return func(c *config) { c.onY2 = true } }
 
 // Mid selects the column an [ErrorBar] marks the measurement at, inside the
 // interval it draws.

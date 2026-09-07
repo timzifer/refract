@@ -24,6 +24,10 @@ type Grid struct {
 	Title string
 	// XTitle and YTitle label the shared axes, once for the grid.
 	XTitle, YTitle string
+	// Y2Title labels the secondary vertical axis, down the grid's right-hand
+	// side. It is "" for a grid with one Y axis, which is what leaves the
+	// arithmetic below exactly what it was.
+	Y2Title string
 
 	// Rows and Cols are the shape of the grid.
 	Rows, Cols int
@@ -69,6 +73,12 @@ type Panel struct {
 	// shares an axis with the panel beside it leaves them empty and takes the
 	// space anyway, so that the panels stay the same size.
 	XLabels, YLabels []string
+
+	// Y2Labels are the tick labels of the panel's secondary vertical axis,
+	// written down its right-hand side. They size a gutter of their own,
+	// per column, exactly as YLabels do on the left — a panel with none takes
+	// none, so a grid without a second axis is laid out as it always was.
+	Y2Labels []string
 }
 
 // GridResult is where everything goes, in device space.
@@ -90,6 +100,10 @@ type GridResult struct {
 	// titles, zero when there is none. YTitle is drawn rotated a quarter turn
 	// anticlockwise.
 	Title, XTitle, YTitle ir.Point
+	// Y2Title is the anchor for the secondary axis's title, down the right of
+	// the grid. It is drawn rotated a quarter turn *clockwise*, so that it
+	// reads from the outside of the chart the way the left one does.
+	Y2Title ir.Point
 
 	// Guides are the guide boxes, one per entry in Grid.Guides and in the same
 	// order, as in [Result].
@@ -130,12 +144,15 @@ func Panels(g Grid, m Measurer) GridResult {
 	if g.Title != "" {
 		titleH = m.Measure(ir.TextRun{Text: g.Title, Font: titleFont}).Height() + th.AxisTitlePad
 	}
-	var bottomTitleH, leftTitleH float32
+	var bottomTitleH, leftTitleH, rightTitleH float32
 	if g.XTitle != "" {
 		bottomTitleH = m.Measure(ir.TextRun{Text: g.XTitle, Font: labelFont}).Height() + th.AxisTitlePad
 	}
 	if g.YTitle != "" {
 		leftTitleH = m.Measure(ir.TextRun{Text: g.YTitle, Font: labelFont}).Height() + th.AxisTitlePad
+	}
+	if g.Y2Title != "" {
+		rightTitleH = m.Measure(ir.TextRun{Text: g.Y2Title, Font: labelFont}).Height() + th.AxisTitlePad
 	}
 
 	// Per-column left gutters and per-row bottom gutters. A gutter is shared
@@ -145,6 +162,11 @@ func Panels(g Grid, m Measurer) GridResult {
 	rowGutter := make([]float32, g.Rows)
 	stripH := make([]float32, g.Rows)
 	rightStripW := make([]float32, g.Cols)
+	// The right gutter is the left one turned about: a second vertical axis
+	// writes its labels outside the panel's far edge, and they need the same
+	// room. A column whose panels have no second axis gets none, which is why
+	// a grid without one is laid out exactly as it was.
+	rightGutter := make([]float32, g.Cols)
 
 	bandH := m.Measure(ir.TextRun{Text: "Hg", Font: stripFont}).Height() + 2*th.StripPad
 	for _, p := range g.Panels {
@@ -153,6 +175,9 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		if w := maxAdvance(m, p.YLabels, tickFont); w > 0 {
 			colGutter[p.Col] = maxOf(colGutter[p.Col], th.TickLength+th.TickLabelPad+w)
+		}
+		if w := maxAdvance(m, p.Y2Labels, tickFont); w > 0 {
+			rightGutter[p.Col] = maxOf(rightGutter[p.Col], th.TickLength+th.TickLabelPad+w)
 		}
 		if h := maxHeight(m, p.XLabels, tickFont); h > 0 {
 			rowGutter[p.Row] = maxOf(rowGutter[p.Row], th.TickLength+th.TickLabelPad+h)
@@ -183,19 +208,23 @@ func Panels(g Grid, m Measurer) GridResult {
 	for _, gd := range guides {
 		guideW = maxOf(guideW, gd.w)
 	}
-	right := float32(0)
+	right := rightTitleH
 	if guideW > 0 {
-		right = guideW + th.LegendPad
+		right += guideW + th.LegendPad
 	} else if last := lastXLabel(g); last != "" {
 		// Without a guide the rightmost tick label, which is centred on the
-		// axis end, would otherwise run off the canvas.
-		right = m.Measure(ir.TextRun{Text: last, Font: tickFont}).Advance / 2
+		// axis end, would otherwise run off the canvas. A second axis already
+		// reserves a gutter wider than half a label, so this only matters
+		// where there is none.
+		if sum(rightGutter) == 0 {
+			right += m.Measure(ir.TextRun{Text: last, Font: tickFont}).Advance / 2
+		}
 	}
 
 	regionLeft := area.Min.X + leftTitleH
 	regionRight := area.Max.X - right
 	usableW := regionRight - regionLeft
-	availW := usableW - sum(colGutter) - sum(rightStripW) - float32(g.Cols-1)*th.PanelGap
+	availW := usableW - sum(colGutter) - sum(rightGutter) - sum(rightStripW) - float32(g.Cols-1)*th.PanelGap
 	colW, _ := extents(g.ColWidths, g.Cols, availW)
 
 	r.Region = ir.Rect{
@@ -212,7 +241,10 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		x += colGutter[c]
 		colX[c] = x
-		x += colW[c] + rightStripW[c]
+		// The second axis's labels sit against the panel and the strip goes
+		// outside them, which is the order a reader expects: the axis belongs
+		// to the panel and the strip names the panel.
+		x += colW[c] + rightGutter[c] + rightStripW[c]
 	}
 	rowY := make([]float32, g.Rows)
 	y := regionTop
@@ -242,8 +274,8 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		if p.RightStrip != "" {
 			r.RightStrips[i] = ir.Rect{
-				Min: ir.Point{X: box.Max.X, Y: box.Min.Y},
-				Max: ir.Point{X: box.Max.X + rightStripW[p.Col], Y: box.Max.Y},
+				Min: ir.Point{X: box.Max.X + rightGutter[p.Col], Y: box.Min.Y},
+				Max: ir.Point{X: box.Max.X + rightGutter[p.Col] + rightStripW[p.Col], Y: box.Max.Y},
 			}
 		}
 	}
@@ -267,8 +299,19 @@ func Panels(g Grid, m Measurer) GridResult {
 		mm := m.Measure(ir.TextRun{Text: g.YTitle, Font: labelFont})
 		r.YTitle = ir.Point{X: area.Min.X + mm.Ascent, Y: (span.Min.Y + span.Max.Y) / 2}
 	}
+	if g.Y2Title != "" {
+		mm := m.Measure(ir.TextRun{Text: g.Y2Title, Font: labelFont})
+		r.Y2Title = ir.Point{X: area.Max.X - mm.Descent, Y: (span.Min.Y + span.Max.Y) / 2}
+	}
 
-	r.Guides = placeGuides(guides, span, th)
+	// The guides sit outside everything the last column owns, which now
+	// includes its second axis's labels. Anchoring them on the panel edge
+	// would put a legend on top of those — the guide column was measured
+	// against a width that already reserved the gutter, so the anchor has to
+	// move with it.
+	guideSpan := span
+	guideSpan.Max.X += givenExtent(rightGutter, g.Cols-1)
+	r.Guides = placeGuides(guides, guideSpan, th)
 	return r
 }
 

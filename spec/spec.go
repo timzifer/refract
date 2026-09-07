@@ -84,10 +84,14 @@ type Chart struct {
 	Title         string
 	XTitle        string
 	YTitle        string
-	X, Y          scale.Scale
-	Coord         coord.Coord
-	Layers        []geom.Geom
-	Facet         *facet.Spec
+	// Y2Title labels the secondary vertical axis, and Y2 is its scale. Both
+	// are zero for a chart with one Y axis.
+	Y2Title string
+	X, Y    scale.Scale
+	Y2      scale.Scale
+	Coord   coord.Coord
+	Layers  []geom.Geom
+	Facet   *facet.Spec
 
 	// Tracks are the bands at the plot's edges, in the order they were added.
 	Tracks []Track
@@ -174,6 +178,13 @@ type Mark struct {
 	// false, and a document that omits it gets the caps — writing `false`
 	// is the point-range look.
 	Caps *bool `json:"caps,omitempty"`
+
+	// Axis names the vertical scale this layer's values are read against:
+	// "y2" for the chart's secondary axis, and empty for its primary one. It
+	// is refract's own — Vega-Lite reaches a second axis by layering two
+	// specs with independent resolves, which is a different picture and a
+	// different set of scales.
+	Axis string `json:"axis,omitempty"`
 
 	// Elide is whether a text layer truncates a label too wide for the box its
 	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
@@ -323,6 +334,17 @@ type Encoding struct {
 	// data apart from a note placed at literal values — the way a field tells
 	// a rect apart from a region.
 	Text *Channel `json:"text,omitempty"`
+
+	// YSecondary is the chart's secondary vertical axis: the scale a layer
+	// whose mark names `"axis": "y2"` is drawn against, and the title written
+	// down the chart's right-hand side. It is only ever set on the top-level
+	// encoding — a layer has one Y channel, and which axis it reads is the
+	// mark's business rather than the channel's.
+	//
+	// It is not spelled `y2` because that name is already the *layer* channel
+	// for the far end of a band, and two things called y2 in one document is
+	// how a reader ends up with a chart that draws neither.
+	YSecondary *Channel `json:"ySecondary,omitempty"`
 
 	// Size is the column a mark takes its size from — the bubble chart's third
 	// dimension. Vega-Lite has the same channel with the same name; what is

@@ -117,6 +117,12 @@ func snapshotable(s scale.Scale) bool {
 // snapshot returns the panel with scales of its own.
 func (p Panel) snapshot() Panel {
 	p.X, p.Y = snapshotScale(p.X), snapshotScale(p.Y)
+	if p.Y2 != nil {
+		// The second axis is shared exactly as the first is — one scale object
+		// for the whole chart — so setting its device range from two panels at
+		// once is the same write race, answered the same way.
+		p.Y2 = snapshotScale(p.Y2)
+	}
 	return p
 }
 

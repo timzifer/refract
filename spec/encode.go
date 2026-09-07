@@ -32,7 +32,10 @@ func Of(c Chart) (Spec, error) {
 	if enc.Y, err = axisChannel(c.Y, c.YTitle); err != nil {
 		return Spec{}, fmt.Errorf("refract/spec: y axis: %w", err)
 	}
-	if enc.X != nil || enc.Y != nil {
+	if enc.YSecondary, err = axisChannel(c.Y2, c.Y2Title); err != nil {
+		return Spec{}, fmt.Errorf("refract/spec: secondary y axis: %w", err)
+	}
+	if enc.X != nil || enc.Y != nil || enc.YSecondary != nil {
 		s.Encoding = enc
 	}
 
@@ -46,7 +49,7 @@ func Of(c Chart) (Spec, error) {
 			return Spec{}, err
 		}
 	}
-	axes := axisKinds{x: kindOf(c.X), y: kindOf(c.Y)}
+	axes := axisKinds{x: kindOf(c.X), y: kindOf(c.Y), y2: kindOf(c.Y2)}
 	for i, g := range c.Layers {
 		l, err := encodeLayer(g, hoist, axes)
 		if err != nil {
@@ -274,6 +277,9 @@ func encodeLayer(g geom.Geom, hoisted bool, axes axisKinds) (Layer, error) {
 	}
 
 	m := Mark{Type: typ, Orient: orient, Extra: d.Extra}
+	if d.OnY2 {
+		m.Axis = axisSecondary
+	}
 	if d.Color != nil {
 		m.Color = colorHex(*d.Color)
 	}
@@ -515,6 +521,11 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 
 func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 	enc := &Encoding{}
+	// An annotation's literal values are written in the spelling of the axis
+	// it is placed against, which is the second one where the layer asked for
+	// it — a threshold on a temporal secondary axis is a timestamp even on a
+	// chart whose first axis is a number line.
+	axes.y = axes.vertical(d.OnY2)
 	if d.Source != nil {
 		if d.X != "" {
 			enc.X = &Channel{Field: d.X}
@@ -608,7 +619,19 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 // axisKinds remembers what each axis is, so that a value annotating a time
 // axis is written as the timestamp it is rather than as a count of
 // nanoseconds nobody can read.
-type axisKinds struct{ x, y axisKind }
+type axisKinds struct{ x, y, y2 axisKind }
+
+// vertical is the kind of the axis a layer's values are read against, which is
+// the secondary one where the layer asked for it. It matters for an annotation
+// rather than for a mark: a datum is written as a timestamp on a temporal axis
+// and as a number everywhere else, so a threshold on a second axis of a
+// different kind would otherwise be written in the first axis's spelling.
+func (a axisKinds) vertical(onY2 bool) axisKind {
+	if onY2 && a.y2 != "" {
+		return a.y2
+	}
+	return a.y
+}
 
 type axisKind scale.Kind
 

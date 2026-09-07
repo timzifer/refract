@@ -152,6 +152,12 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 	return geom.Mark(m.Type), nil
 }
 
+// axisSecondary is what a document calls the chart's second vertical axis. It
+// is a constant rather than a literal because the encoder writes it and the
+// decoder reads it, and a vocabulary that drifted between the two would be a
+// round trip that quietly moved a layer to the other axis.
+const axisSecondary = "y2"
+
 // hasField reports whether a layer's encoding names any column, which is what
 // separates a layer with data from an annotation placed at literal values.
 func hasField(enc *Encoding) bool {

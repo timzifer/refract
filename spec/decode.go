@@ -46,6 +46,9 @@ func (s Spec) Chart() (Chart, error) {
 		if c.Y, c.YTitle, err = axisScale(s.Encoding.Y); err != nil {
 			return Chart{}, fmt.Errorf("refract/spec: y axis: %w", err)
 		}
+		if c.Y2, c.Y2Title, err = axisScale(s.Encoding.YSecondary); err != nil {
+			return Chart{}, fmt.Errorf("refract/spec: secondary y axis: %w", err)
+		}
 	}
 
 	if c.Coord, err = decodeCoord(s.Coord); err != nil {
@@ -242,6 +245,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Marker:    markerShape(l.Mark.Shape),
 		MarkerSet: l.Mark.Shape != "",
 		Closed:    l.Mark.Closed,
+		OnY2:      l.Mark.Axis == axisSecondary,
 		Steps:     stepPos(l.Mark.Interpolate),
 		HAlign:    hAlignOf(l.Mark.Align),
 		VAlign:    vAlignOf(l.Mark.Baseline),
