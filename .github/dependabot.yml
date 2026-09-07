@@ -15,6 +15,22 @@ updates:
     commit-message:
       prefix: build
       include: scope
+    # The GoGPU stack moves as a unit, and gg leads it. wgpu v0.33 turned the
+    # render-pass calls into struct arguments, and gg v0.52.5 — the version both
+    # backend/gg and the GPU tier pin — still makes the old calls, so anything
+    # that drags wgpu to v0.33 or later fails to build gg itself. gogpu v0.53.2
+    # and gpucontext v0.30 do exactly that. Holding the ceiling here keeps
+    # Dependabot from reopening a bump that cannot compile; raise it in one
+    # commit across both modules once gg ships against the new wgpu.
+    ignore:
+      - dependency-name: github.com/gogpu/wgpu
+        versions: [">=0.33.0"]
+      - dependency-name: github.com/gogpu/gogpu
+        versions: [">=0.53.2"]
+      - dependency-name: github.com/gogpu/gpucontext
+        versions: [">=0.30.0"]
+      - dependency-name: github.com/gogpu/gputypes
+        versions: [">=0.7.0"]
 
   - package-ecosystem: github-actions
     directory: /
