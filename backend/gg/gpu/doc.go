@@ -54,5 +54,11 @@
 // on the CPU rasterizer. The cost is one device probe at startup, which is the
 // probe the first chart pays anyway.
 //
+// The probe used to fail on machines that have a GPU. wgpu's HAL backends —
+// Vulkan, DX12, Metal, GLES — register themselves from their own init and
+// nothing in gg or gpucontext imports one, so a build that asked for the tier
+// and nothing else enumerated no adapters at all. This module imports them,
+// which is what makes the opt-in reach the hardware.
+//
 // [ADR 0006]: https://github.com/timzifer/refract/blob/main/docs/adr/0006-gg-coupling-surface.md
 package gpu

@@ -36,8 +36,13 @@ import (
 ```
 
 - The module is one file of substance: a blank import of `gg/gpu`, which
-  registers gg's GPU accelerator and its tile-based coverage filler, plus
-  `Enabled` and `Close`.
+  registers gg's GPU accelerator and its tile-based coverage filler, a blank
+  import of `wgpu/hal/allbackends`, plus `Enabled` and `Close`.
+- Both imports are load-bearing. wgpu's HAL backends register themselves from
+  their own `init` and neither gg nor `gpucontext` imports one, so `gg/gpu`
+  alone enumerates no adapters on a machine with a working GPU and everything
+  falls to the CPU. The tier is the accelerator *and* a backend to run it on,
+  and this module is where both are decided.
 - A nested module is excluded from its parent's module graph, so `backend/gg`'s
   own dependencies are unchanged and `go list -deps` on it still shows gg,
   `x/image` and the core. That is the same mechanism [ADR 0001](0001-module-layout.md)
