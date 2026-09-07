@@ -17,6 +17,7 @@ type backend struct {
 	depth int
 	dpr   float64 // the device scale the context was made with, for damage
 	dirty bool    // a damage clip is in force and has to be unwound at Flush
+	drew  bool    // pixels were touched since the last Flush, for the generation
 	err   error
 }
 
@@ -108,6 +109,7 @@ func (b *backend) Polyline(pts []ir.Point, style ir.Stroke) {
 	}
 	b.applyStroke(style)
 	b.fail(b.ctx.Stroke())
+	b.drew = true
 }
 
 func (b *backend) StrokePath(p *ir.Path, style ir.Stroke) {
@@ -117,6 +119,7 @@ func (b *backend) StrokePath(p *ir.Path, style ir.Stroke) {
 	b.buildPath(p)
 	b.applyStroke(style)
 	b.fail(b.ctx.Stroke())
+	b.drew = true
 }
 
 func (b *backend) FillPath(p *ir.Path, fill ir.Fill, rule ir.FillRule) {
@@ -136,6 +139,7 @@ func (b *backend) FillPath(p *ir.Path, fill ir.Fill, rule ir.FillRule) {
 	}
 	b.fail(b.ctx.Fill())
 	b.ctx.SetFillRule(gogg.FillRuleNonZero)
+	b.drew = true
 }
 
 func (b *backend) Text(run ir.TextRun) {
@@ -146,6 +150,7 @@ func (b *backend) Text(run ir.TextRun) {
 	x, y := anchor(face, run)
 
 	b.ctx.SetColor(run.Color)
+	b.drew = true
 	if run.Rotation != 0 {
 		b.ctx.Push()
 		b.ctx.RotateAbout(run.Rotation, float64(run.At.X), float64(run.At.Y))
@@ -223,6 +228,7 @@ func (b *backend) Markers(shape ir.Marker, at []ir.Point, style ir.MarkerStyle) 
 			b.fail(b.ctx.Stroke())
 		}
 	}
+	b.drew = true
 }
 
 func (b *backend) Image(img image.Image, dst ir.Rect) {
@@ -240,6 +246,7 @@ func (b *backend) Image(img image.Image, dst ir.Rect) {
 		DstHeight: float64(dst.Dy()),
 		Opacity:   1,
 	})
+	b.drew = true
 }
 
 func (b *backend) Push(clip *ir.Path, xform ir.Affine) {
@@ -299,6 +306,7 @@ func (b *backend) Measure(run ir.TextRun) ir.TextMetrics {
 // change both ask for.
 func (b *backend) Damage(rects []ir.Rect) {
 	b.undamage()
+	b.drew = true
 	if rects == nil {
 		b.ctx.Clear()
 		return
@@ -390,6 +398,17 @@ func (b *backend) Flush() error {
 	// A damage clip lasts until the frame it limits has been drawn, which is
 	// exactly here.
 	b.undamage()
+	// Stamp the buffer with a new generation when this frame put something in
+	// it. gg stamps a pixmap only when it allocates one, so without this the
+	// generation would answer "have the pixels moved in memory" rather than
+	// "have the pixels changed" — and a window watching it would hold the
+	// texture of the first frame until something resized the buffer.
+	if b.drew {
+		if pm := b.ctx.ResizeTarget(); pm != nil {
+			pm.NotifyPixelsChanged()
+		}
+		b.drew = false
+	}
 	return b.err
 }
 
