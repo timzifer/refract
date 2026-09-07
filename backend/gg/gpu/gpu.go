@@ -7,6 +7,13 @@ import (
 	// accelerator and a coverage filler in gg's own registry from its init,
 	// and every context made after that uses them.
 	_ "github.com/gogpu/gg/gpu"
+
+	// The other half of the mechanism, and the half nobody imports: wgpu's HAL
+	// backends — Vulkan, DX12, Metal, GLES — register themselves from their own
+	// init, and neither gg nor gpucontext pulls one in. Without this, wgpu
+	// enumerates no adapters on a machine with a working GPU, the probe below
+	// finds no ink and the tier gives itself back on hardware that was fine.
+	_ "github.com/gogpu/wgpu/hal/allbackends"
 )
 
 // init keeps the accelerator only if it can be shown to draw.
