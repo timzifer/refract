@@ -23,7 +23,7 @@ jobs:
     name: Lint and dependency purity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -80,7 +80,7 @@ jobs:
           - os: ubuntu-latest
             go: "1.25"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
@@ -135,7 +135,7 @@ jobs:
     env:
       CGO_ENABLED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -176,7 +176,7 @@ jobs:
           - { goos: windows, goarch: amd64 }
           - { goos: js, goarch: wasm }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -236,7 +236,7 @@ jobs:
       GOOS: js
       GOARCH: wasm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -277,7 +277,7 @@ jobs:
     name: Benchmarks and the allocation gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -345,7 +345,7 @@ jobs:
       # user-owned repository. It goes through a deploy key that the ruleset
       # does name as a bypass actor instead, which is why the checkout is by
       # SSH. See CONTRIBUTING.md.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ssh-key: ${{ secrets.CI_PUSH_KEY }}
       - uses: actions/setup-go@v5
@@ -440,7 +440,7 @@ jobs:
     steps:
       # The same deploy key as the coverage job, and for the same reason: the
       # commit below lands on a protected main.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ssh-key: ${{ secrets.CI_PUSH_KEY }}
       - uses: actions/setup-go@v5
