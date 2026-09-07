@@ -2,6 +2,8 @@ package gpu_test
 
 import (
 	"bytes"
+	"image"
+	"image/png"
 	"testing"
 
 	"github.com/timzifer/refract"
@@ -37,6 +39,18 @@ func TestAChartRendersWithTheTierEitherWay(t *testing.T) {
 		t.Fatal("nothing was encoded")
 	}
 
+	// Decoding it rather than measuring it: a GPU tier that never flushed
+	// encodes a perfectly valid PNG of an empty buffer, and a length check
+	// passes on that. The chart has a title and a line on it, so more than one
+	// colour has to come back.
+	img, err := png.Decode(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("decoding what was rendered: %v", err)
+	}
+	if !painted(img) {
+		t.Error("the encoded chart is a single flat colour")
+	}
+
 	// The vector emitter does not go near a GPU, so it is the reference for
 	// what the chart is: whatever the raster tier does, the geometry is the
 	// same geometry.
@@ -57,4 +71,21 @@ func TestCloseIsSafeWhateverHappened(t *testing.T) {
 	if gpu.Enabled() {
 		t.Error("the accelerator is still registered after Close")
 	}
+}
+
+// painted reports whether an image has more than one colour in it.
+func painted(img image.Image) bool {
+	b := img.Bounds()
+	if b.Empty() {
+		return false
+	}
+	first := img.At(b.Min.X, b.Min.Y)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if img.At(x, y) != first {
+				return true
+			}
+		}
+	}
+	return false
 }

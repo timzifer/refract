@@ -165,6 +165,12 @@ func (t *target) Close() error {
 }
 
 func (t *target) encode(w io.Writer) error {
+	// A GPU accelerator batches its work, so the pixels are not in the buffer
+	// until it is asked for them — gg's own SavePNG flushes for the same
+	// reason, and Context.Image does not. Without this an export on the GPU
+	// tier encodes whatever was last read back, which is a blank or stale
+	// frame. See [Surface.Image], which guards the same edge for a window.
+	_ = t.ctx.FlushGPU()
 	img := t.ctx.Image()
 	switch t.format {
 	case FormatJPEG:
