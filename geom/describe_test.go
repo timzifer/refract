@@ -42,6 +42,10 @@ func TestDescribeAndRebuildAgree(t *testing.T) {
 		Segment(0, 1, 2, 3),
 		Region(0, 1, 2, 3),
 		Note(1, 2, "here", FontSize(9), Rotate(0.25), Align(ir.AlignEnd, ir.AlignBottom)),
+		Treemap(src, ID("x"), Parent("y"), Value("z"), Padding(0.01)),
+		Icicle(src, ID("x"), Parent("y"), Value("z"), ColorBy("z", cs)),
+		Sankey(src, From("x"), To("y"), Value("z"), Thickness(0.05), Padding(0.02)),
+		Arc(src, From("x"), To("y"), Value("z"), Baseline(1), Thickness(0.08)),
 	}
 
 	for _, g := range layers {
@@ -97,9 +101,12 @@ func TestFromDescNeedsASource(t *testing.T) {
 }
 
 func TestFromDescRejectsAnUnknownMark(t *testing.T) {
-	// "hexbin" used to be the example here, until v0.9 made it a mark. Anything
-	// this package genuinely has no constructor for will do.
-	if _, err := FromDesc(Desc{Mark: "sunburst", Source: testSource()}); err == nil {
+	// "hexbin" used to be the example here, until v0.9 made it a mark, and
+	// "sunburst" until the relational layouts arrived — a sunburst is an
+	// [Icicle] under a polar coord and not a mark at all, so naming it here
+	// read as a contradiction of its own documentation. Anything this package
+	// genuinely has no constructor for will do.
+	if _, err := FromDesc(Desc{Mark: "venn", Source: testSource()}); err == nil {
 		t.Error("an unknown mark was built")
 	}
 }
