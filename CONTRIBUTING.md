@@ -10,7 +10,7 @@ This is a five-module repository:
 | `backend/gg` | `github.com/timzifer/refract/backend/gg` | `gogpu/gg`, `x/image` |
 | `backend/gg/gpu` | `github.com/timzifer/refract/backend/gg/gpu` | `gogpu/gg/gpu` → `wgpu`, `naga`, `goffi` |
 | `backend/window` | `github.com/timzifer/refract/backend/window` | `gogpu/gogpu`, and the two above |
-| `arrow` | `github.com/timzifer/refract/arrow` | `apache/arrow-go` |
+| `arrow/v18` | `github.com/timzifer/refract/arrow/v18` | `apache/arrow-go` — its major version is the adapter's ([ADR 0030](docs/adr/0030-arrow-major-version.md)) |
 
 Three backends are in the core module — `backend/svg`, `backend/pdf` and
 `backend/canvas` — so SVG, PDF and a browser canvas cost no dependency at all
@@ -37,7 +37,7 @@ draws and `window/show` steers, because a backend must not import the model
 
 `go.work` at the repository root is **committed**, so the five modules build
 together with no setup. If your tooling ignores it,
-`go work init . ./arrow ./backend/gg ./backend/gg/gpu ./backend/window`
+`go work init . ./arrow/v18 ./backend/gg ./backend/gg/gpu ./backend/window`
 reproduces it.
 
 > Each nested module requires the core at a published tag, not through a
@@ -54,11 +54,11 @@ go build ./... && go test ./...
 (cd backend/gg && go test ./...)
 (cd backend/gg/gpu && go test ./...)
 (cd backend/window && go test ./...)
-(cd arrow && go test ./...)
+(cd arrow/v18 && go test ./...)
 
 # the checks CI runs
 gofmt -l .                                   # must print nothing
-for m in . backend/gg backend/gg/gpu backend/window arrow; do (cd "$m" && go vet ./...); done
+for m in . backend/gg backend/gg/gpu backend/window arrow/v18; do (cd "$m" && go vet ./...); done
 CGO_ENABLED=0 go build ./...
 
 # a chart in a window, by hand — the one thing CI cannot check, because a
@@ -344,6 +344,48 @@ being called once per row.
 A new benchmark goes wherever the thing it measures lives, and needs no
 registration — the CI job runs `-bench=.` across every package, which also means
 a benchmark that stops compiling fails the build rather than quietly rotting.
+It does need a paragraph in [docs/benchmarks.md](docs/benchmarks.md), which
+is the suite's catalogue: what the benchmark measures, and whether the gate
+reads it. The results table there is written by
+`.github/scripts/benchtable.awk` from the same output the gate reads, and the
+CI job writes the same table into its summary and attaches the raw output:
+
+```sh
+go test -run='^$' -bench=. -benchmem ./... | awk -f .github/scripts/benchtable.awk
+```
+
+## Releasing
+
+The modules are tagged in dependency order, because each nested module
+requires the core — and `backend/window` and `backend/gg/gpu` require
+`backend/gg` — at a published tag rather than through a `replace`. A tag has
+to exist before a `require` line can name it.
+
+1. **The core.** Tag `vX.Y.Z` on the commit to release. `go.mod` at the root
+   has no `require` block, so nothing precedes it.
+2. **The `require` lines.** In `backend/gg/go.mod`, `backend/window/go.mod`,
+   `backend/gg/gpu/go.mod` and `arrow/v18/go.mod`, bump
+   `github.com/timzifer/refract` to the tag from step 1 — and in the last
+   three, `github.com/timzifer/refract/backend/gg` to the tag it is about to
+   get. Run `go mod tidy` in each and commit. `go.work` overrides these during
+   development, so the change is invisible locally; it is what a downstream
+   `go get` resolves.
+3. **The nested modules.** Tag each with its directory as the prefix:
+   `backend/gg/vX.Y.Z`, `backend/window/vX.Y.Z`, `backend/gg/gpu/v0.N.0` and
+   `arrow/v18.N.M`. The first two share the core's version — they are the
+   supported raster and native paths, and their own APIs are small. The GPU
+   tier stays at `v0` for as long as it is opt-in beta, so its tag says what
+   the README says. The Arrow adapter's major is Arrow's, and its tag prefix
+   is `arrow/` rather than `arrow/v18/`: a module's tag prefix is its
+   subdirectory without the major-version suffix, even when the module lives
+   in a major-version subdirectory ([ADR 0030](docs/adr/0030-arrow-major-version.md)).
+4. **The docs.** The README's status line and `CONCEPT.md` §14 name the
+   milestone; the results table in `docs/benchmarks.md` is regenerated when a
+   release changes what a benchmark measures.
+
+A release that skips step 2 publishes nested modules that resolve to an older
+core than the one they were tested against. That is the failure the order
+exists to prevent.
 
 ## Style
 

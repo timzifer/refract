@@ -42,6 +42,7 @@ V1 landed on the same branch, recorded in
 | 7 | `spec.Schema` is `…/spec/v1`, its comment states the additive-field policy, the README example agrees | yes |
 | 8 | The growth rule is in the doc comment of every interface a third party implements, and `stat`'s package doc says why there is no `Stat` interface | yes |
 | 9 | CONCEPT §15 says which nested modules tag with the core | yes |
+| 10 | `arrow` tracks its upstream's major version — which Go only allows with the version in the import path, so the module is `…/arrow/v18` in the `arrow/v18` directory ([ADR 0030](adr/0030-arrow-major-version.md)) | yes |
 
 One decision differs from the sketch below: the audit proposed a new `Config`
 type with accessors, and the ADR chose to return the existing `Desc` instead.

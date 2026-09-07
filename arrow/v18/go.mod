@@ -1,4 +1,4 @@
-module github.com/timzifer/refract/arrow
+module github.com/timzifer/refract/arrow/v18
 
 go 1.25.0
 

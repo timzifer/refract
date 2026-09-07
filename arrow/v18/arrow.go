@@ -6,6 +6,13 @@
 // already hold Arrow data — and for them it is the shortest possible path,
 // because Arrow's columnar layout is the layout refract already wants.
 //
+// The import path carries a major version, and it is Arrow's rather than
+// refract's: this module adapts apache/arrow-go/v18, and its own major version
+// follows its upstream's so that the two can never disagree about what an
+// Arrow record is. The package name is still arrow.
+//
+//	import "github.com/timzifer/refract/arrow/v18"
+//
 //	rec := reader.Record()
 //	src := arrow.Source(rec)
 //

@@ -32,7 +32,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: gofmt
         run: |
@@ -49,7 +49,7 @@ jobs:
           (cd backend/gg && go vet ./...)
           (cd backend/gg/gpu && go vet ./...)
           (cd backend/window && go vet ./...)
-          (cd arrow && go vet ./...)
+          (cd arrow/v18 && go vet ./...)
 
       - name: The core module must depend on nothing but the standard library
         run: |
@@ -89,7 +89,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: Build
         run: |
@@ -97,7 +97,7 @@ jobs:
           go build ./backend/gg/...
           go build ./backend/gg/gpu/...
           go build ./backend/window/...
-          go build ./arrow/...
+          go build ./arrow/v18/...
 
       - name: Test the core
         run: go test ./...
@@ -122,7 +122,7 @@ jobs:
         run: go test ./...
 
       - name: Test the Arrow adapter
-        working-directory: arrow
+        working-directory: arrow/v18
         run: go test ./...
 
   # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: Test the core
         run: go test -race ./...
@@ -158,7 +158,7 @@ jobs:
         run: go test -race ./...
 
       - name: Test the Arrow adapter
-        working-directory: arrow
+        working-directory: arrow/v18
         run: go test -race ./...
 
   # ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: Build the core for ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
@@ -221,7 +221,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build ./arrow/...
+        run: go build ./arrow/v18/...
 
   # ---------------------------------------------------------------------------
   # The browser backend. Cross-compiling it is not enough: backend/canvas talks
@@ -245,7 +245,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -286,7 +286,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       # The gate's own tests. They live behind //go:build !race because the
       # race detector allocates on refract's behalf, so they are invisible to
@@ -296,29 +296,41 @@ jobs:
 
       # -benchtime=10x, because this job gates allocation counts — which are
       # deterministic — and not times, which a shared runner cannot measure.
+      # -benchmem, so that every line carries the bytes and the allocations
+      # whether or not the benchmark asked for them itself.
       - name: Run every benchmark
         run: |
           set -euo pipefail
           {
-            go test -run='^$' -bench=. -benchtime=10x -count=1 ./...
-            (cd backend/gg && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
-            (cd backend/window && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
-            (cd arrow && go test -run='^$' -bench=. -benchtime=10x -count=1 ./...)
+            go test -run='^$' -bench=. -benchmem -benchtime=10x -count=1 ./...
+            (cd backend/gg && go test -run='^$' -bench=. -benchmem -benchtime=10x -count=1 ./...)
+            (cd backend/window && go test -run='^$' -bench=. -benchmem -benchtime=10x -count=1 ./...)
+            (cd arrow/v18 && go test -run='^$' -bench=. -benchmem -benchtime=10x -count=1 ./...)
           } | tee bench.txt
 
       - name: The allocation gate as a benchmark
         run: awk -f .github/scripts/allocgate.awk bench.txt
 
+      # The suite is public: the raw output is attached to the run, and the
+      # same table docs/benchmarks.md carries is written into the job summary.
+      # The times in it are this runner's and mean nothing across runs — the
+      # summary says so, and the gate above is what holds.
       - name: Summarise
         if: always()
         run: |
           {
             echo "### Benchmarks"
             echo
-            echo '```'
-            grep -E '^Benchmark' bench.txt || echo "no benchmark output"
-            echo '```'
+            echo "The allocation columns are gated; the times are this runner's and are not comparable across runs. See docs/benchmarks.md."
+            echo
+            awk -f .github/scripts/benchtable.awk bench.txt || echo "no benchmark output"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmarks
+          path: bench.txt
 
   # ---------------------------------------------------------------------------
   # Coverage across both modules, published as a shields.io endpoint so the
@@ -339,7 +351,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: Measure
         run: |
@@ -351,7 +363,7 @@ jobs:
           go test -covermode=atomic -coverpkg=./... -coverprofile=core.cov ./...
           (cd backend/gg && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../gg.cov ./...)
           (cd backend/window && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../window.cov ./...)
-          (cd arrow && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../arrow.cov ./...)
+          (cd arrow/v18 && go test -covermode=atomic -coverpkg=./...,github.com/timzifer/refract/... -coverprofile=../../arrow.cov ./...)
 
           # Merge the profiles: one mode line, then every data line from each.
           { echo "mode: atomic"; tail -q -n +2 core.cov gg.cov window.cov arrow.cov; } > coverage.cov
@@ -432,7 +444,7 @@ jobs:
             backend/gg/go.sum
             backend/gg/gpu/go.sum
             backend/window/go.sum
-            arrow/go.sum
+            arrow/v18/go.sum
 
       - name: Check the committed figures against the code
         id: check

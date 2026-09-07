@@ -1,6 +1,6 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws fifteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
+refract draws fourteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
 `Area`, `Step`, `Boxplot`, `Rect`, `Histogram`, `Violin`, `Ridgeline`, `Hexbin`,
 `Beeswarm`, `ECDF` and `Trend`, plus the annotations in `geom/annotate.go`. This
 document is

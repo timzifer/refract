@@ -25,6 +25,7 @@ import (
 	"github.com/timzifer/refract"
 	ggbackend "github.com/timzifer/refract/backend/gg"
 	"github.com/timzifer/refract/coord"
+	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/facet"
 	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/svgdiff"
@@ -573,6 +574,119 @@ func figures() []figure {
 			},
 		},
 		{
+			// The v0.9 marks. A histogram is the first mark whose Y axis holds
+			// values that appear in no column: the counts are computed in
+			// Train, and the axis is trained on them rather than on the rows.
+			// The bins are Freedman–Diaconis unless told otherwise.
+			name: "histogram", width: 700, high: 400, theme: theme.Light, title: "Request latency",
+			opts: []refract.Option{refract.XTitle("milliseconds"), refract.YTitle("requests")},
+			build: func(p *refract.Plot) {
+				src := refract.Float64Columns(map[string][]float64{"ms": latencies()})
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(geom.Histogram(src, geom.X("ms"), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			// The same kind of question with no parameter in it: an ECDF picks
+			// no bins and no bandwidth, and it takes a series column, so three
+			// distributions compare on one axis without hiding each other.
+			name: "ecdf", width: 700, high: 400, theme: theme.Light, title: "Scores by cohort, cumulative",
+			opts: []refract.Option{refract.XTitle("score"), refract.YTitle("fraction of cohort")},
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear())
+				p.Add(geom.ECDF(cohortScores(), geom.X("score"), geom.GroupBy("cohort"),
+					geom.ColorBy("cohort", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
+			// The chart a boxplot cannot draw: distributions with the same
+			// quartiles and different shapes, split again by region. The
+			// bandwidth is pinned so that the two regions are smoothed the
+			// same amount, and a difference in shape is a difference in data.
+			name: "violin", width: 760, high: 420, theme: theme.Light, title: "Latency by service",
+			opts: []refract.Option{refract.YTitle("milliseconds"), refract.Legend(true)},
+			build: func(p *refract.Plot) {
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+				p.Add(geom.Violin(serviceLatencies(),
+					geom.X("service"), geom.Y("ms"),
+					geom.GroupBy("region"), geom.Bandwidth(3),
+					geom.ColorBy("region", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
+			// Twelve densities down one axis. The months are pinned in
+			// calendar order rather than discovered, because a ridgeline is
+			// read down its axis, and the ridges overlap on purpose.
+			name: "ridgeline", width: 700, high: 520, theme: theme.Light, title: "Daily maximum, by month",
+			opts: []refract.Option{refract.XTitle("degrees")},
+			build: func(p *refract.Plot) {
+				months, src := monthlyTemperatures()
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Ordinal(scale.Categories(months...)))
+				p.Add(geom.Ridgeline(src, geom.X("degrees"), geom.Y("month"),
+					geom.Overlap(2.2), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			// Every observation, and none hidden: a swarm is honest about a
+			// cohort of nine in a way a violin over nine rows is not. The
+			// placement is deterministic, so this figure is the same on
+			// every machine.
+			name: "beeswarm", width: 700, high: 400, theme: theme.Light, title: "Scores by cohort",
+			opts: []refract.Option{refract.YTitle("score")},
+			build: func(p *refract.Plot) {
+				p.X(scale.Ordinal())
+				// The domain is pinned rather than niced so that the highest
+				// score sits inside the frame rather than on its edge.
+				p.Y(scale.Linear(scale.Domain(30, 85)))
+				p.Add(geom.Beeswarm(cohortScores(), geom.X("cohort"), geom.Y("score"),
+					geom.Size(7), geom.Color(palette.Blue)))
+			},
+		},
+		{
+			// Fifty thousand rows and a fit through them. The hexbin says how
+			// many are where — binned over the plot rectangle, so the cells
+			// are regular hexagons on the page — and the loess trend says what
+			// they are doing.
+			name: "hexbin", width: 760, high: 460, theme: theme.Light, title: "Fifty thousand observations",
+			opts: []refract.Option{refract.Legend(false)},
+			build: func(p *refract.Plot) {
+				src := hexcloud(50000)
+				p.X(scale.Linear(scale.Nice()))
+				p.Y(scale.Linear(scale.Nice()))
+				p.Add(
+					geom.Hexbin(src, geom.X("x"), geom.Y("y"),
+						geom.DensityCells(7), geom.Color(palette.Blue)),
+					geom.Trend(src, geom.X("x"), geom.Y("y"),
+						geom.Span(0.15), geom.Color(palette.Orange), geom.Width(2.5)),
+				)
+			},
+		},
+		{
+			// The size channel. Four columns, three channels, and the key for
+			// the third one beside the legend in the guide column. Area rather
+			// than radius: a country with twice the population is drawn with
+			// twice the ink. See docs/adr/0027.
+			name: "bubbles", width: 760, high: 460, theme: theme.Light, title: "Income and life expectancy",
+			opts: []refract.Option{
+				refract.XTitle("income per person"), refract.YTitle("years"), refract.Legend(true),
+			},
+			build: func(p *refract.Plot) {
+				p.X(scale.Log(scale.LogNice()))
+				// Pinned for the same reason as the swarm: a bubble has a
+				// radius, and the largest one must not be cut by the frame.
+				p.Y(scale.Linear(scale.Domain(55, 85)))
+				p.Add(geom.Scatter(nations(),
+					geom.X("income"), geom.Y("years"),
+					geom.SizeBy("people", scale.Size()),
+					geom.ColorBy("region", scale.Qualitative(palette.OkabeIto)),
+					geom.Label("population (millions)")))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -803,4 +917,114 @@ func clusters() (xs, a, b []float64) {
 		b[i] = 9 - 2.5*math.Cos(5*t) + 0.6*math.Cos(23*t)
 	}
 	return xs, a, b
+}
+
+// The v0.9 samples. Everything here is a fixed sequence rather than math/rand,
+// for the same reason as everything else in this file: a figure that came out
+// differently on every run could not be checked against what is committed.
+
+// latencies is two thousand lognormal request times.
+func latencies() []float64 {
+	out := make([]float64, 2000)
+	for i := range out {
+		out[i] = lognormalAt(i*11+11, 3.6, 0.55)
+	}
+	return out
+}
+
+// serviceLatencies is three services in two regions; checkout has a second
+// hump, a slow path some requests take, which is what a violin shows and a
+// boxplot summarises away.
+func serviceLatencies() *data.Table {
+	names := []string{"auth", "search", "checkout"}
+	regions := []string{"eu", "us"}
+	var vals []float64
+	var svc, region []string
+	for i := range 900 {
+		s := i % 3
+		r := (i / 3) % 2
+		v := lognormalAt(i, 3.2+0.35*float64(s)+0.2*float64(r), 0.4)
+		if s == 2 && i%7 == 0 {
+			v *= 3
+		}
+		vals = append(vals, v)
+		svc = append(svc, names[s])
+		region = append(region, regions[r])
+	}
+	return refract.NewTable().Float64("ms", vals).String("service", svc).String("region", region)
+}
+
+// monthlyTemperatures is a year of daily maxima: a sinusoid through the
+// months, with the spread widening in winter.
+func monthlyTemperatures() (months []string, src *data.Table) {
+	months = []string{
+		"jan", "feb", "mar", "apr", "may", "jun",
+		"jul", "aug", "sep", "oct", "nov", "dec",
+	}
+	var temps []float64
+	var month []string
+	for m, name := range months {
+		mid := 11 + 9*math.Sin(2*math.Pi*(float64(m)-3)/12)
+		spread := 3.5 + 1.5*math.Cos(2*math.Pi*float64(m)/12)
+		for i := range 220 {
+			temps = append(temps, mid+spread*noise(m*997+i))
+			month = append(month, name)
+		}
+	}
+	return months, refract.NewTable().Float64("degrees", temps).String("month", month)
+}
+
+// cohortScores is two cohorts of sixty and one of nine.
+func cohortScores() *data.Table {
+	names := []string{"control", "variant A", "variant B"}
+	sizes := []int{60, 60, 9}
+	var scores []float64
+	var cohort []string
+	for c, name := range names {
+		for i := range sizes[c] {
+			scores = append(scores, 50+float64(c)*6+9*noise(c*613+i))
+			cohort = append(cohort, name)
+		}
+	}
+	return refract.NewTable().Float64("score", scores).String("cohort", cohort)
+}
+
+// hexcloud is n rows scattered about a curve.
+func hexcloud(n int) data.Source {
+	xs, ys := make([]float64, n), make([]float64, n)
+	for i := range n {
+		x := 10 * float64(i) / float64(n-1)
+		xs[i] = x
+		ys[i] = math.Sin(x)*3 + x/3 + 1.2*noise(i)
+	}
+	return refract.Float64Columns(map[string][]float64{"x": xs, "y": ys})
+}
+
+// nations is eight countries: income, life expectancy, population, region.
+func nations() *data.Table {
+	return refract.NewTable().
+		Float64("income", []float64{1500, 4200, 12800, 31000, 46000, 58000, 9800, 24000}).
+		Float64("years", []float64{58, 66, 72, 78, 81, 82, 70, 76}).
+		Float64("people", []float64{212, 1420, 274, 51, 68, 335, 84, 38}).
+		String("region", []string{
+			"Africa", "Asia", "Asia", "Europe",
+			"Europe", "Americas", "Africa", "Americas",
+		})
+}
+
+func lognormalAt(i int, mu, sigma float64) float64 {
+	return math.Exp(mu + sigma*noise(i))
+}
+
+// noise is a deterministic pseudo-normal deviate: the sum of twelve values from
+// a fixed linear congruential sequence, minus six — the Irwin–Hall
+// approximation, and exactly reproducible.
+func noise(i int) float64 {
+	v := uint64(i)*2862933555777941757 + 3037000493
+	sum := 0.0
+	for range 12 {
+		v = v*6364136223846793005 + 1442695040888963407
+		sum += float64(v>>11) / float64(uint64(1)<<53)
+	}
+	return sum - 6
 }
