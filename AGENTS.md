@@ -340,6 +340,13 @@ what leaves every golden file unchanged; the guide column is anchored past that
 gutter, because the width was already reserved and an anchor on the panel edge
 puts a legend on top of the labels.
 
+Steering has to move both. `Live.Wheel`, `ZoomTo`, `PanBy` and `Autoscale` all
+reach `Panel.Y2` as well as `Panel.Y`, or the two series slide apart under the
+reader's hand — a chart with two axes is one chart, so a zoom is one zoom.
+`interact.Panel` learns about the second axis from `LayerY` rather than from
+`Observer.Panel`, which carries the two scales a panel has always had and never
+gains a third.
+
 **An error bar's orientation is its encoding, and its bounds are derived in
 `Train`.** `Y2`/`ErrorBy` runs it vertically and `X2`/`ErrorXBy` horizontally —
 the rule `Rect` already follows about its edges, which is why there is no

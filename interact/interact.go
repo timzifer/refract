@@ -84,6 +84,16 @@ type Panel struct {
 	Area ir.Rect
 	// X and Y are the panel's scales, ranged to Area.
 	X, Y scale.Scale
+	// Y2 is the panel's secondary vertical axis, when a layer in it was drawn
+	// against one, and nil otherwise.
+	//
+	// It is discovered from the layers rather than announced with the panel:
+	// [render.Observer.Panel] carries the two scales a panel has always had
+	// and never gains a third, so the second axis arrives through
+	// [Index.LayerY] with the layer that reads it. A caller steering the chart
+	// needs it — a zoom that moved one vertical axis and left the other would
+	// slide the two series apart.
+	Y2 scale.Scale
 	// Coord is the coordinate system the panel was drawn in, framed to Area.
 	// It is what turns a device position back into the pair the scales speak
 	// in — without it a pointer over a pie slice would be inverted as though
@@ -231,7 +241,15 @@ func (ix *Index) Layer(i int, label string) {
 // is not the panel's, and a hit has to be read back through the scale the mark
 // was placed by. It is remembered per layer rather than per panel because that
 // is where the binding is: the two axes share a panel.
-func (ix *Index) LayerY(y scale.Scale) { ix.layerY = y }
+func (ix *Index) LayerY(y scale.Scale) {
+	ix.layerY = y
+	// A layer drawn against a scale that is not the panel's own is what tells
+	// the panel it has a second axis. There is nowhere else to learn it from:
+	// the observer's Panel call carries two scales and never gains a third.
+	if p := ix.panelOf(ix.panel); p != nil && y != nil && y != p.Y && p.Y2 == nil {
+		p.Y2 = y
+	}
+}
 
 // Panels reports the panels of the last watched render, in chart order.
 func (ix *Index) Panels() []Panel { return ix.panels }

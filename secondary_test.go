@@ -278,3 +278,48 @@ func TestAFacetWritesTheSecondAxisAtItsRightEdge(t *testing.T) {
 		t.Errorf("the shared second axis was written %d times, want once", n)
 	}
 }
+
+// A chart with two axes is one chart, so a zoom is one zoom. Moving the left
+// axis and leaving the right one would slide the two series apart under the
+// reader's hand.
+func TestAZoomMovesBothVerticalAxes(t *testing.T) {
+	p, y, y2 := twoUnits()
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Close() })
+	if err := live.Draw(); err != nil {
+		t.Fatal(err)
+	}
+
+	before, before2 := span(y), span(y2)
+	if err := live.Wheel(300, 180, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	after, after2 := span(y), span(y2)
+
+	if after >= before {
+		t.Fatalf("the primary axis did not zoom: %v then %v", before, after)
+	}
+	if after2 >= before2 {
+		t.Fatalf("the secondary axis did not zoom: %v then %v; the two series have slid apart", before2, after2)
+	}
+	// Both by the same factor, which is what "one zoom" means.
+	if r1, r2 := after/before, after2/before2; r1 < r2-0.01 || r1 > r2+0.01 {
+		t.Errorf("the axes zoomed by %v and %v", r1, r2)
+	}
+
+	if err := live.Autoscale(); err != nil {
+		t.Fatal(err)
+	}
+	if span(y2) != before2 {
+		t.Errorf("the reset view left the secondary axis at %v, want %v", span(y2), before2)
+	}
+}
+
+func span(s scale.Scale) float64 {
+	lo, hi := s.Domain()
+	return hi - lo
+}
