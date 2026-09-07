@@ -84,11 +84,12 @@ type Chart struct {
 	Title         string
 	XTitle        string
 	YTitle        string
-	// Y2Title labels the secondary vertical axis, and Y2 is its scale. Both
-	// are zero for a chart with one Y axis.
+	// Y2Title and X2Title label the secondary axes, and Y2 and X2 are their
+	// scales. All four are zero for a chart with one axis in that direction.
 	Y2Title string
+	X2Title string
 	X, Y    scale.Scale
-	Y2      scale.Scale
+	Y2, X2  scale.Scale
 	Coord   coord.Coord
 	Layers  []geom.Geom
 	Facet   *facet.Spec
@@ -179,12 +180,17 @@ type Mark struct {
 	// is the point-range look.
 	Caps *bool `json:"caps,omitempty"`
 
-	// Axis names the vertical scale this layer's values are read against:
-	// "y2" for the chart's secondary axis, and empty for its primary one. It
-	// is refract's own — Vega-Lite reaches a second axis by layering two
+	// XAxis and YAxis name the scales this layer's values are read against:
+	// "x2" and "y2" for the chart's secondary axes, and empty for its primary
+	// ones. They are two fields rather than one because the two directions are
+	// independent — a layer may read the top axis and the right one — and a
+	// single field would have to spell a set.
+	//
+	// They are refract's own: Vega-Lite reaches a second axis by layering two
 	// specs with independent resolves, which is a different picture and a
 	// different set of scales.
-	Axis string `json:"axis,omitempty"`
+	XAxis string `json:"xAxis,omitempty"`
+	YAxis string `json:"yAxis,omitempty"`
 
 	// Elide is whether a text layer truncates a label too wide for the box its
 	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
@@ -335,16 +341,18 @@ type Encoding struct {
 	// a rect apart from a region.
 	Text *Channel `json:"text,omitempty"`
 
-	// YSecondary is the chart's secondary vertical axis: the scale a layer
-	// whose mark names `"axis": "y2"` is drawn against, and the title written
-	// down the chart's right-hand side. It is only ever set on the top-level
-	// encoding — a layer has one Y channel, and which axis it reads is the
+	// YSecondary and XSecondary are the chart's secondary axes: the scales a
+	// layer whose mark names `"yAxis": "y2"` or `"xAxis": "x2"` is drawn
+	// against, and the titles written down the chart's right-hand side and
+	// along its top. They are only ever set on the top-level encoding — a
+	// layer has one channel per direction, and which axis it reads is the
 	// mark's business rather than the channel's.
 	//
-	// It is not spelled `y2` because that name is already the *layer* channel
-	// for the far end of a band, and two things called y2 in one document is
-	// how a reader ends up with a chart that draws neither.
+	// They are not spelled `x2` and `y2` because those names are already the
+	// *layer* channels for the far end of a band, and two things called y2 in
+	// one document is how a reader ends up with a chart that draws neither.
 	YSecondary *Channel `json:"ySecondary,omitempty"`
+	XSecondary *Channel `json:"xSecondary,omitempty"`
 
 	// Size is the column a mark takes its size from — the bubble chart's third
 	// dimension. Vega-Lite has the same channel with the same name; what is

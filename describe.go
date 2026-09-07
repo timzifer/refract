@@ -78,9 +78,11 @@ func (p *Plot) a11yChart() a11y.Chart {
 		XTitle:  p.plain(p.xTitle),
 		YTitle:  p.plain(p.yTitle),
 		Y2Title: p.plain(p.y2Title),
+		X2Title: p.plain(p.x2Title),
 		X:       p.scaleX(),
 		Y:       p.scaleY(),
 		Y2:      p.y2,
+		X2:      p.x2,
 		Layers:  p.layers,
 	}
 	if p.facet != nil {

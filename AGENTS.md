@@ -319,26 +319,29 @@ that snapped to round numbers after every wheel notch would not follow the
 pointer, and on a log axis nicing rounds the view out to whole decades. `fixed`
 alone stops *training*; `pinned` also stops *framing*.
 
-**The second Y axis is a scale on the chart and a binding on the layer, and
-five places had to learn it.** `render.Panel.axisOf` asks the layer through
+**A second axis is a scale on the chart and a binding on the layer, and five
+places had to learn it.** `render.Panel.axesOf` asks the layer through
 `geom.Describe` — not a method on `Geom`, which never gains one — so the chart
 and the document agree by construction
-([ADR 0036](docs/adr/0036-secondary-axis.md)). Four consequences are
-load-bearing. `Panel.setRange` frames the coord against **both** vertical
-scales, or the layers on the second one map through a scale with no device
-range. `coord.Opposite` is an optional interface and `Polar` deliberately does
+([ADR 0036](docs/adr/0036-secondary-axis.md)). The two directions are
+independent: a layer may name `OnX2` and `OnY2` together. Four consequences are
+load-bearing. `Panel.setRange` frames the coord against the **secondary** pair as
+well as the primary one, or the layers on a second axis map through a scale
+with no device range. `coord.Opposite` is an optional interface and `Polar` deliberately does
 not implement it — a ring has no far side — so a chart that names a second axis
 under a polar coord simply does not draw one. The second axis draws **no grid
 lines**, and there is a test comparing the count against a one-axis chart:
 two ladders of rules at different values are a moiré, and which scale a line
 belongs to is unanswerable by looking. And `render.LayerAxes` is what makes a
 hit report the right number — an index that inverted every mark through the
-panel's Y would name 4200 on a chart whose right axis reads 12 %, which is
-wrong by a *unit* on the feature whose whole purpose is that the units differ.
-The layout's right gutter is zero for a column with no second axis, which is
-what leaves every golden file unchanged; the guide column is anchored past that
-gutter, because the width was already reserved and an anchor on the panel edge
-puts a legend on top of the labels.
+panel's own scales would name 4200 on a chart whose right axis reads 12 %,
+which is wrong by a *unit* on the feature whose whole purpose is that the units
+differ. The layout's right and top gutters are zero for a column or row with no
+second axis, which is what leaves every golden file unchanged; the guide column
+is anchored past the right one, because the width was already reserved and an
+anchor on the panel edge puts a legend on top of the labels. A facet's strip
+sits **outside** the top gutter: a strip between a panel and its own tick
+labels reads as though it named the axis.
 
 Steering has to move both. `Live.Wheel`, `ZoomTo`, `PanBy` and `Autoscale` all
 reach `Panel.Y2` as well as `Panel.Y`, or the two series slide apart under the

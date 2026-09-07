@@ -178,6 +178,7 @@ type config struct {
 
 	closed    bool
 	onY2      bool
+	onX2      bool
 	elide     bool
 	dashSet   bool
 	markerSet bool
@@ -468,6 +469,17 @@ func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
 // coord: an option every mark accepts must not make a chart's validity depend
 // on something set somewhere else.
 func OnY2() Option { return func(c *config) { c.onY2 = true } }
+
+// OnX2 is [OnY2] turned a quarter turn: it binds this layer to the chart's
+// secondary *horizontal* axis, the one [github.com/timzifer/refract.Plot.X2]
+// sets, drawn along the top of the panel.
+//
+// It is the option two series measured over different extents of the same
+// thing need — a run indexed by cycle against one indexed by elapsed time, or
+// a spectrum read in wavelength against the same spectrum in wavenumber. The
+// two are independent: a layer may name both, and then it reads the top axis
+// and the right one.
+func OnX2() Option { return func(c *config) { c.onX2 = true } }
 
 // Mid selects the column an [ErrorBar] marks the measurement at, inside the
 // interval it draws.

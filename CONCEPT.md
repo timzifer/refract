@@ -1084,11 +1084,16 @@ bucket G for them.
   nowhere to put the second. `geom.ErrorBar` takes either spelling a table
   comes in, and which axis it runs along follows from the encoding
   ([ADR 0035](docs/adr/0035-error-bars.md)).
-- **Two quantities in different units.** A `Plot` had one Y scale and a layer
-  no way to name another. `Plot.Y2` and `geom.OnY2` are a scale on the chart
-  and a binding on the layer, and the axis reaches the layout, the coord's
-  furniture, hit-testing, steering, the description and the document
-  ([ADR 0036](docs/adr/0036-secondary-axis.md)).
+- **A second axis, in both directions.** A `Plot` had one scale per direction
+  and a layer no way to name another. `Plot.Y2`/`geom.OnY2` and
+  `Plot.X2`/`geom.OnX2` are a scale on the chart and a binding on the layer,
+  and each axis reaches the layout, the coord's furniture, hit-testing,
+  steering, the description and the document
+  ([ADR 0036](docs/adr/0036-secondary-axis.md)). The vertical one is two
+  quantities in different units — revenue against margin; the horizontal one is
+  most often one reading with two rulers, an oven curve counted in cycles and
+  in minutes, which needs no second layer because an axis with nothing drawn on
+  it is still an axis. The two are independent: a layer may name both.
 - **A PDF in a script WinAnsi cannot hold.** The emitter named the base-14
   Helvetica, so every rune outside Latin-1 became `?` — in the format people
   send to customers. `pdf.WithFont` embeds a face, subset to the glyphs the
@@ -1100,7 +1105,8 @@ bucket G for them.
   chart written down as JSON labels its ticks the way it was told to, in the
   language it was told to; a mean and its interval are one mark; revenue and
   margin are one chart with two axes that zoom together and describe
-  themselves separately; and a Japanese label reaches a PDF as a glyph rather
+  themselves separately, and so are minutes and cycles along the bottom and the
+  top; and a Japanese label reaches a PDF as a glyph rather
   than as a question mark. ✔
 
 Every one of them is additive: no interface gained a method, no struct lost a

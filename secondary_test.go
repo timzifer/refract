@@ -240,7 +240,7 @@ func TestASecondAxisSurvivesTheRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"ySecondary"`) || !strings.Contains(string(b), `"axis": "y2"`) {
+	if !strings.Contains(string(b), `"ySecondary"`) || !strings.Contains(string(b), `"yAxis": "y2"`) {
 		t.Fatalf("the document is missing the axis or its binding:\n%s", b)
 	}
 	back, err := refract.FromSpec(s)
@@ -322,4 +322,289 @@ func TestAZoomMovesBothVerticalAxes(t *testing.T) {
 func span(s scale.Scale) float64 {
 	lo, hi := s.Domain()
 	return hi - lo
+}
+
+// The second horizontal axis is the same machinery a quarter turn round. What
+// it is *for* is different — two series measured over different extents of the
+// same thing rather than two quantities in different units — so it gets its
+// own chart rather than a transposed copy of the one above.
+
+// twoExtents is a spectrum read in wavelength along the bottom and in
+// wavenumber along the top: one measurement, two ways of indexing it.
+func twoExtents(opts ...refract.Option) (*refract.Plot, scale.Scale, scale.Scale) {
+	src := refract.Float64Columns(map[string][]float64{
+		"nm":     {400, 500, 600, 700},
+		"kayser": {25000, 20000, 16667, 14286},
+		"i":      {0.2, 0.9, 0.5, 0.3},
+	})
+	x := scale.Linear(scale.Nice())
+	x2 := scale.Linear(scale.Nice())
+
+	p := refract.New(append([]refract.Option{
+		refract.Size(640, 380),
+		refract.XTitle("wavelength (nm)"), refract.X2Title("wavenumber (1/cm)"),
+	}, opts...)...)
+	p.X(x)
+	p.X2(x2)
+	p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	p.Add(geom.Line(src, geom.X("nm"), geom.Y("i")))
+	p.Add(geom.Scatter(src, geom.X("kayser"), geom.Y("i"), geom.OnX2()))
+	return p, x, x2
+}
+
+func TestEachHorizontalAxisDescribesItsOwnLayers(t *testing.T) {
+	p, x, x2 := twoExtents()
+	svgOf(t, p)
+
+	if lo, hi := x.Domain(); lo > 400 || hi < 700 {
+		t.Errorf("the primary axis runs %v..%v, want it to cover the wavelengths", lo, hi)
+	}
+	if lo, _ := x2.Domain(); lo < 1000 {
+		t.Errorf("the secondary axis starts at %v; it was trained on the primary layer's numbers", lo)
+	}
+}
+
+// The top axis writes its labels above the panel, which is what "opposite"
+// means when the assertion has to survive a layout change.
+func TestTheSecondHorizontalAxisIsWrittenAlongTheTop(t *testing.T) {
+	p, _, _ := twoExtents()
+	rec := irtest.New()
+	if err := p.Render(rec.Target()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(svgOf(t, p), ">wavenumber (1/cm)<") {
+		t.Error("the second horizontal axis has no title")
+	}
+
+	var lowest, highest float32 = 1e9, -1e9
+	for _, c := range rec.Calls {
+		if c.Op != "Text" {
+			continue
+		}
+		switch c.Text.Text {
+		case "16000", "20000", "24000": // the wavenumber ladder
+			if c.Text.At.Y > highest {
+				highest = c.Text.At.Y
+			}
+		case "400", "500", "600", "700": // the wavelength ladder
+			if c.Text.At.Y < lowest {
+				lowest = c.Text.At.Y
+			}
+		}
+	}
+	if highest >= lowest {
+		t.Errorf("a wavenumber label at y=%v is below a wavelength label at y=%v", highest, lowest)
+	}
+}
+
+// The grid stays the primary axis's in this direction too.
+func TestTheSecondHorizontalAxisDrawsNoGrid(t *testing.T) {
+	src := refract.Float64Columns(map[string][]float64{"nm": {400, 700}, "i": {0.2, 0.3}})
+	one := refract.New(refract.Size(640, 380))
+	one.X(scale.Linear(scale.Nice()))
+	one.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	one.Add(geom.Line(src, geom.X("nm"), geom.Y("i")))
+
+	two, _, _ := twoExtents()
+	if got, want := verticalGridLines(t, two), verticalGridLines(t, one); got != want {
+		t.Errorf("the chart with two horizontal axes drew %d vertical grid lines and the one with one drew %d", got, want)
+	}
+}
+
+// verticalGridLines counts the vertical rules a chart draws down its panel.
+func verticalGridLines(t *testing.T, p *refract.Plot) int {
+	t.Helper()
+	rec := irtest.New()
+	if err := p.Render(rec.Target()); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, c := range rec.Calls {
+		if c.Op == "Polyline" && len(c.Points) == 2 && c.Points[0].X == c.Points[1].X &&
+			c.Points[1].Y-c.Points[0].Y > 100 {
+			n++
+		}
+	}
+	return n
+}
+
+// A hit on a layer bound to the top axis reports that axis's value. Reading it
+// through the panel's own X would name 520 nm for a point drawn at 19 000 1/cm.
+func TestAHitOnTheSecondHorizontalAxisReportsThatAxisValue(t *testing.T) {
+	p, _, _ := twoExtents()
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Close() })
+	if err := live.Draw(); err != nil {
+		t.Fatal(err)
+	}
+	ix := live.Index()
+
+	var at ir.Point
+	found := false
+	for _, c := range rec.Calls {
+		if c.Op == "Markers" && len(c.Points) > 0 {
+			at, found = c.Points[0], true
+		}
+	}
+	if !found {
+		t.Fatal("the scatter layer drew no markers")
+	}
+	hit, ok := ix.At(at, 4)
+	if !ok {
+		t.Fatal("nothing was hit at the marker's own position")
+	}
+	if hit.X < 10000 {
+		t.Errorf("the hit reports x=%v, which is the primary axis reading the same pixel; want a wavenumber", hit.X)
+	}
+}
+
+// Both directions are independent, so a layer may read the top axis and the
+// right one at once.
+func TestALayerCanBeOnBothSecondaryAxes(t *testing.T) {
+	src := refract.Float64Columns(map[string][]float64{
+		"a": {0, 1}, "b": {1, 2}, "c": {100, 200}, "d": {0.1, 0.2},
+	})
+	x, y := scale.Linear(scale.Nice()), scale.Linear(scale.Nice())
+	x2, y2 := scale.Linear(scale.Nice()), scale.Linear(scale.Nice())
+
+	p := refract.New(refract.Size(600, 400))
+	p.X(x)
+	p.Y(y)
+	p.X2(x2)
+	p.Y2(y2)
+	p.Add(geom.Line(src, geom.X("a"), geom.Y("b")))
+	p.Add(geom.Line(src, geom.X("c"), geom.Y("d"), geom.OnX2(), geom.OnY2()))
+
+	svgOf(t, p)
+	if lo, hi := x2.Domain(); lo > 100 || hi < 200 {
+		t.Errorf("the second horizontal axis runs %v..%v, want it to cover the layer that named it", lo, hi)
+	}
+	if lo, hi := y2.Domain(); lo > 0.1 || hi < 0.2 {
+		t.Errorf("the second vertical axis runs %v..%v, want it to cover the layer that named it", lo, hi)
+	}
+	if _, hi := x.Domain(); hi > 50 {
+		t.Errorf("the primary horizontal axis reaches %v; the layer that named the second one trained it", hi)
+	}
+	if _, hi := y.Domain(); hi > 50 {
+		t.Errorf("the primary vertical axis reaches %v; the layer that named the second one trained it", hi)
+	}
+}
+
+// A zoom is one zoom in both directions.
+func TestAZoomMovesBothHorizontalAxes(t *testing.T) {
+	p, x, x2 := twoExtents()
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Close() })
+	if err := live.Draw(); err != nil {
+		t.Fatal(err)
+	}
+
+	before, before2 := span(x), span(x2)
+	if err := live.Wheel(320, 200, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	if span(x) >= before {
+		t.Fatal("the primary horizontal axis did not zoom")
+	}
+	if span(x2) >= before2 {
+		t.Fatal("the secondary horizontal axis did not zoom; the two series have slid apart")
+	}
+	if err := live.Autoscale(); err != nil {
+		t.Fatal(err)
+	}
+	if span(x2) != before2 {
+		t.Errorf("the reset view left the secondary axis at %v, want %v", span(x2), before2)
+	}
+}
+
+// A polar coord has no far side in either direction.
+func TestAPolarChartDrawsNoSecondHorizontalAxis(t *testing.T) {
+	src := refract.Float64Columns(map[string][]float64{"x": {0, 0, 0}, "y": {1, 2, 3}})
+	p := refract.New(refract.Size(400, 400), refract.Coord(coord.Pie()))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.X2(scale.Linear(scale.Domain(0, 100)))
+	p.Add(geom.Bar(src, geom.X("x"), geom.Y("y")))
+
+	if doc := svgOf(t, p); strings.Contains(doc, ">100<") {
+		t.Errorf("a polar chart wrote a second horizontal axis:\n%s", firstLabels(doc))
+	}
+}
+
+// The whole thing survives the round trip, including which layer is on which
+// axis in each direction.
+func TestBothSecondaryAxesSurviveTheRoundTrip(t *testing.T) {
+	p, _, _ := twoExtents()
+	s, err := p.Spec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"xSecondary"`) || !strings.Contains(string(b), `"xAxis": "x2"`) {
+		t.Fatalf("the document is missing the axis or its binding:\n%s", b)
+	}
+	back, err := refract.FromSpec(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svgOf(t, back) != svgOf(t, p) {
+		t.Error("the chart read back differently")
+	}
+}
+
+// A chart with no second horizontal axis is the chart it was.
+func TestAChartWithNoSecondHorizontalAxisIsUnchanged(t *testing.T) {
+	src := refract.Float64Columns(map[string][]float64{"x": {0, 1, 2}, "y": {1, 4, 2}})
+	build := func(withX2 bool) string {
+		p := refract.New(refract.Size(500, 300), refract.Title("Signal"))
+		p.X(scale.Linear(scale.Nice()))
+		p.Y(scale.Linear(scale.Nice()))
+		if withX2 {
+			p.X2(scale.Linear(scale.Nice()))
+		}
+		p.Add(geom.Line(src, geom.X("x"), geom.Y("y")))
+		return svgOf(t, p)
+	}
+	plain := build(false)
+	if plain == build(true) {
+		t.Error("adding a second horizontal axis changed nothing; it should at least draw its own line")
+	}
+	if plain != build(false) {
+		t.Error("a chart with no second horizontal axis is not reproducible")
+	}
+}
+
+// A facet writes the shared second horizontal axis at the top of the grid.
+func TestAFacetWritesTheSecondHorizontalAxisAtItsTop(t *testing.T) {
+	src := refract.NewTable().
+		Float64("x", []float64{0, 1, 0, 1}).
+		Float64("x2", []float64{100, 200, 100, 200}).
+		Float64("y", []float64{10, 20, 30, 40}).
+		String("g", []string{"a", "a", "b", "b"})
+
+	p := refract.New(refract.Size(420, 620))
+	p.X(scale.Linear(scale.Nice()))
+	p.X2(scale.Linear(scale.Domain(0, 200)))
+	p.Y(scale.Linear(scale.Nice()))
+	p.Add(geom.Line(src, geom.X("x"), geom.Y("y")))
+	p.Add(geom.Line(src, geom.X("x2"), geom.Y("y"), geom.OnX2()))
+	p.Facet(facet.Wrap("g", facet.Columns(1)))
+
+	doc := svgOf(t, p)
+	// Two panels stacked, one shared axis: the ladder is written once, at the
+	// top of the grid.
+	if n := strings.Count(doc, ">150<"); n != 1 {
+		t.Errorf("the shared second horizontal axis was written %d times, want once:\n%s", n, firstLabels(doc))
+	}
 }

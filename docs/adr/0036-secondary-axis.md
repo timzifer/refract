@@ -1,6 +1,7 @@
-# 0036 — A second vertical axis is a scale on the chart and a binding on the layer
+# 0036 — A second axis is a scale on the chart and a binding on the layer
 
-**Status:** Accepted · **Date:** 2026-09-07
+**Status:** Accepted · **Date:** 2026-09-07 · **Amended:** 2026-09-07 (see
+[Amendment](#amendment-the-horizontal-direction))
 
 ## Context
 
@@ -30,7 +31,9 @@ the document.
 
 ## Decision
 
-**The scale is on the chart and the binding is on the layer.**
+**The scale is on the chart and the binding is on the layer.** Stated for the
+vertical direction, which is the one it was written for; the horizontal one is
+the same sentence and is covered by the amendment below.
 
 ```go
 p.Y(scale.Linear(scale.Zero()))
@@ -131,8 +134,68 @@ column for it.
 - **The parallel path snapshots it.** Panels share one scale object per axis,
   and setting its device range from two goroutines is the same write race the
   first axis has, answered the same way.
-- **What is still one thing per chart: the X axis.** A secondary *horizontal*
-  axis is the same machinery turned a quarter turn and is not here, because
-  nothing has asked for it — the two-unit chart is a vertical arrangement, and
-  a second X axis is usually a second *time* base, which is a different feature
-  (two domains over one extent) wearing this one's clothes.
+- **What was still one thing per chart: the X axis.** A secondary *horizontal*
+  axis is the same machinery turned a quarter turn and was not in the first
+  version of this record, because nothing had asked for it. Something did; see
+  the amendment below.
+
+## Amendment: the horizontal direction
+
+The consequence above gave two reasons for leaving the second X axis out. One
+was "nothing has asked for it", and that expired the day somebody did. The
+other was an argument and deserves an answer rather than a quiet reversal:
+
+> a second X axis is usually a second *time* base, which is a different feature
+> (two domains over one extent) wearing this one's clothes.
+
+**That was half right, and the half it got wrong is the half that mattered.**
+There genuinely is a different feature nearby: two *layers* whose X columns are
+unrelated measurements sharing one rectangle — a run indexed by cycle beside a
+run indexed by elapsed time — and that is what `Plot.X2` plus `geom.OnX2`
+gives, exactly as `Y2` gives it vertically. What the argument missed is the
+*more* common shape, which needs no second feature at all: **one reading with
+two rulers under it**. An oven curve the operator counts in cycles and the
+engineer counts in minutes is one series, one set of marks, and two ladders
+describing the same extent. That falls out of this machinery for free, because
+an axis with no layer bound to it is still drawn — which this record had
+already decided, for a different reason, one consequence up.
+
+So the generalisation is the feature, and the "different feature" it was held
+back for turns out to be a *third* thing that neither this nor the guess
+describes: two domains over one extent that must stay in a fixed relation, so
+that zooming one rescales the other. That one is still not here, and now has a
+name.
+
+### What generalising cost
+
+Less than the first direction did, which is the argument for having built the
+first one as machinery rather than as a special case:
+
+- `coord.Opposite` gained `FurnitureX2` beside `FurnitureY2` — one interface,
+  because they are one capability ("this coord has edges opposite its axes")
+  and a coord that can answer for one direction can answer for the other.
+  Cartesian implements both; Polar still implements neither.
+- `layout` gained a per-row **top gutter**, which is the right gutter turned a
+  quarter turn, and a title band above the panels and below the chart title.
+  A row whose panels have no second axis gets a gutter of zero, so every
+  existing figure is unchanged — the same property the right gutter has.
+- `render.LayerAxes` became `LayerAxes(x, y)` rather than `LayerY(y)`. It was
+  added in the same unreleased batch as this record, so widening it costs
+  nothing; had it shipped, the second direction would have needed an interface
+  of its own, which is an argument for naming an optional interface after the
+  *capability* rather than after the first use of it.
+- `Panel.axisOf` became `Panel.axesOf`, returning both scales. The two
+  directions are independent by construction: a layer may name `OnX2` and
+  `OnY2` together and then reads the top axis and the right one.
+- The document carries `xAxis` and `yAxis` on the mark rather than one `axis`,
+  because a single field would have to spell a *set* once a layer can be on
+  both.
+
+### The strip moved, and that is load-bearing
+
+A facet's strip is drawn above its panel. With a second horizontal axis there
+are now two things above the panel, and the order is: panel, then its own
+axis's labels, then the strip naming it. Same order as the right-hand side and
+the same reason — the axis belongs to the panel and the strip names the panel.
+A strip drawn between the panel and its own tick labels would read as though it
+named the axis.

@@ -23,9 +23,11 @@ func (p *Plot) Spec() (spec.Spec, error) {
 		XTitle:  p.xTitle,
 		YTitle:  p.yTitle,
 		Y2Title: p.y2Title,
+		X2Title: p.x2Title,
 		X:       p.scaleX(),
 		Y:       p.scaleY(),
 		Y2:      p.y2,
+		X2:      p.x2,
 		Coord:   p.coord,
 		Layers:  p.layers,
 		Facet:   p.facet,
@@ -45,7 +47,8 @@ func FromSpec(s spec.Spec) (*Plot, error) {
 		return nil, err
 	}
 	p := New(Size(c.Width, c.Height), DPR(c.DPR), Theme(c.Theme),
-		Title(c.Title), XTitle(c.XTitle), YTitle(c.YTitle), Y2Title(c.Y2Title))
+		Title(c.Title), XTitle(c.XTitle), YTitle(c.YTitle),
+		Y2Title(c.Y2Title), X2Title(c.X2Title))
 	if c.X != nil {
 		p.X(c.X)
 	}
@@ -54,6 +57,9 @@ func FromSpec(s spec.Spec) (*Plot, error) {
 	}
 	if c.Y2 != nil {
 		p.Y2(c.Y2)
+	}
+	if c.X2 != nil {
+		p.X2(c.X2)
 	}
 	p.coord = c.Coord
 	p.Add(c.Layers...)

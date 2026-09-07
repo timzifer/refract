@@ -45,7 +45,7 @@ depends on.
 | [0033](0033-null-values.md) | A null is a missing value, and a column says so beside its values | Accepted | — |
 | [0034](0034-label-format-and-locale.md) | A tick label is described rather than computed, and the description carries a language | Accepted | — |
 | [0035](0035-error-bars.md) | An interval is a mark, and the encoding says which way it runs | Accepted | — |
-| [0036](0036-secondary-axis.md) | A second vertical axis is a scale on the chart and a binding on the layer | Accepted | — |
+| [0036](0036-secondary-axis.md) | A second axis is a scale on the chart and a binding on the layer | Accepted, amended | — |
 | [0037](0037-embedded-fonts.md) | A PDF carries the font its labels need, subset to the glyphs it drew | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend

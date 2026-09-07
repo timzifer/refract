@@ -160,9 +160,11 @@ type Desc struct {
 	// Closed reports a connected layer that joins its last mark back to its
 	// first — the radar contour of [Closed].
 	Closed bool
-	// OnY2 reports a layer bound to the chart's secondary vertical axis. See
-	// [OnY2].
+	// OnY2 and OnX2 report a layer bound to the chart's secondary vertical or
+	// horizontal axis. They are independent: a layer may be on both. See
+	// [OnY2] and [OnX2].
 	OnY2     bool
+	OnX2     bool
 	Size     float32
 	BarWidth float64
 	Baseline float64
@@ -323,7 +325,7 @@ func (d Desc) options() []Option {
 		Extend(d.Extend),
 		Order(d.Order),
 		Closed(d.Closed),
-		onSecondary(d.OnY2),
+		onSecondary(d.OnY2, d.OnX2),
 		Bins(d.Bins),
 		BinRange(d.BinLo, d.BinHi),
 		Bandwidth(d.Bandwidth),
@@ -456,6 +458,7 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		MarkerSet:  c.markerSet,
 		Closed:     c.closed,
 		OnY2:       c.onY2,
+		OnX2:       c.onX2,
 		Size:       c.size,
 		BarWidth:   c.barWidth,
 		Baseline:   c.baseline,
@@ -571,22 +574,31 @@ var (
 	_ Describer = (*noteGeom)(nil)
 )
 
-// onSecondary is [OnY2] as a plain setter, so that [FromDesc]'s option list
-// can carry the flag either way round. The exported option only ever turns it
-// on, because a layer that says nothing is on the primary axis and an option
-// spelling "not secondary" would read as though there were a third state.
-func onSecondary(on bool) Option { return func(c *config) { c.onY2 = on } }
+// onSecondary is [OnY2] and [OnX2] as plain setters, so that [FromDesc]'s
+// option list can carry the flags either way round. The exported options only
+// ever turn them on, because a layer that says nothing is on the primary axes
+// and an option spelling "not secondary" would read as though there were a
+// third state.
+func onSecondary(y2, x2 bool) Option {
+	return func(c *config) { c.onY2, c.onX2 = y2, x2 }
+}
 
-// OnSecondaryY reports whether a layer draws against the chart's secondary
-// vertical axis.
+// OnSecondaryY and OnSecondaryX report whether a layer draws against the
+// chart's secondary vertical or horizontal axis.
 //
-// It is asked through [Describer] rather than through a method on [Geom],
+// They are asked through [Describer] rather than through a method on [Geom],
 // because Geom is implemented outside this package and never gains one — and
 // because the binding is already part of what a layer says about itself, so
 // the answer and the document agree by construction. A layer that cannot
-// describe itself reads the primary axis, which is what every layer written
+// describe itself reads the primary axes, which is what every layer written
 // before there were two of them means.
 func OnSecondaryY(g Geom) bool {
 	d, ok := Describe(g)
 	return ok && d.OnY2
+}
+
+// OnSecondaryX is [OnSecondaryY] for the horizontal axis.
+func OnSecondaryX(g Geom) bool {
+	d, ok := Describe(g)
+	return ok && d.OnX2
 }

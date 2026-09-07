@@ -144,9 +144,10 @@ type Plot struct {
 	xTitle  string
 	yTitle  string
 	y2Title string
+	x2Title string
 
 	x, y   scale.Scale
-	y2     scale.Scale
+	y2, x2 scale.Scale
 	coord  coordpkg.Coord
 	layers []geom.Geom
 
@@ -324,6 +325,10 @@ func YTitle(s string) Option { return func(p *Plot) { p.yTitle = s } }
 // chart's right-hand side. It is ignored by a chart with no [Plot.Y2].
 func Y2Title(s string) Option { return func(p *Plot) { p.y2Title = s } }
 
+// X2Title sets the title of the secondary horizontal axis, written along the
+// chart's top. It is ignored by a chart with no [Plot.X2].
+func X2Title(s string) Option { return func(p *Plot) { p.x2Title = s } }
+
 // Legend forces the legend on or off. By default a legend appears once a plot
 // has more than one layer: one series does not need to be told apart from
 // anything.
@@ -426,6 +431,20 @@ func (p *Plot) Y(s scale.Scale) *Plot { p.y = s; return p }
 // a live chart whose second series has not arrived is the case.
 func (p *Plot) Y2(s scale.Scale) *Plot { p.y2 = s; return p }
 
+// X2 sets the chart's secondary horizontal axis: a second scale, drawn along
+// the top, read by the layers that asked for it with [geom.OnX2].
+//
+// It is [Plot.Y2] turned a quarter turn and everything said there holds,
+// including that the second axis draws no grid lines. What it is *for* is
+// different: two series measured over different extents of the same thing —
+// a run indexed by cycle beside one indexed by elapsed time, a spectrum read
+// in wavelength against the same spectrum in wavenumber, a backlog by date
+// against a backlog by sprint.
+//
+// The two directions are independent. A layer may name [geom.OnX2] and
+// [geom.OnY2] together, and then it reads the top axis and the right one.
+func (p *Plot) X2(s scale.Scale) *Plot { p.x2 = s; return p }
+
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
@@ -506,6 +525,7 @@ func (p *Plot) chart() (render.Chart, error) {
 		scale.Localize(c.X, p.locale)
 		scale.Localize(c.Y, p.locale)
 		scale.Localize(c.Y2, p.locale)
+		scale.Localize(c.X2, p.locale)
 		for i := range c.Panels {
 			scale.Localize(c.Panels[i].X, p.locale)
 			scale.Localize(c.Panels[i].Y, p.locale)
@@ -526,7 +546,9 @@ func (p *Plot) describe() (render.Chart, error) {
 		X:           p.scaleX(),
 		Y:           p.scaleY(),
 		Y2:          p.y2,
+		X2:          p.x2,
 		Y2Title:     p.y2Title,
+		X2Title:     p.x2Title,
 		Coord:       p.coord,
 		Layers:      p.layers,
 		ShowLegend:  p.showLegend(),
@@ -561,6 +583,7 @@ func (p *Plot) describe() (render.Chart, error) {
 			X:          c.X,
 			Y:          c.Y,
 			Y2:         c.Y2,
+			X2:         c.X2,
 			// A shared axis is written once, at the edge of the grid — which
 			// is the last panel in the column, not the last row: a wrapped
 			// facet whose final row is short would otherwise leave the
@@ -575,10 +598,16 @@ func (p *Plot) describe() (render.Chart, error) {
 			// same rule: a shared axis belongs at the outside, and a free one
 			// is a different axis in every panel and has to be written in each.
 			ShowY2: c.Y2 != nil && (freeY || outermost(panels, fp, rightOf)),
+			ShowX2: c.X2 != nil && (freeX || outermost(panels, fp, above)),
 		}
 		if freeX {
 			if rp.X, err = freeScale(c.X); err != nil {
 				return render.Chart{}, err
+			}
+			if c.X2 != nil {
+				if rp.X2, err = freeScale(c.X2); err != nil {
+					return render.Chart{}, err
+				}
 			}
 		}
 		if freeY {
@@ -611,11 +640,12 @@ func outermost(panels []facet.Panel, p facet.Panel, beyond func(a, b facet.Panel
 	return true
 }
 
-// below, leftOf and rightOf are the three directions that matter. A shared X axis is
+// below, above, leftOf and rightOf are the four directions that matter. A shared X axis is
 // written by the last panel in its column — not by the bottom row, because a
 // wrapped facet whose final row is short would leave the panels above the gap
 // unlabelled. A shared Y axis is written by the first panel in its row.
 func below(a, b facet.Panel) bool   { return a.Col == b.Col && b.Row > a.Row }
+func above(a, b facet.Panel) bool   { return a.Col == b.Col && b.Row < a.Row }
 func leftOf(a, b facet.Panel) bool  { return a.Row == b.Row && b.Col < a.Col }
 func rightOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col > a.Col }
 

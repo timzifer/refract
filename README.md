@@ -25,8 +25,8 @@ everywhere — built on the GoGPU stack.**
 >
 > **On `main` since:** the six gaps that were not chart types — a null that is
 > a missing value in a text or temporal column, a tick format and a language a
-> *document* can choose, an interval mark, a second vertical axis, and a PDF
-> that carries the font its labels need. All additive; see
+> *document* can choose, an interval mark, a second axis in either direction,
+> and a PDF that carries the font its labels need. All additive; see
 > [CONCEPT §14](CONCEPT.md#14-roadmap--milestones).
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
@@ -150,6 +150,7 @@ picture here cannot drift away from the code that produced it.
 | ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
 | ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
+| ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | |
 
 ## What it does
 
