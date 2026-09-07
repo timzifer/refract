@@ -339,10 +339,15 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
+      # main is a protected branch, so the badge commit below cannot go through
+      # the workflow token: a ruleset bypass is not grantable to it on a
+      # user-owned repository. It goes through a deploy key that the ruleset
+      # does name as a bypass actor instead, which is why the checkout is by
+      # SSH. See CONTRIBUTING.md.
       - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.CI_PUSH_KEY }}
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -432,10 +437,12 @@ jobs:
   figures:
     name: Documentation figures
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
+      # The same deploy key as the coverage job, and for the same reason: the
+      # commit below lands on a protected main.
       - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.CI_PUSH_KEY }}
       - uses: actions/setup-go@v5
         with:
           go-version: stable

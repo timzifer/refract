@@ -354,6 +354,23 @@ CI job writes the same table into its summary and attaches the raw output:
 go test -run='^$' -bench=. -benchmem ./... | awk -f .github/scripts/benchtable.awk
 ```
 
+## Landing a change
+
+`main` is protected by a repository ruleset, so nothing lands on it directly:
+every change goes through a pull request, and the merge button unlocks when the
+lint, test, race, wasm, figure and CodeQL checks are green. Force-pushing main
+and deleting it are refused outright.
+
+Two CI jobs are the exception, because they commit *to* main: `coverage` writes
+`docs/coverage.json` for the README badge, and `figures` re-renders
+`docs/images/` when a chart changes. A workflow token cannot be granted a
+ruleset bypass on a user-owned repository, so those two jobs check out over SSH
+with a write deploy key — the `CI_PUSH_KEY` secret — and the ruleset names that
+deploy key as its bypass actor. If the badge or the figures ever stop updating
+on main, that key is the first thing to look at: rotate it by generating a new
+ed25519 pair, replacing the deploy key and the secret, and pointing the
+ruleset's bypass at the new key's id.
+
 ## Releasing
 
 The modules are tagged in dependency order, because each nested module
