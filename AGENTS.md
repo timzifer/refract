@@ -301,6 +301,29 @@ that snapped to round numbers after every wheel notch would not follow the
 pointer, and on a log axis nicing rounds the view out to whole decades. `fixed`
 alone stops *training*; `pinned` also stops *framing*.
 
+**A tick label has two spellings and the Go one wins, but both are written
+down.** `scale.Format` takes a function and `scale.NumberFormat` takes a spec;
+`Desc` carries `Formatted` *and* `Format`, because a Desc that dropped the spec
+when a function was present would silently change the chart the day somebody
+deleted the Go code — [ADR 0034](docs/adr/0034-label-format-and-locale.md). Two
+things there are easy to break. A spec that names no precision must keep the
+axis's own, which is derived from the tick *step* and is what keeps a column of
+labels aligned: that is why `autoFor` returns a description rather than a
+formatter, and why the two meet in `numberFormat.label`. And an unlocalised
+scale must take the *old* path exactly — `punctuate` with English's separators
+is the identity on `strconv`'s output, and a time scale with no locale calls
+`time.Format` itself rather than the layout-splitting path — because that is
+what leaves every golden file in the repository unchanged. There is a test
+asserting that naming English changes nothing; do not "simplify" the default
+branch away.
+
+**A locale reaches a chart's axes by a walk, and the walk is the feature.**
+`refract.Locale` localises the scales in the *chart description*, after it is
+built, which is what reaches a track's own scale and a free facet axis's clone
+— neither of which the caller holds. Setting it in `Plot.X` instead compiles
+and misses both. It happens before the parallel path, and a locale is read
+from then on and never written, so there is nothing for `Snapshotter` to fix.
+
 **A null is a missing value, and only a numeric column can say so by itself.**
 `""` is a string somebody may have measured and the zero time is an instant, so
 absence in a text or temporal column is stated beside the values through

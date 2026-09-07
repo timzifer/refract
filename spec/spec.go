@@ -371,6 +371,27 @@ type Scale struct {
 	// proportion, so it is written out rather than assumed.
 	SizeZero *float64 `json:"sizeZero,omitempty"`
 
+	// Format is how this axis writes its tick labels, and Locale the language
+	// it writes them in.
+	//
+	// A numeric scale reads Format as a number format —
+	// [github.com/timzifer/refract/scale.NumberFormat] gives the grammar,
+	// which is "#" for the number with an optional group comma, decimals,
+	// style letter, and any literal text around it: "€ #,.2". A time scale
+	// reads it as a Go reference layout, which is
+	// [github.com/timzifer/refract/scale.TimeLayout]. One field rather than
+	// two because the scale's own type already says which of the two an axis
+	// is, and Vega-Lite spells both of its equivalents `format` as well —
+	// there on the axis, which refract has no object for.
+	//
+	// Locale is a name, resolved against what the reading process registered
+	// through [github.com/timzifer/refract/scale.RegisterLocale]. A name
+	// nothing registered draws in English and is written back out unchanged,
+	// so a document does not lose what it asked for by passing through a
+	// process that cannot honour it.
+	Format string `json:"format,omitempty"`
+	Locale string `json:"locale,omitempty"`
+
 	// MinorTicks, Center, Undefined, TimeZone and Origin are refract's.
 	MinorTicks *bool    `json:"minorTicks,omitempty"`
 	Center     *float64 `json:"center,omitempty"`

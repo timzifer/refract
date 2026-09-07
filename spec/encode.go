@@ -129,7 +129,7 @@ func channelType(k scale.Kind) string {
 }
 
 func encodeScale(d scale.Desc) *Scale {
-	out := &Scale{Nice: d.Nice, Zero: d.Zero}
+	out := &Scale{Nice: d.Nice, Zero: d.Zero, Format: d.Format, Locale: d.Locale}
 	switch d.Kind {
 	case scale.KindLinear:
 		out.Type = "linear"
@@ -141,6 +141,10 @@ func encodeScale(d scale.Desc) *Scale {
 		out.MinorTicks = boolPtr(d.MinorTicks)
 	case scale.KindTime:
 		out.Type, out.TimeZone = "time", d.Location
+		// A time scale's declarative format is a layout, and it travels in
+		// the same field a numeric scale's number format does: the type says
+		// which of the two this is.
+		out.Format = d.Layout
 		if d.Origin != 0 {
 			out.Origin = time.Unix(0, d.Origin).UTC().Format(timeLayout)
 		}

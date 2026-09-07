@@ -148,6 +148,13 @@ type Plot struct {
 	coord  coordpkg.Coord
 	layers []geom.Geom
 
+	// locale is the language every axis of this plot writes its labels in,
+	// and nil for English. It is a plot-level option rather than a scale one
+	// because a chart is in one language: setting it per scale means saying
+	// it once per axis and once per track, and forgetting it somewhere is a
+	// chart with two languages in it. See [Locale].
+	locale *scale.Locale
+
 	facet *facet.Spec
 
 	// tracks are the bands at the panel's edges, in the order they were
@@ -276,6 +283,28 @@ func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } 
 // A coord belongs to the chart rather than to a panel, so the panels of a
 // facet all share it.
 func Coord(c coordpkg.Coord) Option { return func(p *Plot) { p.coord = c } }
+
+// Locale sets the language every axis of this plot writes its tick labels in:
+// the decimal and group separators of a number, the percent sign, and the
+// month and weekday names of a time axis.
+//
+// It reaches the scales through [scale.Localizer], which every scale in the
+// scale package implements except the ordinal one — an ordinal axis labels its
+// ticks with the caller's own categories, and translating those would be
+// inventing data. A scale from somewhere else that does not implement it is
+// left alone rather than refused.
+//
+// It is a plot option rather than a scale one because a chart is in one
+// language: setting it per scale means saying it once per axis and once per
+// track, and forgetting it somewhere is a chart with two languages in it.
+//
+// The default is [scale.English], which is what every chart drew before this
+// option existed.
+//
+//	p := refract.New(refract.Locale(scale.LocaleDE))
+//	p.X(scale.Time()).Y(scale.Linear(scale.NumberFormat("#,.1")))
+//	// → "1.234,5" on the Y axis and "Mär 2026" on the X one
+func Locale(l *scale.Locale) Option { return func(p *Plot) { p.locale = l } }
 
 // Theme sets the visual tokens. The default is [theme.Light].
 func Theme(t themepkg.Theme) Option { return func(p *Plot) { p.theme = t } }
@@ -433,7 +462,34 @@ func (p *Plot) Render(t Target) (err error) {
 
 // chart resolves the plot into what render draws: one panel, or the grid of
 // panels a facet spec cuts it into.
+// chart builds the render description and puts every axis it holds into the
+// plot's language.
+//
+// Localising here rather than in [Plot.X] is what makes the option reach a
+// scale the plot was given afterwards, a track's own scale and a free facet
+// axis's clone alike — they are all in the description by the time this runs,
+// and the walk is one place rather than four call sites that can drift.
+//
+// It is safe against the parallel path because it happens before it: the
+// panels are built after this returns, and a locale is read from then on and
+// never written.
 func (p *Plot) chart() (render.Chart, error) {
+	c, err := p.describe()
+	if err != nil {
+		return render.Chart{}, err
+	}
+	if p.locale != nil {
+		scale.Localize(c.X, p.locale)
+		scale.Localize(c.Y, p.locale)
+		for i := range c.Panels {
+			scale.Localize(c.Panels[i].X, p.locale)
+			scale.Localize(c.Panels[i].Y, p.locale)
+		}
+	}
+	return c, nil
+}
+
+func (p *Plot) describe() (render.Chart, error) {
 	c := render.Chart{
 		Width:       p.width,
 		Height:      p.height,

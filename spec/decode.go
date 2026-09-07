@@ -127,10 +127,18 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 			typ = "linear"
 		}
 	}
-	d := scale.Desc{Nice: s.Nice, Zero: s.Zero, Base: s.Base, Threshold: s.Constant}
+	d := scale.Desc{Nice: s.Nice, Zero: s.Zero, Base: s.Base, Threshold: s.Constant, Locale: s.Locale}
 	d.MinorTicks = true
 	if s.MinorTicks != nil {
 		d.MinorTicks = *s.MinorTicks
+	}
+
+	// The one format field is read as whichever of the two the scale's type
+	// makes it; see [Scale.Format].
+	if typ == "time" || typ == "utc" {
+		d.Layout = s.Format
+	} else {
+		d.Format = s.Format
 	}
 
 	switch typ {

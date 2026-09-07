@@ -70,6 +70,11 @@ type logScale struct {
 	pinned bool
 	minor  bool
 	format func(float64) string
+
+	// numFormat and loc are the declarative half of the same choice; see
+	// [NumberFormat].
+	numFormat numberFormat
+	loc       *Locale
 }
 
 func (l *logScale) Train(vs ...float64) {
@@ -162,7 +167,7 @@ func (l *logScale) Ticks(want int) []Tick {
 
 	fmtFn := l.format
 	if fmtFn == nil {
-		fmtFn = formatLog
+		fmtFn = labeller(autoFormat{mode: 'l'}, l.numFormat, l.loc)
 	}
 
 	out := make([]Tick, 0, (last-first+1)*2)
@@ -219,3 +224,6 @@ func formatLog(v float64) string {
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
+
+// SetLocale implements [Localizer].
+func (l *logScale) SetLocale(loc *Locale) { l.loc = loc }
