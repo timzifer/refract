@@ -13,7 +13,7 @@ require github.com/gogpu/gg v0.52.5
 
 require (
 	github.com/timzifer/refract v1.0.0
-	github.com/timzifer/refract/backend/gg v1.0.0
+	github.com/timzifer/refract/backend/gg v1.0.2
 )
 
 require (
