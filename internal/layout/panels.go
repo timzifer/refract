@@ -31,6 +31,12 @@ type Grid struct {
 	// Panels are the panels, in any order. A cell with no panel is a hole.
 	Panels []Panel
 
+	// ColWidths fixes the width of a column in device units, or leaves it to
+	// the solver when the entry is zero or absent. It is RowHeights turned a
+	// quarter turn: what a left or right track — a band beside the panel, on
+	// the panel's own Y — is made of.
+	ColWidths []float32
+
 	// RowHeights fixes the height of a row in device units, or leaves it to
 	// the solver when the entry is zero or absent. It is what a track — a band
 	// at a panel's edge, on the panel's own X — is made of: a row whose height
@@ -166,7 +172,7 @@ func Panels(g Grid, m Measurer) GridResult {
 	regionBottom := area.Max.Y - bottomTitleH
 	usableH := regionBottom - regionTop
 	availH := usableH - sum(rowGutter) - sum(stripH) - float32(g.Rows-1)*th.PanelGap
-	rowH, panelsH := rowHeights(g, availH)
+	rowH, panelsH := extents(g.RowHeights, g.Rows, availH)
 
 	// The guides are as long as the panels together are tall, which is the
 	// fixed rows plus the flexible ones — not the region, which includes the
@@ -189,12 +195,8 @@ func Panels(g Grid, m Measurer) GridResult {
 	regionLeft := area.Min.X + leftTitleH
 	regionRight := area.Max.X - right
 	usableW := regionRight - regionLeft
-	panelW := (usableW - sum(colGutter) - sum(rightStripW) - float32(g.Cols-1)*th.PanelGap) / float32(g.Cols)
-
-	// A canvas too small for its furniture would produce inverted rectangles
-	// and geometry that maps to nonsense. Collapse to degenerate but
-	// well-ordered panels instead.
-	panelW = maxOf(panelW, 0)
+	availW := usableW - sum(colGutter) - sum(rightStripW) - float32(g.Cols-1)*th.PanelGap
+	colW, _ := extents(g.ColWidths, g.Cols, availW)
 
 	r.Region = ir.Rect{
 		Min: ir.Point{X: regionLeft, Y: regionTop},
@@ -210,7 +212,7 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		x += colGutter[c]
 		colX[c] = x
-		x += panelW + rightStripW[c]
+		x += colW[c] + rightStripW[c]
 	}
 	rowY := make([]float32, g.Rows)
 	y := regionTop
@@ -229,7 +231,7 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		box := ir.Rect{
 			Min: ir.Point{X: colX[p.Col], Y: rowY[p.Row]},
-			Max: ir.Point{X: colX[p.Col] + panelW, Y: rowY[p.Row] + rowH[p.Row]},
+			Max: ir.Point{X: colX[p.Col] + colW[p.Col], Y: rowY[p.Row] + rowH[p.Row]},
 		}
 		r.Areas[i] = box
 		if p.Strip != "" {
@@ -251,7 +253,7 @@ func Panels(g Grid, m Measurer) GridResult {
 	// to one side of the thing it names.
 	span := ir.Rect{
 		Min: ir.Point{X: colX[0], Y: rowY[0]},
-		Max: ir.Point{X: colX[g.Cols-1] + panelW, Y: rowY[g.Rows-1] + rowH[g.Rows-1]},
+		Max: ir.Point{X: colX[g.Cols-1] + colW[g.Cols-1], Y: rowY[g.Rows-1] + rowH[g.Rows-1]},
 	}
 	if g.Title != "" {
 		mm := m.Measure(ir.TextRun{Text: g.Title, Font: titleFont})
@@ -295,62 +297,68 @@ func sum(vs []float32) float32 {
 	return t
 }
 
-// rowHeights resolves each row's height, and reports how tall the panels are
-// together — which is what the guide column is measured against.
+// extents resolves the size of each track along one axis of the grid, and
+// reports how much of it the panels occupy together — which is what the guide
+// column is measured against.
 //
-// A row named in Grid.RowHeights is that tall; every other row takes an equal
-// share of what is left. The arithmetic is deliberately written so that a grid
-// with no fixed row computes exactly what it computed before this existed: the
+// A track named in given is that size; every other one takes an equal share of
+// what is left. It is one function rather than two because a fixed row and a
+// fixed column are the same arithmetic turned a quarter turn, and two copies
+// of the care below would be two places to get it wrong.
+//
+// That care: the arithmetic is deliberately written so that a grid fixing
+// nothing computes exactly what it computed before any of this existed. The
 // share is a single division of the same quantity, and the total is a single
-// multiplication rather than a sum, because a float32 sum of n equal terms is
-// not always the product and every golden file in the repository would move by
-// an ulp if it were.
-func rowHeights(g Grid, avail float32) (rows []float32, panels float32) {
-	rows = make([]float32, g.Rows)
+// multiplication rather than a sum — because a float32 sum of n equal terms is
+// not always their product, and every golden file in the repository would move
+// by an ulp if it were. The structural comparison the goldens use tolerates
+// exactly that much, so nothing would fail; the figures would simply drift.
+func extents(given []float32, n int, avail float32) (sizes []float32, panels float32) {
+	sizes = make([]float32, n)
 
 	var fixed float32
 	flex := 0
-	for i := range rows {
-		if h := givenHeight(g, i); h > 0 {
-			rows[i] = h
-			fixed += h
+	for i := range sizes {
+		if e := givenExtent(given, i); e > 0 {
+			sizes[i] = e
+			fixed += e
 		} else {
 			flex++
 		}
 	}
 
-	// A canvas too small for its fixed rows would produce inverted rectangles
-	// and geometry that maps to nonsense. Give the flexible rows nothing and
-	// shrink the fixed ones in proportion, so the result is degenerate but
-	// still well ordered.
+	// A canvas too small for its fixed tracks would produce inverted
+	// rectangles and geometry that maps to nonsense. Give the flexible ones
+	// nothing and shrink the fixed ones in proportion, so the result is
+	// degenerate but still well ordered.
 	if fixed > avail {
 		scale := float32(0)
 		if avail > 0 {
 			scale = avail / fixed
 		}
-		for i := range rows {
-			rows[i] *= scale
+		for i := range sizes {
+			sizes[i] *= scale
 		}
-		return rows, maxOf(avail, 0)
+		return sizes, maxOf(avail, 0)
 	}
 
 	if flex == 0 {
-		return rows, fixed
+		return sizes, fixed
 	}
 	share := maxOf((avail-fixed)/float32(flex), 0)
-	for i := range rows {
-		if givenHeight(g, i) <= 0 {
-			rows[i] = share
+	for i := range sizes {
+		if givenExtent(given, i) <= 0 {
+			sizes[i] = share
 		}
 	}
-	return rows, share*float32(flex) + fixed
+	return sizes, share*float32(flex) + fixed
 }
 
-// givenHeight is the height Grid.RowHeights fixes for a row, or zero when the
-// row is the solver's to size.
-func givenHeight(g Grid, row int) float32 {
-	if row < 0 || row >= len(g.RowHeights) {
+// givenExtent is the size the caller fixed for one row or column, or zero when
+// it is the solver's to decide.
+func givenExtent(given []float32, i int) float32 {
+	if i < 0 || i >= len(given) {
 		return 0
 	}
-	return maxOf(g.RowHeights[row], 0)
+	return maxOf(given[i], 0)
 }

@@ -123,7 +123,8 @@ Dropping the second call leaves every panel but the last drawing its data where
 the last panel's axis is. There is a test.
 
 **A track shares the panel's scale object, and that is the whole feature.**
-`Plot.tracked` gives every track panel `c.X` itself. A zoom reaches a scale
+`Plot.tracked` gives every track panel the chart's own scale for the axis it
+runs along — `c.X` for a bottom or top band, `c.Y` for a left or right one. A zoom reaches a scale
 through `scale.Zoomer.SetDomain`, so one object means the panel and its bands
 move together by construction rather than by two handlers agreeing. Cloning it
 there — which is what `freeScale` does for a *free facet axis*, and looks like

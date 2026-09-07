@@ -37,7 +37,9 @@ type Grid struct {
 	cols       int
 	cells      []gridCell
 	rowHeights []float32
+	colWidths  []float32
 	sharedX    bool
+	sharedY    bool
 
 	legend    bool
 	legendSet bool
@@ -134,6 +136,19 @@ func GridParallel(on bool) GridOption { return func(g *Grid) { g.serial = !on } 
 func GridRowHeights(h ...float32) GridOption {
 	return func(g *Grid) { g.rowHeights = append([]float32(nil), h...) }
 }
+
+// GridColWidths fixes the width of each column in device-independent pixels,
+// as [GridRowHeights] does for rows. A zero entry, or a column past the end of
+// the list, is left to the solver.
+func GridColWidths(w ...float32) GridOption {
+	return func(g *Grid) { g.colWidths = append([]float32(nil), w...) }
+}
+
+// GridSharedY writes the Y tick labels only beside the first column, as
+// [GridSharedX] does for the bottom row. The same caution applies: turn it on
+// only when the plots in a row really do share a domain, which they do when
+// they were given the same [scale.Scale] object.
+func GridSharedY(on bool) GridOption { return func(g *Grid) { g.sharedY = on } }
 
 // GridSharedX writes the X tick labels only under the bottom row, instead of
 // under every panel.
@@ -274,14 +289,21 @@ func (g *Grid) chart() (render.Chart, error) {
 		return render.Chart{}, ErrEmptyGrid
 	}
 	c.Rows, c.Cols = rows, g.cols
-	if g.sharedX {
-		for i := range c.Panels {
+	for i := range c.Panels {
+		if g.sharedX {
 			c.Panels[i].ShowX = c.Panels[i].Row == rows-1
+		}
+		if g.sharedY {
+			c.Panels[i].ShowY = c.Panels[i].Col == 0
 		}
 	}
 	if len(g.rowHeights) > 0 {
 		c.RowHeights = make([]float32, rows)
 		copy(c.RowHeights, g.rowHeights)
+	}
+	if len(g.colWidths) > 0 {
+		c.ColWidths = make([]float32, g.cols)
+		copy(c.ColWidths, g.colWidths)
 	}
 	return c, nil
 }

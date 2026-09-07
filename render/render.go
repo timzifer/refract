@@ -76,6 +76,12 @@ type Chart struct {
 	// that one of its rows is a strip rather than a panel.
 	RowHeights []float32
 
+	// ColWidths fixes the width of a grid column in device units, leaving the
+	// solver to size any column whose entry is zero or absent. It is
+	// RowHeights turned a quarter turn, and it is what a left or right track
+	// is given its width by.
+	ColWidths []float32
+
 	// Serial draws the panels one at a time. The zero value builds them
 	// concurrently where that is possible and worth it — see [drawData] — and
 	// produces the same output either way.
@@ -215,6 +221,7 @@ func Draw(b ir.Backend, c Chart) error {
 		Cols:       cols,
 		Panels:     measurePanels(panels, th),
 		RowHeights: c.RowHeights,
+		ColWidths:  c.ColWidths,
 		Guides:     layoutGuides(guides, th),
 	}, b)
 

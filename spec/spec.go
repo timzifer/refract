@@ -99,17 +99,17 @@ type Chart struct {
 
 // Track is a band at an edge of the plot area, written down.
 //
-// It carries its own vertical scale and its own layers, and shares the
-// chart's X — which is why there is no X here to write: a track that named a
-// different horizontal scale would not be a track.
+// It carries one scale of its own and its own layers, and shares the chart's
+// other scale — which is why only one is written here: a track that named a
+// different scale for the axis it runs along would not be a track.
 type Track struct {
-	// Edge is "bottom" or "top".
+	// Edge is "bottom", "top", "left" or "right".
 	Edge string
-	// Height is the band's height in device-independent pixels, and Fraction
-	// its height as a share of the canvas. Exactly one is non-zero.
-	Height, Fraction float32
-	// Y is the band's own vertical scale.
-	Y scale.Scale
+	// Size is how thick the band is in device-independent pixels, and Fraction
+	// its thickness as a share of the canvas. Exactly one is non-zero.
+	Size, Fraction float32
+	// Scale is the band's own scale: the one it does not share with the plot.
+	Scale scale.Scale
 	// Layers are the band's marks.
 	Layers []geom.Geom
 	// Axis reports whether the band writes its tick labels, and Grid whether
@@ -409,14 +409,14 @@ type Facet struct {
 
 // TrackDoc is one track in a document.
 //
-// A track's marks are layers like any other, and its vertical scale is an
-// axis channel like any other; what is particular to a track is which edge it
-// is on and how much room it takes.
+// A track's marks are layers like any other, and its own scale is an axis
+// channel like any other; what is particular to a track is which edge it is on
+// and how much room it takes.
 type TrackDoc struct {
 	Edge     string   `json:"edge,omitempty"`
-	Height   float32  `json:"height,omitempty"`
+	Size     float32  `json:"size,omitempty"`
 	Fraction float32  `json:"fraction,omitempty"`
-	Y        *Channel `json:"y,omitempty"`
+	Scale    *Channel `json:"scale,omitempty"`
 	Layer    []Layer  `json:"layer,omitempty"`
 	NoAxis   bool     `json:"noAxis,omitempty"`
 	Grid     bool     `json:"grid,omitempty"`

@@ -54,11 +54,11 @@ func FromSpec(s spec.Spec) (*Plot, error) {
 	p.Add(c.Layers...)
 	p.Facet(c.Facet)
 	for _, tr := range c.Tracks {
-		t := p.Track(edgeNamed(tr.Edge), TrackScale(tr.Y), TrackAxis(tr.Axis), TrackGrid(tr.Grid))
+		t := p.Track(edgeNamed(tr.Edge), TrackScale(tr.Scale), TrackAxis(tr.Axis), TrackGrid(tr.Grid))
 		if tr.Fraction > 0 {
 			TrackFraction(tr.Fraction)(t)
-		} else if tr.Height > 0 {
-			TrackHeight(tr.Height)(t)
+		} else if tr.Size > 0 {
+			TrackSize(tr.Size)(t)
 		}
 		t.Add(tr.Layers...)
 	}

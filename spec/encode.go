@@ -75,7 +75,7 @@ func Of(c Chart) (Spec, error) {
 	}
 
 	for i, tr := range c.Tracks {
-		d, err := encodeTrack(tr, kindOf(c.X))
+		d, err := encodeTrack(tr, kindOf(c.X), kindOf(c.Y))
 		if err != nil {
 			return Spec{}, fmt.Errorf("refract/spec: track %d: %w", i, err)
 		}
@@ -597,22 +597,30 @@ func float64Ptr(v float64) *float64 { return &v }
 
 // encodeTrack writes one band down.
 //
-// A track's layers are encoded against its own axis kinds — the chart's X and
-// the track's Y — because a mark's channel type is read off the scale it is
-// placed by, and a track's Y is not the chart's.
-func encodeTrack(t Track, x axisKind) (TrackDoc, error) {
+// A track's layers are encoded against the axis kinds it is actually drawn
+// with — one the chart's, one the track's — because a mark's channel type is
+// read off the scale it is placed by, and a track's own scale is not the
+// chart's.
+func encodeTrack(t Track, x, y axisKind) (TrackDoc, error) {
 	d := TrackDoc{
 		Edge:     t.Edge,
-		Height:   t.Height,
+		Size:     t.Size,
 		Fraction: t.Fraction,
 		NoAxis:   !t.Axis,
 		Grid:     t.Grid,
 	}
 	var err error
-	if d.Y, err = axisChannel(t.Y, ""); err != nil {
-		return TrackDoc{}, fmt.Errorf("y axis: %w", err)
+	if d.Scale, err = axisChannel(t.Scale, ""); err != nil {
+		return TrackDoc{}, fmt.Errorf("scale: %w", err)
 	}
-	axes := axisKinds{x: x, y: kindOf(t.Y)}
+	// A band beside the panel owns its horizontal scale and shares the
+	// chart's vertical one; a band under it is the other way round. The kinds
+	// a mark's channels are written with follow that, because a channel's
+	// type is read off the scale that places it.
+	axes := axisKinds{x: x, y: kindOf(t.Scale)}
+	if t.Edge == "left" || t.Edge == "right" {
+		axes = axisKinds{x: kindOf(t.Scale), y: y}
+	}
 	for i, g := range t.Layers {
 		l, err := encodeLayer(g, false, axes)
 		if err != nil {

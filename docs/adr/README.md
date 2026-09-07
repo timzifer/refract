@@ -40,7 +40,7 @@ depends on.
 | [0028](0028-distribution-stats.md) | A distribution stat runs in `Train`, and decides one of its own axes | Accepted | — |
 | [0029](0029-extension-model.md) | A third party's geom, scale or coord is a first-class citizen of the spec | Accepted | §17.7 |
 | [0030](0030-arrow-major-version.md) | The Arrow adapter's major version is its upstream's, and its import path says so | Accepted | — |
-| [0031](0031-tracks.md) | A track is a panel with a fixed row height, on the panel's own scale | Accepted | — |
+| [0031](0031-tracks.md) | A track is a panel with a fixed extent, on a scale it shares | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

@@ -451,14 +451,14 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 func decodeTrack(d TrackDoc, shared data.Source) (Track, error) {
 	t := Track{
 		Edge:     d.Edge,
-		Height:   d.Height,
+		Size:     d.Size,
 		Fraction: d.Fraction,
 		Axis:     !d.NoAxis,
 		Grid:     d.Grid,
 	}
 	var err error
-	if t.Y, _, err = axisScale(d.Y); err != nil {
-		return Track{}, fmt.Errorf("y axis: %w", err)
+	if t.Scale, _, err = axisScale(d.Scale); err != nil {
+		return Track{}, fmt.Errorf("scale: %w", err)
 	}
 	for i, l := range d.Layer {
 		g, err := decodeLayer(l, shared)

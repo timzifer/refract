@@ -1005,16 +1005,20 @@ becoming the general size-per-panel solver it warned about. The rows not given
 a height are still all the same size. See
 [ADR 0031](docs/adr/0031-tracks.md).
 
+All four edges are there. Bottom and top are rows sharing X; left and right are
+columns sharing Y, which is what a colour key or a marginal distribution wants.
+They are one code path — `layout.extents` sizes fixed rows and fixed columns
+with the same function — and bands on two edges leave the corner between them
+empty, which the solver already understood because a wrapped facet leaves holes
+too.
+
 The same solver change gives stacked plots on one domain — the linked-axes
-shape — as two `Grid` options rather than a `Link` API, because a `Grid`
-already routes its plots through the one solver and already takes their scale
+shape — as `Grid` options rather than a `Link` API, because a `Grid` already
+routes its plots through the one solver and already takes their scale
 objects.
 
 ### Beyond v1.0
 
-- Left and right tracks: the mirror image, grid columns with fixed widths
-  sharing the panel's Y, which is what a colour key or a marginal distribution
-  wants. `Edge` is numbered for them.
 - Harden the GPU tier as GoGPU matures.
 - More coordinate systems: geographic and map projections. Polar arrived in v0.8
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam

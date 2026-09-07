@@ -56,15 +56,24 @@ func run(out string) error {
 
 	// Two bands under the panel, stacked in the order they are added. Each has
 	// an ordinal scale of its own and neither touches the speed's axis.
-	p.Track(refract.Bottom, refract.TrackHeight(40)).
+	p.Track(refract.Bottom, refract.TrackSize(40)).
 		Add(geom.Rect(states(times[0]),
 			geom.X("start"), geom.X2("end"), geom.Y("state"),
 			geom.ColorBy("state", scale.Qualitative(palette.Default))))
 
-	p.Track(refract.Bottom, refract.TrackHeight(28)).
+	p.Track(refract.Bottom, refract.TrackSize(28)).
 		Add(geom.Rect(orders(times[0]),
 			geom.X("start"), geom.X2("end"), geom.Y("lane"),
 			geom.ColorBy("order", scale.Qualitative(palette.Default))))
+
+	// A band beside the panel is the same thing turned a quarter turn: it
+	// shares the speed axis instead of the time axis, and is thick in X. This
+	// one names the ranges the operator cares about. Its lane needs no label —
+	// the colours are named in the legend — so the axis is turned off.
+	p.Track(refract.Left, refract.TrackSize(18), refract.TrackAxis(false)).
+		Add(geom.Rect(ranges(),
+			geom.Y("lo"), geom.Y2("hi"), geom.X("lane"),
+			geom.ColorBy("range", scale.Qualitative(palette.Default))))
 
 	return p.Render(refract.SVG(out))
 }
@@ -110,4 +119,15 @@ func orders(start time.Time) *data.Table {
 		Time("end", []time.Time{at(110), at(180), at(240)}).
 		String("lane", []string{"order", "order", "order"}).
 		String("order", []string{"WO-4471", "WO-4472", "WO-4473"})
+}
+
+// ranges are the speed bands the operator reads against, drawn beside the
+// panel. They are on the speed axis the panel owns — a left track shares Y —
+// and on an ordinal lane of their own across the band.
+func ranges() *data.Table {
+	return data.NewTable().
+		Float64("lo", []float64{0, 100}).
+		Float64("hi", []float64{100, 130}).
+		String("lane", []string{"band", "band"}).
+		String("range", []string{"below target", "at target"})
 }

@@ -22,7 +22,7 @@ mark that does not exist yet, and the catalogue says which.
 | Multi-entry legends (`geom.Legender`) | **shipped in v0.7** — [ADR 0020](adr/0020-discrete-colour-and-multi-entry-legends.md) | pie, stacks, treemap, waffle, sankey |
 | Position adjustments (stack / dodge / fill / wiggle) | **shipped in v0.7** — [ADR 0019](adr/0019-position-adjustments.md) | stacked and grouped bars, stacked area, streamgraph, funnel, marimekko, ridgeline, **and pie** |
 | Coordinate systems (`coord.Polar`) | **shipped in v0.8** — [ADR 0018](adr/0018-coordinate-systems.md) | pie, donut, radar, rose, wind rose, gauge |
-| A band at a panel's edge on the panel's own X (`Plot.Track`) | **shipped in v0.10** — [ADR 0031](adr/0031-tracks.md) | gantt strip under a trace, rug plot, event ribbon, sparkline gutter, shift bands |
+| A band at a panel's edge on a shared axis (`Plot.Track`) | **shipped in v0.10** — [ADR 0031](adr/0031-tracks.md) | gantt strip under a trace, rug plot, event ribbon, sparkline gutter, shift bands; beside it, colour keys and marginal distributions |
 | A size channel (`geom.SizeBy` + a size scale) | **shipped in v0.9** — [ADR 0027](adr/0027-size-channel-and-the-guide-column.md) | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |

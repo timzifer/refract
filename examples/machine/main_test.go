@@ -23,7 +23,7 @@ func TestExampleRuns(t *testing.T) {
 
 	// The panel, both tracks and the legend: the speed's axis title, the state
 	// lane names, the order lane, and an order's own label.
-	for _, want := range []string{"<svg", "Line 3", "m/min", "running", "fault", "order", "WO-4472", "</svg>"} {
+	for _, want := range []string{"<svg", "Line 3", "m/min", "running", "fault", "order", "WO-4472", "at target", "</svg>"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output is missing %q", want)
 		}

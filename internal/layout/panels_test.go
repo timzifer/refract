@@ -373,3 +373,36 @@ func TestANilRowHeightsChangesNothing(t *testing.T) {
 		}
 	}
 }
+
+// A fixed column is a fixed row turned a quarter turn, and goes through the
+// same function. This is the check that the turn was made everywhere it had to
+// be — the origins, the rectangles and the span all read the per-column width.
+func TestAFixedColumnIsExactlyAsWideAsItWasTold(t *testing.T) {
+	g := grid(1, 2, numbered(0, 0), numbered(0, 1))
+	g.ColWidths = []float32{56, 0}
+
+	got := layout.Panels(g, irtest.New())
+	if w := got.Areas[0].Max.X - got.Areas[0].Min.X; !closeTo(w, 56) {
+		t.Errorf("fixed column is %v wide, want 56", w)
+	}
+	if w := got.Areas[1].Max.X - got.Areas[1].Min.X; w <= 0 {
+		t.Errorf("the flexible column got %v", w)
+	}
+	if got.Areas[1].Min.X < got.Areas[0].Max.X {
+		t.Errorf("the columns overlap: %v and %v", got.Areas[0], got.Areas[1])
+	}
+}
+
+func TestANilColWidthsChangesNothing(t *testing.T) {
+	before := layout.Panels(grid(1, 2, numbered(0, 0), numbered(0, 1)), irtest.New())
+
+	g := grid(1, 2, numbered(0, 0), numbered(0, 1))
+	g.ColWidths = []float32{0, 0}
+	after := layout.Panels(g, irtest.New())
+
+	for i := range before.Areas {
+		if before.Areas[i] != after.Areas[i] {
+			t.Errorf("panel %d: %v with zero widths, %v without", i, after.Areas[i], before.Areas[i])
+		}
+	}
+}
