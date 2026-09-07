@@ -48,6 +48,7 @@ depends on.
 | [0036](0036-error-bars.md) | An interval is a mark, and the encoding says which way it runs | Accepted | — |
 | [0037](0037-secondary-axis.md) | A second axis is a scale on the chart and a binding on the layer | Accepted, amended | — |
 | [0038](0038-embedded-fonts.md) | A PDF carries the font its labels need, subset to the glyphs it drew | Accepted | — |
+| [0039](0039-relational-layouts.md) | A relational layout is a stat in the unit square, and the coord decides what it looks like | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

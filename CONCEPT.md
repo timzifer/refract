@@ -1143,6 +1143,50 @@ Every one of them is additive: no interface gained a method, no struct lost a
 field, and a chart that mentions none of them draws exactly what it drew —
 which is what every golden file in the repository asserts.
 
+### v1.4 — Bucket E, the last one — **on `main`**
+
+The relational and hierarchical layouts: treemap, icicle, sunburst, sankey, arc
+diagram, chord diagram. It is the bucket this document called the only family
+that shares no machinery with the rest — "its own data shape, its own solver,
+its own legend, its own hit-testing" — and half of that sentence turned out to
+be wrong, which is the interesting part.
+
+The data shape and the solvers were real, and they are where the work went:
+five new channels (`geom.From`, `geom.To`, `geom.ID`, `geom.Parent`,
+`geom.Value`) and six pure functions in `stat/` — a depth, a roll-up, a
+partition, a squarified packing, a flow layout and a chord layout, each with a
+determinism test. The legend and the hit test needed nothing at all. A
+multi-entry legend has been what a layer whose series live inside it
+contributes since v0.7, and a relational layer's nodes are exactly that; and
+`interact` has indexed one mark per subpath of a fill since v0.5, so a layout
+that draws one subpath per cell is pointable with no new machinery. The only
+line outside `geom`, `stat` and `spec` is `Plot.showLegend` learning that an
+edge table is a second kind of series.
+
+**Four marks, six charts.** Every layout fills the unit square — a span across,
+a height out — and the coordinate stage decides what that looks like, which is
+the v0.8 move made twice. An `Icicle` under `coord.Polar` is a sunburst; an
+`Arc` under one, with its rail moved to the rim by `geom.Baseline(1)`, is a
+chord diagram. Neither is a mark of its own, for the same reason a pie is not a
+second implementation of a bar.
+
+One thing had to move across a line, and it is worth the sentence: a squarified
+treemap packs against the *panel* rather than against the unit square, because
+what it optimises is an aspect ratio on screen and squarifying a square to
+stretch it into a wide panel defeats the algorithm. That makes it the third
+instance of [ADR 0028](docs/adr/0028-distribution-stats.md)'s stated exception,
+after the hexagonal lattice and the beeswarm's offsets.
+
+- *DoD:* a hierarchy of `(id, parent, value)` draws as a treemap and as a
+  sunburst from one layer and two coords; an edge list of `(from, to, value)`
+  draws as a sankey and as a chord diagram; every layout is a pure function
+  with a determinism test and a fixed sweep count; a frame costs the same over
+  a hundred thousand rows as over a thousand; and every existing golden file is
+  byte-for-byte what it was. ✔
+
+Still not drawn: node-link and Venn/UpSet. See
+[ADR 0039](docs/adr/0039-relational-layouts.md).
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1154,15 +1198,16 @@ which is what every golden file in the repository asserts.
   still the wider one — it transforms every point with no linear interval
   underneath it, and its graticule has no tick behind it — and is argued on its
   own evidence rather than smuggled in as a fourth.
-- Relational and hierarchical layouts: sankey/alluvial, chord, arc diagrams,
-  treemap, sunburst. The one family in
-  [docs/chart-types.md](docs/chart-types.md) that shares no machinery with the
-  rest — its own data shape, its own solver, its own legend, its own
-  hit-testing — and therefore the only one that moves without cost. The data
-  layer does not change to accommodate it: an edge list is two string columns
-  and a value column, which `data.Source` already returns.
+- Node-link diagrams and Venn/UpSet, which are what is left of the relational
+  family after v1.3 shipped the rest of it
+  ([ADR 0039](docs/adr/0039-relational-layouts.md)). A force layout's whole
+  method is to run until it settles, so it cannot be a pure function of its
+  input at a bounded sweep count that also looks good, and
+  [ADR 0012](docs/adr/0012-parallel-panels.md) has to be answered on its own
+  terms before it lands. Venn is a circle-packing optimiser and UpSet is a
+  matrix chart rather than a relational layout at all.
 - More stats: contour, and a QQ plot over the ECDF v0.9 shipped.
-- The rest of bucket G in [docs/chart-types.md](docs/chart-types.md): an
+- The rest of bucket H in [docs/chart-types.md](docs/chart-types.md): an
   overlay layer the chart itself owns — a tooltip, a crosshair, a brush
   rectangle — which is what linked brushing across panels needs before
   anything else, and a de-overlap pass for labels.
