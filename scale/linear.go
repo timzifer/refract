@@ -2,6 +2,7 @@ package scale
 
 import (
 	"math"
+	"sort"
 	"strconv"
 )
 
@@ -30,6 +31,36 @@ func Format(fn func(v float64) string) LinearOption {
 	return func(l *linear) { l.format = fn }
 }
 
+// TickValues pins the tick positions, replacing the chosen sequence with the
+// one given. It is for an axis whose readable positions are a convention rather
+// than a search result: the 0.2 / 0.5 / 1 / 2 / 5 grid of a Smith chart, the
+// five points of a Likert item, the octaves of a frequency axis.
+//
+// It says nothing about the domain. A tick outside the domain is dropped rather
+// than stretching the axis to reach it — [Domain] is how an axis is widened —
+// and an empty or all-infinite list leaves the automatic sequence in place, so
+// TickValues() is not a way to ask for an axis with no ticks at all.
+//
+// Labels are formatted as they always are: by [Format] when one was given, and
+// otherwise from the closest spacing in the list, so that a sequence which is
+// not evenly spaced still labels every tick to the same precision.
+func TickValues(vs ...float64) LinearOption {
+	return func(l *linear) {
+		ts := make([]float64, 0, len(vs))
+		for _, v := range vs {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				continue
+			}
+			ts = append(ts, v)
+		}
+		if len(ts) == 0 {
+			return
+		}
+		sort.Float64s(ts)
+		l.ticks = ts
+	}
+}
+
 // Linear returns a linear scale.
 func Linear(opts ...LinearOption) Scale {
 	l := &linear{}
@@ -46,6 +77,11 @@ type linear struct {
 	fixed  bool
 	pinned bool
 	format func(float64) string
+	// ticks is the sequence [TickValues] pinned, ascending, or nil for an axis
+	// that chooses its own. It is written once at construction and never
+	// afterwards, which is why Clone and Snapshot share it rather than copying
+	// it: unlike an ordinal scale's labels, nothing here grows during training.
+	ticks []float64
 
 	// cached nicing, invalidated whenever the domain changes
 	nicedFor [2]float64
@@ -132,11 +168,17 @@ func (l *linear) Invert(pos float32) float64 {
 
 func (l *linear) Ticks(want int) []Tick {
 	lo, hi := l.effective()
-	lab := extendedWilkinson(lo, hi, want, false)
-	vals := lab.values()
+	var vals []float64
+	step := 0.0
+	if len(l.ticks) > 0 {
+		vals, step = l.ticks, closestSpacing(l.ticks)
+	} else {
+		lab := extendedWilkinson(lo, hi, want, false)
+		vals, step = lab.values(), lab.step
+	}
 	fmtFn := l.format
 	if fmtFn == nil {
-		fmtFn = formatterFor(lab.step)
+		fmtFn = formatterFor(step)
 	}
 	out := make([]Tick, 0, len(vals))
 	for _, v := range vals {
@@ -146,6 +188,22 @@ func (l *linear) Ticks(want int) []Tick {
 		out = append(out, Tick{Value: v, Pos: l.Map(v), Label: fmtFn(v)})
 	}
 	return out
+}
+
+// closestSpacing is the smallest gap in an ascending tick sequence, which is
+// the step a label format has to be able to tell apart. A sequence that is not
+// evenly spaced has no single step; taking the closest pair labels every tick
+// to the precision the tightest pair needs, so 0.2 and 0.5 do not both print
+// as the same number on an axis whose other gaps are whole.
+func closestSpacing(vs []float64) float64 {
+	step := 0.0
+	for i := 1; i < len(vs); i++ {
+		d := vs[i] - vs[i-1]
+		if d > 0 && (step == 0 || d < step) {
+			step = d
+		}
+	}
+	return step
 }
 
 // formatterFor picks a label format from the tick step: enough decimals to

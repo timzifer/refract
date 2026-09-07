@@ -273,6 +273,17 @@ func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } 
 // own inner and outer radius with [geom.X] and [geom.X2] and be broken out of
 // the ring with [geom.ExplodeBy], neither of which is a new mark.
 //
+// [coord.Smith] is the third one, and the same idea over a different map: it
+// reads the pair as a normalised impedance and carries it through
+// Γ = (z − 1)/(z + 1) onto the unit disc, which is the Smith chart. Its grid is
+// the two axes' own ticks — a circle per resistance, an arc per reactance — so
+// again the mark is one that was already there:
+//
+//	p := refract.New(refract.Coord(coord.Smith()))
+//	p.X(scale.Linear(scale.Domain(0, 50), scale.TickValues(0, 0.2, 0.5, 1, 2, 5)))
+//	p.Y(scale.Linear(scale.Domain(-50, 50), scale.TickValues(-5, -1, -0.5, 0.5, 1, 5)))
+//	p.Add(geom.Line(sweep, geom.X("r"), geom.Y("x")))
+//
 // A coord belongs to the chart rather than to a panel, so the panels of a
 // facet all share it.
 func Coord(c coordpkg.Coord) Option { return func(p *Plot) { p.coord = c } }

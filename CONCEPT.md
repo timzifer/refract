@@ -1051,13 +1051,46 @@ Neighbouring labels are not moved apart. A box too narrow drops its label
 already, and a general de-overlap pass is a layout question rather than a
 mark's. See [ADR 0032](docs/adr/0032-text-as-a-mark.md).
 
+### Smith charts: a third coordinate system — **shipped**
+
+`coord.Smith` reads a panel's two axes as a complex impedance — r = R/Z₀ and
+x = X/Z₀ — and maps the pair through the reflection coefficient
+Γ = (z − 1)/(z + 1), which carries the whole right half-plane, every passive
+impedance including the infinite ones, into the unit disc. It is the standard
+instrument of RF, microwave and antenna work, and no general-purpose plotting
+library draws one, because a library whose coordinate stage is hard-coded
+Cartesian cannot.
+
+It is the sharpest evidence that §8's pluggable stage was cut in the right
+place: the chart's two grid families are the images of the two axes' own grid
+lines, so the constant-resistance circles are what the X ticks look like once
+the coord has had them and the constant-reactance arcs are the Y ticks — and
+`render` was not touched at all. No new mark either: the locus is a `geom.Line`
+from v0.1.
+
+Two additions came with it. `scale.TickValues` pins a linear axis's tick
+sequence, because the 0.2 / 0.5 / 1 / 2 / 5 of a paper chart is a convention
+rather than the answer to a tick search. And `coord.SmithAdmittance` is the Y
+chart — one sign, since y = 1/z gives Γ_y = −Γ_z — applied to the picture and
+not to the data, so one load lands in one place whichever chart it is read on.
+
+Not drawn: constant-|Γ| circles, constant-Q arcs and a combined ZY overlay.
+Each is a third grid family, and a coord may draw one grid line per tick a
+scale emits — the same constraint that made the columns an impedance rather
+than the reflection coefficient an instrument reports.
+See [ADR 0033](docs/adr/0033-smith-charts.md).
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
 - More coordinate systems: geographic and map projections. Polar arrived in v0.8
-  ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam
-  — it transforms every point with no linear interval underneath it — and is
-  argued on its own evidence rather than smuggled in as a third `Coord`.
+  ([ADR 0018](docs/adr/0018-coordinate-systems.md)) and the **Smith chart** in
+  v1.2 ([ADR 0033](docs/adr/0033-smith-charts.md)) — the third `Coord`, and the
+  same shape of seam: it maps a *mapped pair* through Γ = (z−1)/(z+1), and its
+  grid is the two axes' own ticks, so `render` was not touched. A projection is
+  still the wider one — it transforms every point with no linear interval
+  underneath it, and its graticule has no tick behind it — and is argued on its
+  own evidence rather than smuggled in as a fourth.
 - Relational and hierarchical layouts: sankey/alluvial, chord, arc diagrams,
   treemap, sunburst. The one family in
   [docs/chart-types.md](docs/chart-types.md) that shares no machinery with the

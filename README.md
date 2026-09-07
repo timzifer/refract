@@ -143,6 +143,7 @@ picture here cannot drift away from the code that produced it.
 | ![Latency by service as violins, one per region within each service](docs/images/violin.png) | ![A year of daily maxima as a ridgeline, one density per month](docs/images/ridgeline.png) |
 | ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
+| ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) | |
 
 ## What it does
 
@@ -153,6 +154,9 @@ picture here cannot drift away from the code that produced it.
   merely evenly spaced. Time ticks step in calendar units. Log and symlog
   subdivide each decade with unlabelled minor ticks; symlog is linear near zero,
   so signed data spanning orders of magnitude is plottable at all.
+  `scale.TickValues` pins the sequence outright, for an axis whose ticks are a
+  convention rather than a reading — the 0.2 / 0.5 / 1 / 2 / 5 of a Smith chart,
+  the five points of a Likert item.
 - **Geoms** — `Line` (optionally tension-smoothed), `Scatter` (six marker
   shapes), `Bar`, **`Area`** (to a baseline, or a band between two series),
   **`Step`** (pre/mid/post), **`Boxplot`** (Tukey whiskers, type-7 quartiles,
@@ -190,7 +194,13 @@ picture here cannot drift away from the code that produced it.
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)). A slice's inner and outer
   radius are columns like its share is (`geom.X` and `geom.X2`), and
   `geom.ExplodeBy` breaks one out of the ring without changing what it says
-  ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)).
+  ([ADR 0026](docs/adr/0026-breaking-a-mark-out.md)). **`coord.Smith`** is the
+  third one: it reads the pair as a complex impedance and maps it through
+  Γ = (z−1)/(z+1) onto the unit disc, which is the chart every RF engineer works
+  on and almost no plotting library draws. Its grid is the two axes' own ticks —
+  constant-resistance circles from X, constant-reactance arcs from Y — so
+  `render` was not touched for it
+  ([ADR 0033](docs/adr/0033-smith-charts.md)).
 - **Size** — `geom.SizeBy` reads a column through `scale.Size`: the bubble
   chart. The mapping is by **area**, not radius, so doubling a value multiplies
   the diameter by √2 and two bubbles compare the way a reader already reads
@@ -400,6 +410,65 @@ nothing real.
 
 A runnable version of the donut, the radar, a wind rose, a gauge and the
 broken-out donut above is in [`examples/polar`](examples/polar).
+
+## A Smith chart is a coordinate system too
+
+Almost no general-purpose plotting library draws a Smith chart, because a Smith
+chart is not a mark. It is a conformal map of the impedance half-plane onto the
+unit disc — Γ = (z−1)/(z+1) — and a library whose coordinate stage is hard-coded
+Cartesian cannot express it at any price. `refract`'s stage can, and `coord.Smith`
+is the third one:
+
+```go
+p := refract.New(refract.Coord(coord.Smith()))
+
+// The two columns are the normalised impedance: r = R/Z₀ and x = X/Z₀.
+// TickValues asks for the grid a paper chart is printed at — six values every
+// RF engineer expects in those places, which no tick-choosing algorithm
+// produces because they are not evenly spaced and are not meant to be.
+p.X(scale.Linear(scale.Domain(0, 50), scale.TickValues(0, 0.2, 0.5, 1, 2, 5)))
+p.Y(scale.Linear(scale.Domain(-50, 50),
+    scale.TickValues(-5, -2, -1, -0.5, -0.2, 0.2, 0.5, 1, 2, 5)))
+
+p.Add(geom.Line(sweep, geom.X("r"), geom.Y("x")))
+```
+
+![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png)
+
+There is no Smith geom and no Smith mark: that is a `geom.Line` from v0.1. And
+there is nothing drawing the grid, either — the constant-resistance circles are
+what the X ticks look like once the coord has had them, and the
+constant-reactance arcs are the Y ticks, so `render` draws this with the same two
+loops it draws a Cartesian grid with. Not one line of `render/` changed for it;
+see [ADR 0033](docs/adr/0033-smith-charts.md), which argues why this is the same
+seam polar is and not the wider one a map projection needs.
+
+An instrument reports S₁₁ as a reflection coefficient rather than as an
+impedance, so a measured sweep is one line at the call site:
+
+```go
+r[i], x[i] = coord.SmithZ(re[i], im[i])   // z = (1+Γ)/(1−Γ)
+```
+
+Three more things are worth knowing. **Both axes are linear**, and the domains
+are pinned rather than trained: the chart's extent is the whole disc whatever
+the data does, and a near-open reflection is a resistance in the thousands that
+would otherwise drag every tick into the last pixel before the rim. **An edge is
+a chord by default**, because a line between two measured samples asserting a
+linear sweep in impedance is an assertion the instrument did not make;
+`coord.SmithArc` draws the exact image for a locus that genuinely is straight in
+impedance, which is what a matching network's steps are. And
+**`coord.SmithAdmittance`** turns the disc through half a turn and reads the pair
+as a conductance and a susceptance — the Y chart a shunt element is read on, and
+the same physical reflection in the same place, against the other grid.
+
+Not drawn: constant-|Γ| circles, constant-Q arcs and a combined ZY overlay. Each
+is a third grid family, and a coord may draw one grid line per tick a scale
+emits — the same constraint that makes the columns an impedance in the first
+place.
+
+A runnable version of the sweep above, a two-element matching network and the
+admittance chart is in [`examples/smith`](examples/smith).
 
 ## Boxes bounded by their own row
 
