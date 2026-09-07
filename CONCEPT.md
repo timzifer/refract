@@ -981,12 +981,18 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- Tagged. The core is `v1.0.0`; `backend/gg` and `backend/window` share it,
-  the opt-in GPU tier is `backend/gg/gpu/v0.1.0`, and the Arrow adapter is
-  `arrow/v18.0.0`. The milestones before it were tagged at the same time, so
-  every one of them names a commit. The order — the core first, then the
-  nested modules' `require` lines, then their own tags — is in
+- Tagged. The core was `v1.0.0` and is `v1.1.0`; `backend/gg` and
+  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.3`
+  — it stays at `v0` for as long as it is opt-in beta, whatever the core does
+  — and the Arrow adapter is `arrow/v18.0.1`, whose major is Arrow's. The
+  milestones before `v1.0.0` were tagged at the same time as it, so every one
+  of them names a commit. The order — the core first, then the nested modules'
+  `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
+
+  Both post-freeze milestones below shipped in `v1.1.0`, and both are additive:
+  no interface gained a method, no struct lost a field, and every option they
+  add is one an existing mark accepts and ignores.
 
 ### v0.10 — Tracks: a band at a panel's edge — **shipped**
 
@@ -1016,6 +1022,34 @@ The same solver change gives stacked plots on one domain — the linked-axes
 shape — as `Grid` options rather than a `Link` API, because a `Grid` already
 routes its plots through the one solver and already takes their scale
 objects.
+
+### Text: a label per row — **shipped**
+
+`geom.Note` placed one literal string at one literal position, so labelling
+rows cost a layer per row — and since a plot only ever gains layers, a chart
+whose rows change had to be rebuilt, which takes the reader's zoom with it.
+`geom.Text` reads its labels from a column, like every other mark reads its
+numbers, and needs no rebuild when the rows change.
+
+The label goes where the encoding says. Naming neither `X2` nor `Y2` puts it at
+the row's point; naming either puts it in the middle of the box the row spans —
+and that box is the one `Rect` would draw for the same options, so one option
+list describes the rectangles and labels them. That is what makes it a mark
+rather than a recipe: the anchor is the middle of the box's *visible* part, so a
+bar half scrolled off the edge keeps its label; the run is measured through
+`ir.Backend.Measure` with the font it will be drawn in and dropped, or elided,
+when the box is too narrow, because a label that overruns reads as belonging to
+the neighbour; and a layer given `ColorBy` takes each label's ink from the fill
+that scale gives the row, so a qualitative palette does not leave half its
+categories unreadable.
+
+It pairs with the tracks above: a track gives the state strip its lane, and this
+gives its bars something to say — which is what a chart locked against panning
+needs, because locked means no hover and no hover means no tooltip.
+
+Neighbouring labels are not moved apart. A box too narrow drops its label
+already, and a general de-overlap pass is a layout question rather than a
+mark's.
 
 ### Beyond v1.0
 

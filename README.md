@@ -12,14 +12,16 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: v1.0.0, released.** Every milestone through **v1.0** has shipped,
+> **Status: v1.1.0, released.** Every milestone through **v1.0** has shipped,
 > and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
-> before the freeze has changed. The API is frozen at the `v1.0.0` tag and
+> before the freeze has changed. The API was frozen at the `v1.0.0` tag and
 > follows semver from here, so a breaking change means a major version and a
-> deprecation cycle precedes it. The nested modules are tagged alongside:
-> `backend/gg` and `backend/window` at `v1.0.0`, the opt-in GPU tier at
-> `v0.1.0`, and the Arrow adapter at `arrow/v18.0.0`, whose major is Arrow's.
-> See [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
+> deprecation cycle precedes it — `v1.1.0` adds two marks and takes nothing
+> away: `Plot.Track`, a band at a panel's edge on a scale it shares, and
+> `geom.Text`, a label per row read from a column. The nested modules are
+> tagged alongside: `backend/gg` and `backend/window` at `v1.1.0`, the opt-in
+> GPU tier at `v0.1.3`, and the Arrow adapter at `arrow/v18.0.1`, whose major
+> is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.

@@ -50,9 +50,13 @@ takes a batch ([ADR 0018](adr/0018-coordinate-systems.md)). `BrokenRing` is a
 donut whose slices carry their own radii and are broken out per row
 ([ADR 0026](adr/0026-breaking-a-mark-out.md)). `Bubbles` is a sized layer,
 the one drawing path that sorts per frame
-([ADR 0027](adr/0027-size-channel-and-the-guide-column.md)). Their slack
-against the small side is eight, or twelve where the large frame is big enough
-to provoke a pool miss; `allocgate.awk` says which and why.
+([ADR 0027](adr/0027-size-channel-and-the-guide-column.md)). `Labelled` is a
+strip of boxes carrying their own text: every label is measured against its box
+on every frame and one that does not fit is cut, which builds a string — so it
+is the one path where a per-row allocation could hide behind work that has to
+happen anyway, and the cut is remembered per row for exactly that reason. Their
+slack against the small side is eight, or twelve where the large frame is big
+enough to provoke a pool miss; `allocgate.awk` says which and why.
 
 **Row identity.** `WatchedFrame` and `WatchedFrameRows` are the same live
 chart redrawn with and without `Live.TrackRows`. Tracking the source row
