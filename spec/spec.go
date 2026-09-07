@@ -89,25 +89,49 @@ type Chart struct {
 	Layers        []geom.Geom
 	Facet         *facet.Spec
 
+	// Tracks are the bands at the plot's edges, in the order they were added.
+	Tracks []Track
+
 	// Legend forces the legend on or off. Nil leaves the default, which shows
 	// one as soon as a plot has more than one layer.
 	Legend *bool
 }
 
+// Track is a band at an edge of the plot area, written down.
+//
+// It carries its own vertical scale and its own layers, and shares the
+// chart's X — which is why there is no X here to write: a track that named a
+// different horizontal scale would not be a track.
+type Track struct {
+	// Edge is "bottom" or "top".
+	Edge string
+	// Height is the band's height in device-independent pixels, and Fraction
+	// its height as a share of the canvas. Exactly one is non-zero.
+	Height, Fraction float32
+	// Y is the band's own vertical scale.
+	Y scale.Scale
+	// Layers are the band's marks.
+	Layers []geom.Geom
+	// Axis reports whether the band writes its tick labels, and Grid whether
+	// it draws grid lines.
+	Axis, Grid bool
+}
+
 // Spec is a chart as a JSON document.
 type Spec struct {
-	Schema   string    `json:"$schema,omitempty"`
-	Width    int       `json:"width,omitempty"`
-	Height   int       `json:"height,omitempty"`
-	Title    string    `json:"title,omitempty"`
-	Data     *Data     `json:"data,omitempty"`
-	Encoding *Encoding `json:"encoding,omitempty"`
-	Coord    *Coord    `json:"coord,omitempty"`
-	Layer    []Layer   `json:"layer,omitempty"`
-	Facet    *Facet    `json:"facet,omitempty"`
-	Columns  int       `json:"columns,omitempty"`
-	Resolve  *Resolve  `json:"resolve,omitempty"`
-	Config   *Config   `json:"config,omitempty"`
+	Schema   string     `json:"$schema,omitempty"`
+	Width    int        `json:"width,omitempty"`
+	Height   int        `json:"height,omitempty"`
+	Title    string     `json:"title,omitempty"`
+	Data     *Data      `json:"data,omitempty"`
+	Encoding *Encoding  `json:"encoding,omitempty"`
+	Coord    *Coord     `json:"coord,omitempty"`
+	Layer    []Layer    `json:"layer,omitempty"`
+	Facet    *Facet     `json:"facet,omitempty"`
+	Tracks   []TrackDoc `json:"tracks,omitempty"`
+	Columns  int        `json:"columns,omitempty"`
+	Resolve  *Resolve   `json:"resolve,omitempty"`
+	Config   *Config    `json:"config,omitempty"`
 }
 
 // Layer is one set of marks.
@@ -381,6 +405,21 @@ type Facet struct {
 	Type   string      `json:"type,omitempty"`
 	Row    *FacetField `json:"row,omitempty"`
 	Column *FacetField `json:"column,omitempty"`
+}
+
+// TrackDoc is one track in a document.
+//
+// A track's marks are layers like any other, and its vertical scale is an
+// axis channel like any other; what is particular to a track is which edge it
+// is on and how much room it takes.
+type TrackDoc struct {
+	Edge     string   `json:"edge,omitempty"`
+	Height   float32  `json:"height,omitempty"`
+	Fraction float32  `json:"fraction,omitempty"`
+	Y        *Channel `json:"y,omitempty"`
+	Layer    []Layer  `json:"layer,omitempty"`
+	NoAxis   bool     `json:"noAxis,omitempty"`
+	Grid     bool     `json:"grid,omitempty"`
 }
 
 // FacetField is one axis of a facet grid.

@@ -27,6 +27,7 @@ func (p *Plot) Spec() (spec.Spec, error) {
 		Coord:  p.coord,
 		Layers: p.layers,
 		Facet:  p.facet,
+		Tracks: p.trackSpecs(),
 	}
 	if p.legendSet {
 		legend := p.legend
@@ -52,6 +53,15 @@ func FromSpec(s spec.Spec) (*Plot, error) {
 	p.coord = c.Coord
 	p.Add(c.Layers...)
 	p.Facet(c.Facet)
+	for _, tr := range c.Tracks {
+		t := p.Track(edgeNamed(tr.Edge), TrackScale(tr.Y), TrackAxis(tr.Axis), TrackGrid(tr.Grid))
+		if tr.Fraction > 0 {
+			TrackFraction(tr.Fraction)(t)
+		} else if tr.Height > 0 {
+			TrackHeight(tr.Height)(t)
+		}
+		t.Add(tr.Layers...)
+	}
 	if c.Legend != nil {
 		p.legend, p.legendSet = *c.Legend, true
 	}

@@ -34,8 +34,10 @@ type Grid struct {
 	xTitle string
 	yTitle string
 
-	cols  int
-	cells []gridCell
+	cols       int
+	cells      []gridCell
+	rowHeights []float32
+	sharedX    bool
 
 	legend    bool
 	legendSet bool
@@ -120,6 +122,38 @@ func GridDescription(title, detail string) GridOption {
 // [Parallel]; a grid is the shape that benefits most, because its panels are
 // different charts over different data.
 func GridParallel(on bool) GridOption { return func(g *Grid) { g.serial = !on } }
+
+// GridRowHeights fixes the height of each row in device-independent pixels. A
+// zero entry, or a row past the end of the list, is left to the solver, and
+// the rows left to it share what the fixed rows leave, equally.
+//
+// It is what makes a grid of plots express the shape a track expresses inside
+// one plot: a full-height plot with a short strip under it.
+//
+//	refract.NewGrid(1, refract.GridRowHeights(0, 48), refract.GridSharedX(true))
+func GridRowHeights(h ...float32) GridOption {
+	return func(g *Grid) { g.rowHeights = append([]float32(nil), h...) }
+}
+
+// GridSharedX writes the X tick labels only under the bottom row, instead of
+// under every panel.
+//
+// It is half of what stacked plots on one domain need; the other half is
+// giving those plots the same [scale.Scale] object, which shares their domain,
+// their nicing and — for a [Live] chart — their zoom, because a zoom reaches a
+// scale and there is only one scale to reach:
+//
+//	t := scale.Time()
+//	speed := refract.New().X(t).Y(scale.Linear())
+//	states := refract.New().X(t).Y(scale.Ordinal())
+//
+// Turn it on only when the plots really do share a domain. Labels under one
+// axis and different numbers on another is the misreading this exists to
+// prevent, and enabling it cannot make two unrelated domains agree.
+//
+// A Grid renders; it has no [Plot.Live]. Interaction on stacked plots is what
+// a track inside one plot is for — see [Plot.Track].
+func GridSharedX(on bool) GridOption { return func(g *Grid) { g.sharedX = on } }
 
 // NewGrid creates a grid that flows plots into rows of cols panels.
 func NewGrid(cols int, opts ...GridOption) *Grid {
@@ -230,7 +264,8 @@ func (g *Grid) chart() (render.Chart, error) {
 			Coord:  cell.plot.coord,
 			Layers: cell.plot.layers,
 			// Every panel has scales of its own, so every panel writes its own
-			// axes: the numbers on one are not the numbers on the next.
+			// axes: the numbers on one are not the numbers on the next. Unless
+			// the caller says they are — see [GridSharedX].
 			ShowX: true,
 			ShowY: true,
 		})
@@ -239,6 +274,15 @@ func (g *Grid) chart() (render.Chart, error) {
 		return render.Chart{}, ErrEmptyGrid
 	}
 	c.Rows, c.Cols = rows, g.cols
+	if g.sharedX {
+		for i := range c.Panels {
+			c.Panels[i].ShowX = c.Panels[i].Row == rows-1
+		}
+	}
+	if len(g.rowHeights) > 0 {
+		c.RowHeights = make([]float32, rows)
+		copy(c.RowHeights, g.rowHeights)
+	}
 	return c, nil
 }
 

@@ -273,3 +273,103 @@ func TestPanelsOutsideTheGridAreIgnored(t *testing.T) {
 		t.Errorf("a panel outside the grid was placed at %v", got.Areas[1])
 	}
 }
+
+// --- fixed rows ----------------------------------------------------------
+//
+// A fixed row is what a track is made of. ADR 0010 says every panel is the
+// same size, and that is still true of the panels: a fixed row is not one of
+// them, and the flexible rows are still equal to each other.
+
+// height is one rectangle's height, compared with the slack every device
+// coordinate in this repository is compared with.
+func height(r ir.Rect) float32 { return r.Max.Y - r.Min.Y }
+
+func closeTo(a, b float32) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d <= 0.01
+}
+
+func TestAFixedRowIsExactlyAsTallAsItWasTold(t *testing.T) {
+	for _, canvas := range []ir.Rect{ir.R(0, 0, 900, 600), ir.R(0, 0, 400, 300), ir.R(0, 0, 1600, 900)} {
+		g := grid(2, 1, numbered(0, 0), numbered(1, 0))
+		g.Canvas = canvas
+		g.RowHeights = []float32{0, 48}
+
+		got := layout.Panels(g, irtest.New())
+		if h := height(got.Areas[1]); !closeTo(h, 48) {
+			t.Errorf("canvas %v: fixed row is %v tall, want 48", canvas, h)
+		}
+		if h := height(got.Areas[0]); h <= 0 {
+			t.Errorf("canvas %v: the flexible row got %v", canvas, h)
+		}
+	}
+}
+
+// The room a fixed row takes comes out of the flexible rows, which is what
+// makes a track take its height out of the panel rather than out of the data.
+func TestAFixedRowTakesItsHeightFromTheFlexibleOnes(t *testing.T) {
+	free := layout.Panels(grid(2, 1, numbered(0, 0), numbered(1, 0)), irtest.New())
+	g := grid(2, 1, numbered(0, 0), numbered(1, 0))
+	g.RowHeights = []float32{0, 48}
+	fixed := layout.Panels(g, irtest.New())
+
+	if height(fixed.Areas[0]) <= height(free.Areas[0]) {
+		t.Errorf("flexible row is %v with a short fixed row below and %v without: it did not grow",
+			height(fixed.Areas[0]), height(free.Areas[0]))
+	}
+	if height(fixed.Areas[0])+height(fixed.Areas[1]) > height(free.Areas[0])+height(free.Areas[1])+0.01 {
+		t.Error("the fixed row added height to the grid rather than taking it")
+	}
+}
+
+// Two flexible rows stay equal to each other whatever is fixed around them.
+// That is ADR 0010's promise, narrowed rather than abandoned.
+func TestFlexibleRowsStayEqualToEachOther(t *testing.T) {
+	g := grid(3, 1, numbered(0, 0), numbered(1, 0), numbered(2, 0))
+	g.RowHeights = []float32{0, 0, 48}
+	got := layout.Panels(g, irtest.New())
+
+	if !closeTo(height(got.Areas[0]), height(got.Areas[1])) {
+		t.Errorf("flexible rows are %v and %v tall", height(got.Areas[0]), height(got.Areas[1]))
+	}
+}
+
+// A canvas too small for its fixed rows must collapse to something degenerate
+// but well ordered. An inverted rectangle maps geometry to nonsense.
+func TestFixedRowsTallerThanTheCanvasCollapseWellOrdered(t *testing.T) {
+	g := grid(2, 1, numbered(0, 0), numbered(1, 0))
+	g.Canvas = ir.R(0, 0, 200, 80)
+	g.RowHeights = []float32{0, 400}
+
+	got := layout.Panels(g, irtest.New())
+	for i, a := range got.Areas {
+		if a.Max.Y < a.Min.Y || a.Max.X < a.Min.X {
+			t.Errorf("panel %d is inverted: %v", i, a)
+		}
+	}
+}
+
+// A grid that fixes nothing must compute exactly what it computed before fixed
+// rows existed. Every golden file in the repository depends on it.
+func TestANilRowHeightsChangesNothing(t *testing.T) {
+	for _, rows := range []int{1, 2, 3} {
+		var panels []layout.Panel
+		for r := range rows {
+			panels = append(panels, numbered(r, 0))
+		}
+		before := layout.Panels(grid(rows, 1, panels...), irtest.New())
+
+		g := grid(rows, 1, panels...)
+		g.RowHeights = make([]float32, rows)
+		after := layout.Panels(g, irtest.New())
+
+		for i := range before.Areas {
+			if before.Areas[i] != after.Areas[i] {
+				t.Errorf("%d rows, panel %d: %v with zero heights, %v without", rows, i, after.Areas[i], before.Areas[i])
+			}
+		}
+	}
+}

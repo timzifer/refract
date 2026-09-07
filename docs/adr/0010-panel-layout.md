@@ -62,3 +62,10 @@ A layout arrives that a grid of equal panels cannot express — a dashboard with
 panels of deliberately different sizes, or a marginal-distribution plot where a
 narrow strip sits beside a square one. That is a real constraint solver rather
 than a wider version of this one, and it should be judged on its own.
+
+**It did, in v0.10, and it was answered narrowly rather than generally.**
+`layout.Grid.RowHeights` lets a row be given its height instead of deriving
+one, which is what a track — a band at a panel's edge, on the panel's own X —
+is made of. The rows *not* given a height still share what is left equally, so
+the panels that are panels are still all the same size; this is not the
+size-per-panel solver above. See [ADR 0031](0031-tracks.md).

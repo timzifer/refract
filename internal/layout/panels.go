@@ -31,6 +31,18 @@ type Grid struct {
 	// Panels are the panels, in any order. A cell with no panel is a hole.
 	Panels []Panel
 
+	// RowHeights fixes the height of a row in device units, or leaves it to
+	// the solver when the entry is zero or absent. It is what a track — a band
+	// at a panel's edge, on the panel's own X — is made of: a row whose height
+	// is given rather than derived.
+	//
+	// The flexible rows share what the fixed ones leave, equally, so the
+	// panels that are panels stay the same size as each other. This is the
+	// narrow widening of ADR 0010 its own "revisit if" clause asks for, not a
+	// general size-per-panel solver: a row is fixed or it is not, and nothing
+	// here can make two flexible rows differ.
+	RowHeights []float32
+
 	// Guides are the keys beside the grid as a whole, in stacking order.
 	Guides []Guide
 }
@@ -153,9 +165,13 @@ func Panels(g Grid, m Measurer) GridResult {
 	regionTop := area.Min.Y + titleH
 	regionBottom := area.Max.Y - bottomTitleH
 	usableH := regionBottom - regionTop
-	panelH := (usableH - sum(rowGutter) - sum(stripH) - float32(g.Rows-1)*th.PanelGap) / float32(g.Rows)
+	availH := usableH - sum(rowGutter) - sum(stripH) - float32(g.Rows-1)*th.PanelGap
+	rowH, panelsH := rowHeights(g, availH)
 
-	guides := measureGuides(th, g.Guides, m, panelH*float32(g.Rows))
+	// The guides are as long as the panels together are tall, which is the
+	// fixed rows plus the flexible ones — not the region, which includes the
+	// gutters between them.
+	guides := measureGuides(th, g.Guides, m, panelsH)
 
 	var guideW float32
 	for _, gd := range guides {
@@ -179,7 +195,6 @@ func Panels(g Grid, m Measurer) GridResult {
 	// and geometry that maps to nonsense. Collapse to degenerate but
 	// well-ordered panels instead.
 	panelW = maxOf(panelW, 0)
-	panelH = maxOf(panelH, 0)
 
 	r.Region = ir.Rect{
 		Min: ir.Point{X: regionLeft, Y: regionTop},
@@ -205,7 +220,7 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		y += stripH[row]
 		rowY[row] = y
-		y += panelH + rowGutter[row]
+		y += rowH[row] + rowGutter[row]
 	}
 
 	for i, p := range g.Panels {
@@ -214,7 +229,7 @@ func Panels(g Grid, m Measurer) GridResult {
 		}
 		box := ir.Rect{
 			Min: ir.Point{X: colX[p.Col], Y: rowY[p.Row]},
-			Max: ir.Point{X: colX[p.Col] + panelW, Y: rowY[p.Row] + panelH},
+			Max: ir.Point{X: colX[p.Col] + panelW, Y: rowY[p.Row] + rowH[p.Row]},
 		}
 		r.Areas[i] = box
 		if p.Strip != "" {
@@ -236,7 +251,7 @@ func Panels(g Grid, m Measurer) GridResult {
 	// to one side of the thing it names.
 	span := ir.Rect{
 		Min: ir.Point{X: colX[0], Y: rowY[0]},
-		Max: ir.Point{X: colX[g.Cols-1] + panelW, Y: rowY[g.Rows-1] + panelH},
+		Max: ir.Point{X: colX[g.Cols-1] + panelW, Y: rowY[g.Rows-1] + rowH[g.Rows-1]},
 	}
 	if g.Title != "" {
 		mm := m.Measure(ir.TextRun{Text: g.Title, Font: titleFont})
@@ -278,4 +293,64 @@ func sum(vs []float32) float32 {
 		t += v
 	}
 	return t
+}
+
+// rowHeights resolves each row's height, and reports how tall the panels are
+// together — which is what the guide column is measured against.
+//
+// A row named in Grid.RowHeights is that tall; every other row takes an equal
+// share of what is left. The arithmetic is deliberately written so that a grid
+// with no fixed row computes exactly what it computed before this existed: the
+// share is a single division of the same quantity, and the total is a single
+// multiplication rather than a sum, because a float32 sum of n equal terms is
+// not always the product and every golden file in the repository would move by
+// an ulp if it were.
+func rowHeights(g Grid, avail float32) (rows []float32, panels float32) {
+	rows = make([]float32, g.Rows)
+
+	var fixed float32
+	flex := 0
+	for i := range rows {
+		if h := givenHeight(g, i); h > 0 {
+			rows[i] = h
+			fixed += h
+		} else {
+			flex++
+		}
+	}
+
+	// A canvas too small for its fixed rows would produce inverted rectangles
+	// and geometry that maps to nonsense. Give the flexible rows nothing and
+	// shrink the fixed ones in proportion, so the result is degenerate but
+	// still well ordered.
+	if fixed > avail {
+		scale := float32(0)
+		if avail > 0 {
+			scale = avail / fixed
+		}
+		for i := range rows {
+			rows[i] *= scale
+		}
+		return rows, maxOf(avail, 0)
+	}
+
+	if flex == 0 {
+		return rows, fixed
+	}
+	share := maxOf((avail-fixed)/float32(flex), 0)
+	for i := range rows {
+		if givenHeight(g, i) <= 0 {
+			rows[i] = share
+		}
+	}
+	return rows, share*float32(flex) + fixed
+}
+
+// givenHeight is the height Grid.RowHeights fixes for a row, or zero when the
+// row is the solver's to size.
+func givenHeight(g Grid, row int) float32 {
+	if row < 0 || row >= len(g.RowHeights) {
+		return 0
+	}
+	return maxOf(g.RowHeights[row], 0)
 }

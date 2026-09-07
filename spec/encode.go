@@ -74,6 +74,14 @@ func Of(c Chart) (Spec, error) {
 		}
 	}
 
+	for i, tr := range c.Tracks {
+		d, err := encodeTrack(tr, kindOf(c.X))
+		if err != nil {
+			return Spec{}, fmt.Errorf("refract/spec: track %d: %w", i, err)
+		}
+		s.Tracks = append(s.Tracks, d)
+	}
+
 	cfg := &Config{Legend: c.Legend}
 	if c.Theme.Name != "" {
 		cfg.Theme = c.Theme.Name
@@ -586,3 +594,31 @@ func kindOf(s scale.Scale) axisKind {
 
 func boolPtr(b bool) *bool          { return &b }
 func float64Ptr(v float64) *float64 { return &v }
+
+// encodeTrack writes one band down.
+//
+// A track's layers are encoded against its own axis kinds — the chart's X and
+// the track's Y — because a mark's channel type is read off the scale it is
+// placed by, and a track's Y is not the chart's.
+func encodeTrack(t Track, x axisKind) (TrackDoc, error) {
+	d := TrackDoc{
+		Edge:     t.Edge,
+		Height:   t.Height,
+		Fraction: t.Fraction,
+		NoAxis:   !t.Axis,
+		Grid:     t.Grid,
+	}
+	var err error
+	if d.Y, err = axisChannel(t.Y, ""); err != nil {
+		return TrackDoc{}, fmt.Errorf("y axis: %w", err)
+	}
+	axes := axisKinds{x: x, y: kindOf(t.Y)}
+	for i, g := range t.Layers {
+		l, err := encodeLayer(g, false, axes)
+		if err != nil {
+			return TrackDoc{}, fmt.Errorf("layer %d: %w", i, err)
+		}
+		d.Layer = append(d.Layer, l)
+	}
+	return d, nil
+}

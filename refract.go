@@ -150,6 +150,10 @@ type Plot struct {
 
 	facet *facet.Spec
 
+	// tracks are the bands at the panel's edges, in the order they were
+	// added. See [Plot.Track].
+	tracks []*Track
+
 	legend    bool
 	legendSet bool
 
@@ -385,6 +389,14 @@ func (p *Plot) Facet(s *facet.Spec) *Plot { p.facet = s; return p }
 // also no scale configured — that combination is always a mistake.
 var ErrNoLayers = errors.New("refract: plot has no layers and no scales")
 
+// ErrTrackWithFacet reports a plot that has both a track and a facet.
+//
+// A facet owns the grid's rows and columns — it is what decides how many there
+// are and what each one means — and a track needs a row of that grid to live
+// in. A band spanning a facet is a different feature with different questions
+// to answer, so this is refused rather than guessed at.
+var ErrTrackWithFacet = errors.New("refract: a plot cannot have both a track and a facet")
+
 // Render draws the plot into t.
 //
 // It opens the target, lowers the chart into the backend it returns, flushes,
@@ -438,6 +450,12 @@ func (p *Plot) chart() (render.Chart, error) {
 		Description: p.Description(),
 		Math:        p.math,
 		Serial:      p.serial,
+	}
+	if len(p.tracks) > 0 {
+		if p.facet != nil {
+			return render.Chart{}, ErrTrackWithFacet
+		}
+		return p.tracked(c), nil
 	}
 	if p.facet == nil {
 		return c, nil

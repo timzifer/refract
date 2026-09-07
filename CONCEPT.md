@@ -988,8 +988,33 @@ buffer and the geom already keeps one.
   nested modules' `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
+### v0.10 — Tracks: a band at a panel's edge — **shipped**
+
+The first milestone after the freeze, and additive throughout: `Plot.Track`
+attaches a band to the bottom or top of the plot area that shares the plot's X
+scale *object* and carries a vertical scale of its own, of a different kind if
+that is what the data is — an ordinal strip of machine states under a linear
+speed trace, on one time axis. Sharing the object rather than the domain is
+what makes a zoom one zoom, and it is why hit-testing, the parallel path and
+the Fyne widget needed no changes at all.
+
+Its cost is one narrow widening of the layout solver — `layout.Grid.RowHeights`
+gives a row its height instead of deriving one — which is the revisit
+[ADR 0010](docs/adr/0010-panel-layout.md) asked for by name, answered without
+becoming the general size-per-panel solver it warned about. The rows not given
+a height are still all the same size. See
+[ADR 0031](docs/adr/0031-tracks.md).
+
+The same solver change gives stacked plots on one domain — the linked-axes
+shape — as two `Grid` options rather than a `Link` API, because a `Grid`
+already routes its plots through the one solver and already takes their scale
+objects.
+
 ### Beyond v1.0
 
+- Left and right tracks: the mirror image, grid columns with fixed widths
+  sharing the panel's Y, which is what a colour key or a marginal distribution
+  wants. `Edge` is numbered for them.
 - Harden the GPU tier as GoGPU matures.
 - More coordinate systems: geographic and map projections. Polar arrived in v0.8
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)); a projection is a wider seam

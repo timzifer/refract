@@ -539,6 +539,36 @@ err := g.Render(refract.PDF("overview.pdf"))
 A runnable version of both, with annotations and PDF output, is in
 [`examples/dashboard`](examples/dashboard).
 
+## A band at the edge, on the same axis
+
+Some of what a chart shows is not on its Y axis at all: a strip of machine
+states under a speed trace, a rug of event times, a ribbon of shifts. A track
+is a band at an edge of the plot area that shares the plot's X and carries a
+scale of its own — an ordinal one under a linear panel, which is the case it
+exists for.
+
+```go
+p := refract.New(refract.Size(900, 480), refract.Title("Line 3"))
+p.X(scale.Time()).Y(scale.Linear(scale.Zero()))
+p.Add(geom.Line(speed, geom.X("t"), geom.Y("speed")))
+
+p.Track(refract.Bottom, refract.TrackHeight(48)).
+    Add(geom.Rect(states, geom.X("start"), geom.X2("end"), geom.Y("state"),
+        geom.ColorBy("state", scale.Qualitative(palette.Default))))
+```
+
+The height comes out of the panel, not out of the panel's domain: the Y axis is
+identical with the track and without it, so `scale.Zero()` still means what it
+says. The track and the panel hold the *same* X scale, so a zoom is one zoom
+rather than two that agree, and a pointer over a state bar reports its layer
+and its row like any other mark. Its lanes do not zoom, because half a category
+is not a view of anything.
+
+For the same shape across separate plots, stack them in a one-column grid on
+one scale object — `refract.GridRowHeights(0, 48)` makes the second row a strip
+and `refract.GridSharedX(true)` writes the time axis once, under the bottom
+row. That path renders; interaction is what a track is for.
+
 ## A million rows
 
 ```go
