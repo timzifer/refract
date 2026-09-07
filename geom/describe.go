@@ -38,6 +38,10 @@ const (
 	MarkECDF      Mark = "ecdf"
 	MarkTrend     Mark = "trend"
 
+	// MarkErrorBar is the interval mark: a rule between two bounds, with a cap
+	// at each end and a marker at the measurement.
+	MarkErrorBar Mark = "errorbar"
+
 	MarkHLine   Mark = "hline"
 	MarkVLine   Mark = "vline"
 	MarkHBand   Mark = "hband"
@@ -163,12 +167,22 @@ type Desc struct {
 	Steps    StepPos
 	Whisker  float64
 	Outliers bool
-	Decimate Decimation
-	Budget   int
-	CellSize float64
-	FontSize float64
-	HAlign   ir.HAlign
-	VAlign   ir.VAlign
+	// MidCol is the column an [ErrorBar] marks its measurement at, ErrorCol
+	// and ErrorXCol the half-widths of a symmetric interval on each axis, and
+	// Caps whether the ends carry a crossbar. Caps needs no companion flag
+	// the way [Desc.DashSet] does: it defaults to true rather than to its zero
+	// value, so a document that says nothing and one that says false are
+	// already different.
+	MidCol    string
+	ErrorCol  string
+	ErrorXCol string
+	Caps      bool
+	Decimate  Decimation
+	Budget    int
+	CellSize  float64
+	FontSize  float64
+	HAlign    ir.HAlign
+	VAlign    ir.VAlign
 	// AlignSet is whether the layer was told how to align its text. The start
 	// of a run on the baseline is both the zero value and an alignment
 	// somebody may have asked for, and a [Text] layer centres a label in its
@@ -274,6 +288,8 @@ func FromDesc(d Desc) (Geom, error) {
 		return ECDF(d.Source, opts...), nil
 	case MarkTrend:
 		return Trend(d.Source, opts...), nil
+	case MarkErrorBar:
+		return ErrorBar(d.Source, opts...), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownMark, d.Mark)
 }
@@ -295,6 +311,7 @@ func (d Desc) options() []Option {
 		Steps(d.Steps),
 		Whisker(d.Whisker),
 		Outliers(d.Outliers),
+		Caps(d.Caps),
 		Decimate(d.Decimate),
 		Budget(d.Budget),
 		DensityCells(d.CellSize),
@@ -346,6 +363,15 @@ func (d Desc) options() []Option {
 	}
 	if d.TextCol != "" {
 		opts = append(opts, TextBy(d.TextCol))
+	}
+	if d.MidCol != "" {
+		opts = append(opts, Mid(d.MidCol))
+	}
+	if d.ErrorCol != "" {
+		opts = append(opts, ErrorBy(d.ErrorCol))
+	}
+	if d.ErrorXCol != "" {
+		opts = append(opts, ErrorXBy(d.ErrorXCol))
 	}
 	if d.Color != nil {
 		opts = append(opts, Color(*d.Color))
@@ -432,6 +458,10 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Steps:      c.steps,
 		Whisker:    c.whisker,
 		Outliers:   c.outliers,
+		MidCol:     c.midCol,
+		ErrorCol:   c.errCol,
+		ErrorXCol:  c.errXCol,
+		Caps:       c.caps,
 		Decimate:   c.decimate,
 		Budget:     c.budget,
 		CellSize:   c.cellSize,

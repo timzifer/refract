@@ -301,6 +301,19 @@ that snapped to round numbers after every wheel notch would not follow the
 pointer, and on a log axis nicing rounds the view out to whole decades. `fixed`
 alone stops *training*; `pinned` also stops *framing*.
 
+**An error bar's orientation is its encoding, and its bounds are derived in
+`Train`.** `Y2`/`ErrorBy` runs it vertically and `X2`/`ErrorXBy` horizontally —
+the rule `Rect` already follows about its edges, which is why there is no
+orientation option to contradict — and naming both is `ErrBothAxes` rather than
+a guess that depends on option order ([ADR 0035](docs/adr/0035-error-bars.md)).
+The bounds are computed in `Train` because the axis has to describe them: an
+interval whose top runs off the plot is the reading the chart was opened for,
+which is the same boundary ADR 0019 draws for a stack's totals. `errorGeom.half`
+is measured once per `Train` out of a buffer the layer keeps — `smallestGap`
+sorts, and asking it per row is what made a bar layer quadratic once already.
+And every segment goes through the coord: a cap drawn as two device points
+would be a straight line under a polar coord, where the mark is an arc.
+
 **A tick label has two spellings and the Go one wins, but both are written
 down.** `scale.Format` takes a function and `scale.NumberFormat` takes a spec;
 `Desc` carries `Formatted` *and* `Format`, because a Desc that dropped the spec

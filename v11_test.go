@@ -153,3 +153,26 @@ func firstLabels(doc string) string {
 	}
 	return strings.Join(out, " | ")
 }
+
+// The interval mark, end to end: a chart of means with the intervals they are
+// known to within, rendered through the whole pipeline.
+func TestAnErrorBarRendersOverTheBarsItAnnotates(t *testing.T) {
+	src := refract.NewTable().
+		String("group", []string{"a", "b", "c"}).
+		Float64("mean", []float64{10, 12, 11}).
+		Float64("sd", []float64{1, 2, 0.5})
+
+	p := refract.New(refract.Size(500, 300), refract.Title("Means"))
+	p.X(scale.Ordinal())
+	p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	p.Add(geom.Bar(src, geom.X("group"), geom.Y("mean")))
+	p.Add(geom.ErrorBar(src, geom.X("group"), geom.Y("mean"), geom.ErrorBy("sd")))
+
+	doc := svgOf(t, p)
+	// The tallest interval reaches 14, so the axis has to have a tick past it:
+	// a chart whose error bar runs off the top is the failure the bounds are
+	// trained for.
+	if !strings.Contains(doc, ">14<") && !strings.Contains(doc, ">15<") {
+		t.Errorf("the axis stops short of the widest interval:\n%s", firstLabels(doc))
+	}
+}

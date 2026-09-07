@@ -1,12 +1,11 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws fourteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
-`Area`, `Step`, `Boxplot`, `Rect`, `Histogram`, `Violin`, `Ridgeline`, `Hexbin`,
-`Beeswarm`, `ECDF` and `Trend`, plus the annotations in `geom/annotate.go`. This
-document is
-the catalogue of what it does not draw yet, sorted **by the machinery each form
-needs** rather than by how popular it is. Sorted that way the list stops being a
-wish list and becomes a schedule: half of these charts share four pieces of
+refract draws sixteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
+`Area`, `Step`, `Boxplot`, `Rect`, `Text`, `ErrorBar`, `Histogram`, `Violin`,
+`Ridgeline`, `Hexbin`, `Beeswarm`, `ECDF` and `Trend`, plus the annotations in
+`geom/annotate.go`. This document is the catalogue of what it does not draw
+yet, sorted **by the machinery each form needs** rather than by how popular it
+is. Sorted that way the list stops being a wish list and becomes a schedule: half of these charts share four pieces of
 plumbing, and once those exist the charts themselves are small.
 
 The milestone column follows [CONCEPT §14](../CONCEPT.md). Nothing here is a
@@ -208,10 +207,26 @@ and `Silverman` takes two spread measures, because sorting means a buffer and th
 geoms already keep one — one per layer, for the reason `barGeom.gaps` is on the
 layer rather than in the frame's pool.
 
+## G — what is not a chart type
+
+The forms above are shapes. This bucket is the other kind of gap: things a
+chart says that no mark draws, and that were missing for long enough to be
+worth naming as a class. They share no machinery with each other either, but
+each of them is small, and each of them was reachable only by giving up
+something else.
+
+| Gap | Status | What it was |
+|---|---|---|
+| An interval around a measurement | **shipped** — [ADR 0035](adr/0035-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
+| A tick label a document can choose | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
+| A chart in a language | **shipped** — [ADR 0034](adr/0034-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
+| Absence in a text or temporal column | **shipped** — [ADR 0033](adr/0033-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
+
 ## Already possible today
 
 Worth saying plainly, because they look like gaps and are not: a **band /
-uncertainty ribbon** is `Area` with `Y2`; a **step chart** is `Step`; a
+uncertainty ribbon** is `Area` with `Y2` (and the discrete version of the same
+statement is `ErrorBar`); a **step chart** is `Step`; a
 **density cloud** over a million points is `Scatter` with
 `geom.Decimate(geom.DensityRaster)`; **reference lines, spans, regions and
 callouts** are the annotations in `geom/annotate.go`; a **slope chart** is a
@@ -238,6 +253,11 @@ The dependency order is not a preference:
    ([ADR 0028](adr/0028-distribution-stats.md)): F, less contour and QQ.
 8. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
+
+9. **The rest of G** — the gaps that are not chart types at all. They are
+   listed above because sorting by machinery is what makes a schedule, and
+   these have none: each is small, independent, and blocks a whole class of
+   charts from being *usable* rather than from being drawn.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this
 catalogue that benefits from none of the plumbing above: its own data shape, its

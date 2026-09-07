@@ -226,6 +226,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		BarWidth:  0.8,
 		Whisker:   l.Mark.Extent,
 		Outliers:  true,
+		Caps:      true,
 		Missing:   missingPolicy(l.Mark.Missing),
 		Decimate:  decimationMode(l.Mark.Decimate),
 		Budget:    l.Mark.Budget,
@@ -263,6 +264,9 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 	}
 	if l.Mark.Outliers != nil {
 		d.Outliers = *l.Mark.Outliers
+	}
+	if l.Mark.Caps != nil {
+		d.Caps = *l.Mark.Caps
 	}
 	if l.Mark.Extend != nil {
 		d.Extend = *l.Mark.Extend
@@ -315,6 +319,7 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 	d.X2 = fieldOf(enc.X2)
 	d.Group, d.WidthCol = fieldOf(enc.Detail), fieldOf(enc.Width)
 	d.ExplodeCol = fieldOf(enc.Explode)
+	d.MidCol, d.ErrorCol, d.ErrorXCol = fieldOf(enc.Mid), fieldOf(enc.Error), fieldOf(enc.ErrorX)
 	// The stack rides the channel it adjusts. A document that names none
 	// leaves the mark's own default in place, which is why this is a pair
 	// rather than a value — see [geom.Desc].

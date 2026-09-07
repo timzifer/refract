@@ -63,6 +63,11 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		// Both are a rect and neither is oriented, so the type does not tell
 		// them apart — the encoding does. See [geomMark].
 		return "rect", "", nil
+	case geom.MarkErrorBar:
+		// Vega-Lite spells it "errorbar" too, and reaches it with an aggregate
+		// transform; refract's reads the bounds from columns, so the name is
+		// the same and what it carries is not.
+		return "errorbar", "", nil
 	case geom.MarkNote, geom.MarkText:
 		// Both are text and neither is oriented, so the type does not tell
 		// them apart — the encoding does, exactly as it does for a rect and a
@@ -112,6 +117,8 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		return geom.MarkECDF, nil
 	case "trend":
 		return geom.MarkTrend, nil
+	case "errorbar":
+		return geom.MarkErrorBar, nil
 	case "rule":
 		switch m.Orient {
 		case "horizontal":
@@ -151,7 +158,7 @@ func hasField(enc *Encoding) bool {
 	if enc == nil {
 		return false
 	}
-	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text} {
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text, enc.Mid, enc.Error, enc.ErrorX} {
 		if ch != nil && ch.Field != "" {
 			return true
 		}

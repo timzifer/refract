@@ -452,6 +452,14 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		if d.MarkerSet {
 			m.Shape = shapeName(d.Marker)
 		}
+	case geom.MarkErrorBar:
+		stroke()
+		rows()
+		group()
+		m.Size, m.BarWidth, m.Caps = d.Size, float64Ptr(d.BarWidth), boolPtr(d.Caps)
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
 	case geom.MarkECDF:
 		stroke()
 		group()
@@ -538,6 +546,15 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.TextCol != "" {
 			enc.Text = &Channel{Field: d.TextCol}
+		}
+		if d.MidCol != "" {
+			enc.Mid = &Channel{Field: d.MidCol}
+		}
+		if d.ErrorCol != "" {
+			enc.Error = &Channel{Field: d.ErrorCol}
+		}
+		if d.ErrorXCol != "" {
+			enc.ErrorX = &Channel{Field: d.ErrorXCol}
 		}
 		if d.SizeCol != "" && d.SizeScale != nil {
 			ss, err := encodeSizeScale(d.SizeScale)

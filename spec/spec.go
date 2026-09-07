@@ -169,6 +169,12 @@ type Mark struct {
 	FontSize    float64   `json:"fontSize,omitempty"`
 	Angle       float64   `json:"angle,omitempty"`
 
+	// Caps is whether an error bar carries a crossbar at each end. It is
+	// refract's own, it is a pointer because the default is true rather than
+	// false, and a document that omits it gets the caps — writing `false`
+	// is the point-range look.
+	Caps *bool `json:"caps,omitempty"`
+
 	// Elide is whether a text layer truncates a label too wide for the box its
 	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
 	// equivalent, so no name is borrowed for it.
@@ -323,6 +329,17 @@ type Encoding struct {
 	// refract's is that the scale behind it is read as an *area*, which the
 	// scale's `type: "size"` says.
 	Size *Channel `json:"size,omitempty"`
+
+	// Mid is the column an error bar marks its measurement at, inside the
+	// interval its positional channels describe. Error and ErrorX are the
+	// symmetric spelling: a column of half-widths about the value on that
+	// axis. All three are refract's, so no Vega-Lite name is borrowed —
+	// Vega-Lite reaches the same picture with an `errorbar` mark and an
+	// aggregate transform, which refract does not have because a stat runs in
+	// the layer.
+	Mid    *Channel `json:"mid,omitempty"`
+	Error  *Channel `json:"error,omitempty"`
+	ErrorX *Channel `json:"errorX,omitempty"`
 }
 
 // Channel is one encoding: a column, or a literal value, and the scale behind

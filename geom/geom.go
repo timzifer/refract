@@ -133,6 +133,9 @@ type config struct {
 
 	groupCol   string
 	widthCol   string
+	midCol     string
+	errCol     string
+	errXCol    string
 	explode    float64
 	explodeCol string
 	stack      Stacking
@@ -160,6 +163,7 @@ type config struct {
 	colorScale scale.ColorScale
 	whisker    float64
 	outliers   bool
+	caps       bool
 	decimate   Decimation
 	budget     int
 	cellSize   float64
@@ -449,6 +453,53 @@ func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
 // rows a reader opened the chart to find.
 func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
 
+// Mid selects the column an [ErrorBar] marks the measurement at, inside the
+// interval it draws.
+//
+// It is the third number an interval needs and the reason this mark has a
+// channel of its own: [Y] and [Y2] are the two ends, exactly as they are for
+// the band an [Area] draws and the box a [Rect] draws, which leaves the
+// measurement itself nowhere to go. A layer that names no Mid draws the
+// interval alone, which is the honest picture when the interval is all that
+// was measured — a min and a max are not evidence of a mean.
+//
+// The symmetric spelling needs no Mid: [ErrorBy] reads the measurement from
+// [Y] and derives both ends from it, so the value is already named.
+func Mid(col string) Option { return func(c *config) { c.midCol = col } }
+
+// ErrorBy selects a column of half-widths, and makes an [ErrorBar] symmetric
+// about its [Y] value: the interval runs from y−e to y+e.
+//
+// It is the spelling a table usually has. A mean and a standard deviation, or
+// a mean and a margin of error, are two columns; turning them into a low and a
+// high column first is arithmetic the caller should not have to do to draw a
+// chart of what they measured.
+//
+// The measurement is marked, because with this spelling there always is one:
+// the centre is the [Y] column, so a layer given a spread is a point with an
+// interval around it rather than an interval alone.
+func ErrorBy(col string) Option { return func(c *config) { c.errCol = col } }
+
+// ErrorXBy is [ErrorBy] along the horizontal axis: the interval runs from x−e
+// to x+e about the [X] value, and the mark lies on its side.
+//
+// Which axis an error bar runs along follows from the encoding and nothing
+// else, exactly as a [Rect]'s edges do: naming [Y2] or [ErrorBy] puts the
+// interval on the vertical axis, naming [X2] or this puts it on the
+// horizontal one. That is what a chart of measurements against categories on
+// the Y axis needs, and it is why there is no orientation option.
+func ErrorXBy(col string) Option { return func(c *config) { c.errXCol = col } }
+
+// Caps turns the crossbars at the ends of an [ErrorBar] on or off. They are on
+// by default.
+//
+// Turning them off is the point-range look: a rule with a marker on it and
+// nothing at the ends, which is what a chart with many intervals close
+// together wants — caps that touch read as a grid. The cap is half as wide as
+// a [Bar] of the same [BarWidth] would be, so an error bar drawn over a bar
+// chart is narrower than the bar it annotates.
+func Caps(show bool) Option { return func(c *config) { c.caps = show } }
+
 // Align sets how a text annotation sits about its position. The default is
 // the run's start on the point, on the baseline — except in a [Text] layer
 // that labels a box, where a label with nothing said about it is centred in
@@ -477,7 +528,7 @@ func Extend(on bool) Option { return func(c *config) { c.extend = on } }
 
 func newConfig(opts []Option) config {
 	c := config{
-		barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1, extend: true,
+		barWidth: 0.8, whisker: 1.5, outliers: true, caps: true, opacity: -1, extend: true,
 		span: stat.DefaultSpan, overlap: defaultOverlap,
 	}
 	for _, o := range opts {
