@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="460" viewBox="0 0 700 460" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Line 3</title>
+<defs>
+<clipPath id="c1"><path d="M154.238,32.8 L684.942,32.8 L684.942,368.825 L154.238,368.825 Z"/></clipPath>
+<clipPath id="c2"><path d="M154.238,380.825 L684.942,380.825 L684.942,428.825 L154.238,428.825 Z"/></clipPath>
+<clipPath id="c3"><path d="M56.448,32.8 L112.448,32.8 L112.448,368.825 L56.448,368.825 Z"/></clipPath>
+</defs>
+<path d="M0,0 L700,0 L700,460 L0,460 Z" fill="#ffffff"/>
+<polyline fill="none" points="154.238,32.8 154.238,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="286.914,32.8 286.914,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="419.59,32.8 419.59,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="552.266,32.8 552.266,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="684.942,32.8 684.942,368.825" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,360.824 684.942,360.824" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,280.818 684.942,280.818" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,200.812 684.942,200.812" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,120.807 684.942,120.807" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,40.801 684.942,40.801" stroke="#dddddd"/>
+<polyline fill="none" points="154.238,368.825 684.942,368.825" stroke="#333333"/>
+<polyline fill="none" points="154.238,32.8 154.238,368.825" stroke="#333333"/>
+<polyline fill="none" points="154.238,368.825 154.238,373.825" stroke="#333333"/>
+<polyline fill="none" points="286.914,368.825 286.914,373.825" stroke="#333333"/>
+<polyline fill="none" points="419.59,368.825 419.59,373.825" stroke="#333333"/>
+<polyline fill="none" points="552.266,368.825 552.266,373.825" stroke="#333333"/>
+<polyline fill="none" points="684.942,368.825 684.942,373.825" stroke="#333333"/>
+<polyline fill="none" points="149.238,360.824 154.238,360.824" stroke="#333333"/>
+<polyline fill="none" points="149.238,280.818 154.238,280.818" stroke="#333333"/>
+<polyline fill="none" points="149.238,200.812 154.238,200.812" stroke="#333333"/>
+<polyline fill="none" points="149.238,120.807 154.238,120.807" stroke="#333333"/>
+<polyline fill="none" points="149.238,40.801 154.238,40.801" stroke="#333333"/>
+<polyline fill="none" points="154.238,428.825 684.942,428.825" stroke="#333333"/>
+<polyline fill="none" points="154.238,380.825 154.238,428.825" stroke="#333333"/>
+<polyline fill="none" points="154.238,428.825 154.238,433.825" stroke="#333333"/>
+<text x="154.238" y="437.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="286.914,428.825 286.914,433.825" stroke="#333333"/>
+<text x="286.914" y="437.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="419.59,428.825 419.59,433.825" stroke="#333333"/>
+<text x="419.59" y="437.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="552.266,428.825 552.266,433.825" stroke="#333333"/>
+<text x="552.266" y="437.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">6</text>
+<polyline fill="none" points="684.942,428.825 684.942,433.825" stroke="#333333"/>
+<text x="684.942" y="437.825" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">8</text>
+<polyline fill="none" points="149.238,416.825 154.238,416.825" stroke="#333333"/>
+<text x="145.238" y="416.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">run</text>
+<polyline fill="none" points="149.238,392.825 154.238,392.825" stroke="#333333"/>
+<text x="145.238" y="392.825" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">fault</text>
+<polyline fill="none" points="56.448,368.825 112.448,368.825" stroke="#333333"/>
+<polyline fill="none" points="56.448,32.8 56.448,368.825" stroke="#333333"/>
+<polyline fill="none" points="70.448,368.825 70.448,373.825" stroke="#333333"/>
+<polyline fill="none" points="98.448,368.825 98.448,373.825" stroke="#333333"/>
+<polyline fill="none" points="51.448,360.824 56.448,360.824" stroke="#333333"/>
+<text x="47.448" y="360.824" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">40</text>
+<polyline fill="none" points="51.448,280.818 56.448,280.818" stroke="#333333"/>
+<text x="47.448" y="280.818" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">60</text>
+<polyline fill="none" points="51.448,200.812 56.448,200.812" stroke="#333333"/>
+<text x="47.448" y="200.812" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">80</text>
+<polyline fill="none" points="51.448,120.807 56.448,120.807" stroke="#333333"/>
+<text x="47.448" y="120.807" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">100</text>
+<polyline fill="none" points="51.448,40.801 56.448,40.801" stroke="#333333"/>
+<text x="47.448" y="40.801" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">120</text>
+<text x="370.695" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Line 3</text>
+<text x="20.616" y="230.812" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 230.812)">m/min</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="154.238,40.801 220.576,48.801 286.914,36.8 353.252,360.824 419.59,368.825 485.928,44.801 552.266,32.8 618.604,40.801" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g clip-path="url(#c2)">
+<path d="M154.238,407.225 L353.252,407.225 L353.252,426.425 L154.238,426.425 Z M485.928,407.225 L684.942,407.225 L684.942,426.425 L485.928,426.425 Z" fill="#0072b2"/>
+<path d="M353.252,383.225 L485.928,383.225 L485.928,402.425 L353.252,402.425 Z" fill="#d55e00"/>
+</g>
+<g clip-path="url(#c3)">
+<path d="M59.248,120.807 L81.648,120.807 L81.648,368.825 L59.248,368.825 Z" fill="#0072b2"/>
+<path d="M87.248,32.8 L109.648,32.8 L109.648,120.807 L87.248,120.807 Z" fill="#d55e00"/>
+</g>
+</svg>

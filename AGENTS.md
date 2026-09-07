@@ -122,6 +122,26 @@ per panel, twice: once before the furniture pass and once before the data pass.
 Dropping the second call leaves every panel but the last drawing its data where
 the last panel's axis is. There is a test.
 
+**A track shares the panel's scale object, and that is the whole feature.**
+`Plot.tracked` gives every track panel the chart's own scale for the axis it
+runs along — `c.X` for a bottom or top band, `c.Y` for a left or right one. A zoom reaches a scale
+through `scale.Zoomer.SetDomain`, so one object means the panel and its bands
+move together by construction rather than by two handlers agreeing. Cloning it
+there — which is what `freeScale` does for a *free facet axis*, and looks like
+the tidier thing to do — compiles, draws a chart that looks right, and breaks
+every acceptance criterion the feature has. The same trap is why
+`scale.Cloner` and `scale.Snapshotter` are opposites; see
+[ADR 0031](docs/adr/0031-tracks.md). A track's own Y is unzoomable for free,
+because `zoomAxis` no-ops on a scale that is not a `Zoomer` and `scale.Ordinal`
+deliberately is not one. There is a test for each half.
+
+**A fixed row's arithmetic is written to be bit-identical when nothing is
+fixed.** `layout.rowHeights` divides once and multiplies once rather than
+summing, because a float32 sum of n equal terms is not always their product,
+and the guide column is measured against that total. Rewriting it as the
+obvious loop moves every golden file in the repository by an ulp — which the
+structural comparison will *not* catch, because it tolerates exactly that.
+
 **PDF is refract's own emitter, not `gg-pdf`.** That library cannot draw
 geometry — its path operations reach a stub in `gxpdf` — so the roadmap's plan
 of routing PDF through gg's recording API would have produced pages with tick

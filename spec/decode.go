@@ -64,6 +64,14 @@ func (s Spec) Chart() (Chart, error) {
 		c.Layers = append(c.Layers, g)
 	}
 
+	for i, d := range s.Tracks {
+		tr, err := decodeTrack(d, shared)
+		if err != nil {
+			return Chart{}, fmt.Errorf("refract/spec: track %d: %w", i, err)
+		}
+		c.Tracks = append(c.Tracks, tr)
+	}
+
 	if s.Facet != nil {
 		d := facet.Desc{Columns: s.Columns}
 		switch {
@@ -434,4 +442,30 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		d.Min, d.Max, d.Fixed = lo, hi, true
 	}
 	return scale.ColorFromDesc(d)
+}
+
+// decodeTrack reads one band back.
+//
+// A track's layers may name the chart's shared data source, so the hoisted
+// source is handed down exactly as it is for the chart's own layers.
+func decodeTrack(d TrackDoc, shared data.Source) (Track, error) {
+	t := Track{
+		Edge:     d.Edge,
+		Size:     d.Size,
+		Fraction: d.Fraction,
+		Axis:     !d.NoAxis,
+		Grid:     d.Grid,
+	}
+	var err error
+	if t.Scale, _, err = axisScale(d.Scale); err != nil {
+		return Track{}, fmt.Errorf("scale: %w", err)
+	}
+	for i, l := range d.Layer {
+		g, err := decodeLayer(l, shared)
+		if err != nil {
+			return Track{}, fmt.Errorf("layer %d: %w", i, err)
+		}
+		t.Layers = append(t.Layers, g)
+	}
+	return t, nil
 }

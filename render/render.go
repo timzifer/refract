@@ -70,6 +70,18 @@ type Chart struct {
 	Panels     []Panel
 	Rows, Cols int
 
+	// RowHeights fixes the height of a grid row in device units, leaving the
+	// solver to size any row whose entry is zero or absent. It is how a track
+	// is given the height it was asked for, and how a subplot grid is told
+	// that one of its rows is a strip rather than a panel.
+	RowHeights []float32
+
+	// ColWidths fixes the width of a grid column in device units, leaving the
+	// solver to size any column whose entry is zero or absent. It is
+	// RowHeights turned a quarter turn, and it is what a left or right track
+	// is given its width by.
+	ColWidths []float32
+
 	// Serial draws the panels one at a time. The zero value builds them
 	// concurrently where that is possible and worth it — see [drawData] — and
 	// produces the same output either way.
@@ -147,6 +159,12 @@ type Panel struct {
 	// panel that shares an axis with its neighbour leaves the labels to the
 	// edge of the grid.
 	ShowX, ShowY bool
+
+	// HideGrid suppresses this panel's grid lines while leaving its fill, its
+	// axes and its tick marks alone. A track — a band on the panel's own X,
+	// whose rows are lanes rather than a quantity — is what it is for: a grid
+	// line through a gantt strip is a rule drawn across a solid bar.
+	HideGrid bool
 }
 
 // Draw lowers c into b. It does not call Flush: the caller owns the backend's
@@ -194,15 +212,17 @@ func Draw(b ir.Backend, c Chart) error {
 	guides := chartGuides(c, panels, th, ir.Rect{})
 
 	lay := layout.Panels(layout.Grid{
-		Canvas: canvas,
-		Theme:  th,
-		Title:  c.Title,
-		XTitle: c.XTitle,
-		YTitle: c.YTitle,
-		Rows:   rows,
-		Cols:   cols,
-		Panels: measurePanels(panels, th),
-		Guides: layoutGuides(guides, th),
+		Canvas:     canvas,
+		Theme:      th,
+		Title:      c.Title,
+		XTitle:     c.XTitle,
+		YTitle:     c.YTitle,
+		Rows:       rows,
+		Cols:       cols,
+		Panels:     measurePanels(panels, th),
+		RowHeights: c.RowHeights,
+		ColWidths:  c.ColWidths,
+		Guides:     layoutGuides(guides, th),
 	}, b)
 
 	// 3. Paint. Furniture for every panel first, then the titles, then the
@@ -462,7 +482,7 @@ func drawStrip(b ir.Backend, box ir.Rect, th theme.Theme, label string, rotation
 
 func drawGrid(b ir.Backend, th theme.Theme, c Panel, fur *coord.Furniture, xTicks, yTicks []scale.Tick) {
 	stroke := ir.Stroke{Color: th.GridColor, Width: th.GridWidth, Dash: th.GridDash}
-	if !stroke.Visible() {
+	if c.HideGrid || !stroke.Visible() {
 		return
 	}
 	// Minor ticks get a tick mark but no grid line. A log axis emits eight of
