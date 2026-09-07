@@ -184,3 +184,29 @@ func TestALabelledRenderDoesNotAllocatePerPoint(t *testing.T) {
 			"the text path is allocating per row", large, small)
 	}
 }
+
+// A layout mark builds a structure sized by the data on every Train — a node
+// per name, a depth and a total per node — and none of it may be allocated per
+// frame. The interning map is the one to watch: it is cleared rather than
+// replaced, so its buckets survive, and a frame that made a new one would show
+// up here as a hundred thousand allocations rather than as anything visibly
+// wrong on screen.
+func TestARelationalRenderDoesNotAllocatePerPoint(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		plot func(int) *refract.Plot
+	}{
+		{"sankey", flowOf},
+		{"treemap", treeOf},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			small := allocsPerFrame(t, tc.plot(1_000))
+			large := allocsPerFrame(t, tc.plot(100_000))
+			const slack = 8
+			if large > small+slack {
+				t.Errorf("100k rows allocate %.0f times per frame against %.0f for 1k rows: "+
+					"something on the layout path is allocating per row", large, small)
+			}
+		})
+	}
+}

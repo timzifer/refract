@@ -137,6 +137,20 @@ END {
 	# thousand allocations rather than as anything visibly wrong on screen.
 	flat("BenchmarkLabelled1k", "BenchmarkLabelled10k", 8)
 
+	# The relational layouts, added in bucket E. Both build a structure sized by
+	# the data on every Train: a node per distinct name, a depth and a total per
+	# node, a layer assignment and a relaxation for the sankey, a squarify per
+	# sibling group for the treemap. None of it may be allocated per frame — the
+	# layer keeps those buffers, and the interning map is cleared rather than
+	# replaced so that its buckets survive too.
+	#
+	# What would break it is the thing that is easy to write: a map made per
+	# Train, or a slice of totals returned rather than appended into. Either
+	# shows up here as a hundred thousand allocations and nowhere else, because
+	# neither is visible in the picture.
+	flat("BenchmarkSankey1k", "BenchmarkSankey100k", 8)
+	flat("BenchmarkTreemap1k", "BenchmarkTreemap100k", 8)
+
 	# Row identity, added after v0.5. Tracking which source row is behind each
 	# mark is opt-in, and what it is opt-in *for* is memory per mark — not
 	# per-frame allocations. If that stops being true it is a buffer that

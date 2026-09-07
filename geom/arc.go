@@ -1,6 +1,8 @@
 package geom
 
 import (
+	"math"
+
 	"github.com/timzifer/refract/coord"
 	"github.com/timzifer/refract/data"
 	"github.com/timzifer/refract/ir"
@@ -135,6 +137,7 @@ func (g *arcGeom) ribbons(b ir.Backend, sc *scratch, cd coord.Coord, f Frame, in
 
 	x := func(v float64) float32 { return f.X.Map(v) }
 	y := func(v float64) float32 { return f.Y.Map(v) }
+	reach := g.reach(cd, x, y, inner, hub)
 
 	for e, r := range g.lay.Ribbons {
 		if !(r.Src.Hi > r.Src.Lo) {
@@ -148,7 +151,7 @@ func (g *arcGeom) ribbons(b ir.Backend, sc *scratch, cd coord.Coord, f Frame, in
 			continue
 		}
 		sc.fill.Reset()
-		chord(&sc.fill, cd, x, y, r, inner, hub)
+		chord(&sc.fill, cd, x, y, r, inner, hub, reach)
 		b.FillPath(&sc.fill, ir.Solid(col), ir.NonZero)
 
 		if sc.wantRows {
@@ -163,28 +166,86 @@ func (g *arcGeom) ribbons(b ir.Backend, sc *scratch, cd coord.Coord, f Frame, in
 // chord appends the closed ribbon between two spans of the rail: along one
 // span, across to the other, along that, and back.
 //
-// The two crossings are cubics whose control points sit at the hub — the far
-// side of the axis. Under a Cartesian coord that is the top of the plot, so the
-// ribbon rises off the rail in an arc; under a polar one every point at the hub
-// is the centre of the disc, so both controls collapse onto it and the ribbon
-// is the chord a reader expects. One path, two pictures, and the coord decides
-// which — which is the whole reason the layout is in the unit square.
-func chord(p *ir.Path, cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner, hub float64) {
-	start := ir.Point{X: x(r.Src.Lo), Y: y(inner)}
+// The two crossings are cubics whose control points are pulled from the rail
+// towards the hub — the far side of the axis. How far is what makes the shape
+// read: a crossing that reaches right across the plot arcs the whole way over,
+// and one between neighbours barely leaves the rail.
+//
+// The pull is one number for the whole ribbon rather than one per crossing, and
+// that is what keeps the ribbon a ribbon: two boundaries pulled by different
+// amounts converge, and a band that narrows to nothing halfway along says the
+// quantity did too.
+//
+// It is measured in device space, as the distance between the two spans'
+// middles, because that is the one measure that means the same thing under both
+// coords: under a Cartesian one it is a width against a height, and under a
+// polar one it is a chord against a diameter — so two nodes on opposite sides
+// of a disc pull all the way to the centre and two beside each other hug the
+// rim. One path, two pictures, and the coord decides which, which is the whole
+// reason the layout is in the unit square.
+func chord(p *ir.Path, cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner, hub, reach float64) {
+	at := func(v, h float64) ir.Point { return cd.Point(x(v), y(h)) }
+	pull := 1.0
+	if reach > 0 {
+		pull = min(1, separation(cd, x, y, r, inner)/reach)
+	}
+	across := func(from, to float64) {
+		a, b := at(from, inner), at(to, inner)
+		c1 := between(a, at(from, hub), pull)
+		c2 := between(b, at(to, hub), pull)
+		p.CubicTo(c1.X, c1.Y, c2.X, c2.Y, b.X, b.Y)
+	}
+
+	start := at(r.Src.Lo, inner)
 	p.MoveTo(start.X, start.Y)
-	edgeAlong(p, cd, x, y, r.Src.Lo, r.Src.Hi, inner)
-
-	c1 := cd.Point(x(r.Src.Hi), y(hub))
-	c2 := cd.Point(x(r.Dst.Lo), y(hub))
-	to := cd.Point(x(r.Dst.Lo), y(inner))
-	p.CubicTo(c1.X, c1.Y, c2.X, c2.Y, to.X, to.Y)
-
-	edgeAlong(p, cd, x, y, r.Dst.Lo, r.Dst.Hi, inner)
-
-	c1 = cd.Point(x(r.Dst.Hi), y(hub))
-	c2 = cd.Point(x(r.Src.Lo), y(hub))
-	p.CubicTo(c1.X, c1.Y, c2.X, c2.Y, start.X, start.Y)
+	edgeAlong(p, cd, at, r.Src.Lo, r.Src.Hi, inner)
+	across(r.Src.Hi, r.Dst.Lo)
+	edgeAlong(p, cd, at, r.Dst.Lo, r.Dst.Hi, inner)
+	across(r.Dst.Hi, r.Src.Lo)
 	p.Close()
+}
+
+// separation is how far apart a ribbon's two ends are on the rail, in device
+// units, measured between the middles of the two spans.
+func separation(cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner float64) float64 {
+	a := cd.Point(x((r.Src.Lo+r.Src.Hi)/2), y(inner))
+	b := cd.Point(x((r.Dst.Lo+r.Dst.Hi)/2), y(inner))
+	return float64(gap(a, b))
+}
+
+// reach is what a ribbon's separation is measured against: the furthest apart
+// any two of this layer's ends are, but never more than the width of the axis
+// itself.
+//
+// The first half is what makes an arc diagram use the room it is given — the
+// longest edge arcs the whole way over and every shorter one is a fraction of
+// that — and the second is what stops a very wide panel from flattening every
+// arc into a ripple. Under a polar coord the axis is the diameter, so two nodes
+// on opposite sides of the disc still pull all the way to the centre.
+func (g *arcGeom) reach(cd coord.Coord, x, y func(float64) float32, inner, hub float64) float64 {
+	widest := 0.0
+	for _, r := range g.lay.Ribbons {
+		if !(r.Src.Hi > r.Src.Lo) {
+			continue
+		}
+		widest = math.Max(widest, separation(cd, x, y, r, inner))
+	}
+	depth := float64(gap(cd.Point(x(0), y(inner)), cd.Point(x(0), y(hub))))
+	return math.Min(widest, 2*depth)
+}
+
+// gap is the distance between two device points.
+func gap(a, b ir.Point) float32 {
+	dx, dy := float64(b.X-a.X), float64(b.Y-a.Y)
+	return float32(math.Hypot(dx, dy))
+}
+
+// between is t of the way from a to b.
+func between(a, b ir.Point, t float64) ir.Point {
+	return ir.Point{
+		X: a.X + float32(t)*(b.X-a.X),
+		Y: a.Y + float32(t)*(b.Y-a.Y),
+	}
 }
 
 func (g *arcGeom) ColorGuide() (ColorGuide, bool) { return g.cfg.colorGuide(g.e.s, g.err) }

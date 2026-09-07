@@ -346,12 +346,17 @@ func arcSteps(span float64) int {
 
 // edgeAlong appends the path of a span of the layout at one height, split so
 // that a polar coord never has to guess which way round to go.
-func edgeAlong(p *ir.Path, cd coord.Coord, x, y func(float64) float32, lo, hi, at float64) {
+//
+// at maps a pair of layout coordinates to a device point, because that is what
+// [coord.Coord.Edge] takes: handing it the values the scales produced would ask
+// a polar coord to read an angle as an abscissa, and it would draw a shape
+// nobody could recognise.
+func edgeAlong(p *ir.Path, cd coord.Coord, at func(v, h float64) ir.Point, lo, hi, height float64) {
 	steps := arcSteps(hi - lo)
-	prev := ir.Point{X: x(lo), Y: y(at)}
+	prev := at(lo, height)
 	for k := 1; k <= steps; k++ {
 		t := lo + (hi-lo)*float64(k)/float64(steps)
-		next := ir.Point{X: x(t), Y: y(at)}
+		next := at(t, height)
 		cd.Edge(p, prev, next)
 		prev = next
 	}

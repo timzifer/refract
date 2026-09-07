@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Disk by directory</title>
+<defs>
+<clipPath id="c1"><path d="M12,32.8 L553.976,32.8 L553.976,388 L12,388 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,400 L0,400 Z" fill="#ffffff"/>
+<text x="282.988" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Disk by directory</text>
+<g clip-path="url(#c1)">
+<path d="M18.504,37.062 L337.754,37.062 L337.754,204.915 L18.504,204.915 Z" fill="#56b4e9"/>
+<path d="M18.504,207.757 L146.544,207.757 L146.544,383.738 L18.504,383.738 Z" fill="#e69f00"/>
+<path d="M150.88,207.757 L337.754,207.757 L337.754,383.738 L150.88,383.738 Z" fill="#cc79a7"/>
+<path d="M346.426,37.062 L470.454,37.062 L470.454,185.136 L346.426,185.136 Z" fill="#000000"/>
+<path d="M474.79,37.062 L547.472,37.062 L547.472,185.136 L474.79,185.136 Z" fill="#0072b2"/>
+<path d="M346.426,190.819 L474.595,190.819 L474.595,383.738 L346.426,383.738 Z" fill="#d55e00"/>
+<path d="M478.931,190.819 L547.472,190.819 L547.472,383.738 L478.931,383.738 Z" fill="#009e73"/>
+</g>
+<path d="M567.976,118.9 L579.976,118.9 L579.976,130.9 L567.976,130.9 Z" fill="#0072b2"/>
+<text x="585.976" y="124.9" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">/</text>
+<path d="M567.976,136 L579.976,136 L579.976,148 L567.976,148 Z" fill="#d55e00"/>
+<text x="585.976" y="142" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">src</text>
+<path d="M567.976,153.1 L579.976,153.1 L579.976,165.1 L567.976,165.1 Z" fill="#009e73"/>
+<text x="585.976" y="159.1" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">docs</text>
+<path d="M567.976,170.2 L579.976,170.2 L579.976,182.2 L567.976,182.2 Z" fill="#f0e442"/>
+<text x="585.976" y="176.2" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">test</text>
+<path d="M567.976,187.3 L579.976,187.3 L579.976,199.3 L567.976,199.3 Z" fill="#56b4e9"/>
+<text x="585.976" y="193.3" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">geom</text>
+<path d="M567.976,204.4 L579.976,204.4 L579.976,216.4 L567.976,216.4 Z" fill="#e69f00"/>
+<text x="585.976" y="210.4" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">scale</text>
+<path d="M567.976,221.5 L579.976,221.5 L579.976,233.5 L567.976,233.5 Z" fill="#cc79a7"/>
+<text x="585.976" y="227.5" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">coord</text>
+<path d="M567.976,238.6 L579.976,238.6 L579.976,250.6 L567.976,250.6 Z" fill="#000000"/>
+<text x="585.976" y="244.6" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">guide</text>
+<path d="M567.976,255.7 L579.976,255.7 L579.976,267.7 L567.976,267.7 Z" fill="#0072b2"/>
+<text x="585.976" y="261.7" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">adr</text>
+<path d="M567.976,272.8 L579.976,272.8 L579.976,284.8 L567.976,284.8 Z" fill="#d55e00"/>
+<text x="585.976" y="278.8" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">unit</text>
+<path d="M567.976,289.9 L579.976,289.9 L579.976,301.9 L567.976,301.9 Z" fill="#009e73"/>
+<text x="585.976" y="295.9" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">golden</text>
+</svg>

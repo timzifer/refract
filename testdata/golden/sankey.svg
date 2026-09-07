@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="380" viewBox="0 0 640 380" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Requests per second</title>
+<defs>
+<clipPath id="c1"><path d="M12,32.8 L553.988,32.8 L553.988,368 L12,368 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,380 L0,380 Z" fill="#ffffff"/>
+<text x="282.994" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Requests per second</text>
+<g clip-path="url(#c1)">
+<path d="M33.68,368 C152.917,368 152.917,368 272.154,368 L272.154,208.008 C152.917,208.008 152.917,208.008 33.68,208.008 L33.68,368 Z" fill="#0072b2" fill-opacity="0.45"/>
+<path d="M33.68,208.008 C152.917,208.008 152.917,110.215 272.154,110.215 L272.154,63.766 C152.917,63.766 152.917,161.559 33.68,161.559 L33.68,208.008 Z" fill="#0072b2" fill-opacity="0.45"/>
+<path d="M33.68,151.503 C152.917,151.503 152.917,208.008 272.154,208.008 L272.154,120.271 C152.917,120.271 152.917,63.766 33.68,63.766 L33.68,151.503 Z" fill="#f0e442" fill-opacity="0.45"/>
+<path d="M33.68,63.766 C152.917,63.766 152.917,63.766 272.154,63.766 L272.154,32.8 C152.917,32.8 152.917,32.8 33.68,32.8 L33.68,63.766 Z" fill="#f0e442" fill-opacity="0.45"/>
+<path d="M293.834,368 C413.071,368 413.071,308.648 532.308,308.648 L532.308,179.623 C413.071,179.623 413.071,238.975 293.834,238.975 L293.834,368 Z" fill="#d55e00" fill-opacity="0.45"/>
+<path d="M293.834,238.975 C413.071,238.975 413.071,169.567 532.308,169.567 L532.308,92.152 C413.071,92.152 413.071,161.559 293.834,161.559 L293.834,238.975 Z" fill="#d55e00" fill-opacity="0.45"/>
+<path d="M293.834,161.559 C413.071,161.559 413.071,82.096 532.308,82.096 L532.308,40.808 C413.071,40.808 413.071,120.271 293.834,120.271 L293.834,161.559 Z" fill="#d55e00" fill-opacity="0.45"/>
+<path d="M12,368 L33.68,368 L33.68,161.559 L12,161.559 Z" fill="#0072b2"/>
+<path d="M272.154,368 L293.834,368 L293.834,120.271 L272.154,120.271 Z" fill="#d55e00"/>
+<path d="M272.154,110.215 L293.834,110.215 L293.834,32.8 L272.154,32.8 Z" fill="#009e73"/>
+<path d="M12,151.503 L33.68,151.503 L33.68,32.8 L12,32.8 Z" fill="#f0e442"/>
+<path d="M532.308,308.648 L553.988,308.648 L553.988,179.623 L532.308,179.623 Z" fill="#56b4e9"/>
+<path d="M532.308,169.567 L553.988,169.567 L553.988,92.152 L532.308,92.152 Z" fill="#e69f00"/>
+<path d="M532.308,82.096 L553.988,82.096 L553.988,40.808 L532.308,40.808 Z" fill="#cc79a7"/>
+</g>
+<path d="M567.988,143.1 L579.988,143.1 L579.988,155.1 L567.988,155.1 Z" fill="#0072b2"/>
+<text x="585.988" y="149.1" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">web</text>
+<path d="M567.988,160.2 L579.988,160.2 L579.988,172.2 L567.988,172.2 Z" fill="#d55e00"/>
+<text x="585.988" y="166.2" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">api</text>
+<path d="M567.988,177.3 L579.988,177.3 L579.988,189.3 L567.988,189.3 Z" fill="#009e73"/>
+<text x="585.988" y="183.3" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">cdn</text>
+<path d="M567.988,194.4 L579.988,194.4 L579.988,206.4 L567.988,206.4 Z" fill="#f0e442"/>
+<text x="585.988" y="200.4" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">mobile</text>
+<path d="M567.988,211.5 L579.988,211.5 L579.988,223.5 L567.988,223.5 Z" fill="#56b4e9"/>
+<text x="585.988" y="217.5" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">cache</text>
+<path d="M567.988,228.6 L579.988,228.6 L579.988,240.6 L567.988,240.6 Z" fill="#e69f00"/>
+<text x="585.988" y="234.6" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">db</text>
+<path d="M567.988,245.7 L579.988,245.7 L579.988,257.7 L567.988,257.7 Z" fill="#cc79a7"/>
+<text x="585.988" y="251.7" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">search</text>
+</svg>

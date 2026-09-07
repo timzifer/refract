@@ -808,6 +808,69 @@ func figures() []figure {
 			},
 		},
 		{
+			// The last bucket of docs/chart-types.md, and the first of its two
+			// halves: a hierarchy packed into rectangles, each with an area
+			// proportional to its value. The packing runs against the panel
+			// rather than against the unit square, because a squarified treemap
+			// optimises a shape on screen — see ADR 0039.
+			name: "treemap", width: 700, high: 420, title: "Disk by directory",
+			theme: bareLayout(theme.Light),
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Treemap(diskUsage(),
+					geom.ID("path"), geom.Parent("under"), geom.Value("kb"),
+					geom.Padding(0.006),
+					geom.ColorBy("group", scale.Qualitative(palette.OkabeIto))))
+			},
+		},
+		{
+			// A sunburst is not a new mark either. It is the icicle the same
+			// layer draws under a Cartesian coord, wrapped round a circle — the
+			// hierarchy's span goes round and its depth goes out, so the root
+			// is at the middle and the leaves are at the rim.
+			name: "sunburst", width: 520, high: 440, title: "Disk by directory",
+			theme: bareLayout(theme.Light),
+			opts:  []refract.Option{refract.Coord(coord.Polar(coord.Hole(0.12)))},
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Icicle(diskUsage(),
+					geom.ID("path"), geom.Parent("under"), geom.Value("kb"),
+					geom.Padding(0.004)))
+			},
+		},
+		{
+			// The other half: an edge list as a flow. A node stands one column
+			// past the deepest source that reaches it, and a band is as thick
+			// as what it carries — the same thickness at both ends, which is
+			// the one quantity the picture asserts.
+			name: "sankey", width: 700, high: 400, title: "Requests per second",
+			theme: bareLayout(theme.Light),
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Sankey(requestFlow(),
+					geom.From("from"), geom.To("to"), geom.Value("rps"),
+					geom.Padding(0.03)))
+			},
+		},
+		{
+			// And the second recipe. This is an arc diagram with its rail moved
+			// to the rim: geom.Baseline is the whole difference, and the coord
+			// does the rest.
+			name: "chord", width: 520, high: 440, title: "Service traffic",
+			theme: bareLayout(theme.Light),
+			opts:  []refract.Option{refract.Coord(coord.Polar())},
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Arc(requestFlow(),
+					geom.From("from"), geom.To("to"), geom.Value("rps"),
+					geom.Baseline(1), geom.Padding(0.01)))
+			},
+		},
+		{
 			name: "subplots", width: 800, high: 480, theme: theme.Dark, title: "Fleet overview",
 			grid: func(g *refract.Grid) {
 				xs := ramp(0, 12, 120)
@@ -1189,4 +1252,55 @@ func bestMatch(re, im []float64) int {
 		}
 	}
 	return at
+}
+
+// bareLayout is the theme a mark that places its own layout wants, for the
+// reason a pie wants one: both its axes describe the unit square, and an axis
+// reading 0 … 1 beside a treemap is a ladder of numbers that mean nothing.
+func bareLayout(t theme.Theme) theme.Theme {
+	return t.With(
+		theme.Grid(false, false),
+		theme.AxisLines(false, false),
+		theme.Ticks(false, false),
+	)
+}
+
+// diskUsage is a small directory tree: one row per node, the node above it, and
+// the size of the leaves. The group column is the top-level directory each row
+// belongs to, so that a subtree is one colour rather than each file its own.
+func diskUsage() refract.Source {
+	return refract.NewTable().
+		String("path", []string{
+			"/", "src", "docs", "test",
+			"geom", "scale", "coord", "render",
+			"guide", "adr",
+			"unit", "golden",
+		}).
+		String("under", []string{
+			"", "/", "/", "/",
+			"src", "src", "src", "src",
+			"docs", "docs",
+			"test", "test",
+		}).
+		String("group", []string{
+			"", "src", "docs", "test",
+			"src", "src", "src", "src",
+			"docs", "docs",
+			"test", "test",
+		}).
+		Float64("kb", []float64{
+			0, 0, 0, 0,
+			420, 180, 260, 310,
+			150, 90,
+			200, 110,
+		})
+}
+
+// requestFlow is where a service's traffic goes: one row per edge, its two ends
+// and how many requests a second run along it.
+func requestFlow() refract.Source {
+	return refract.NewTable().
+		String("from", []string{"web", "web", "mobile", "mobile", "api", "api", "api"}).
+		String("to", []string{"api", "cdn", "api", "cdn", "cache", "db", "search"}).
+		Float64("rps", []float64{620, 180, 340, 120, 500, 300, 160})
 }

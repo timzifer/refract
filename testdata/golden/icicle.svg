@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="420" viewBox="0 0 420 420">
+<defs>
+<clipPath id="c1"><path d="M12,12 L333.976,12 L333.976,408 L12,408 Z"/></clipPath>
+</defs>
+<path d="M0,0 L420,0 L420,420 L0,420 Z" fill="#ffffff"/>
+<g clip-path="url(#c1)">
+<path d="M12.644,407.208 L333.332,407.208 L333.332,276.792 L12.644,276.792 Z M243.279,143.208 L262.543,143.208 L262.543,12.792 L243.279,12.792 Z" fill="#0072b2"/>
+<path d="M12.644,275.208 L207.739,275.208 L207.739,144.792 L12.644,144.792 Z M263.831,143.208 L308.213,143.208 L308.213,12.792 L263.831,12.792 Z" fill="#d55e00"/>
+<path d="M209.026,275.208 L262.543,275.208 L262.543,144.792 L209.026,144.792 Z M309.501,143.208 L333.332,143.208 L333.332,12.792 L309.501,12.792 Z" fill="#009e73"/>
+<path d="M263.831,275.208 L333.332,275.208 L333.332,144.792 L263.831,144.792 Z" fill="#f0e442"/>
+<path d="M12.644,143.208 L107.264,143.208 L107.264,12.792 L12.644,12.792 Z" fill="#56b4e9"/>
+<path d="M108.552,143.208 L148.367,143.208 L148.367,12.792 L108.552,12.792 Z" fill="#e69f00"/>
+<path d="M149.655,143.208 L207.739,143.208 L207.739,12.792 L149.655,12.792 Z" fill="#cc79a7"/>
+<path d="M209.026,143.208 L241.991,143.208 L241.991,12.792 L209.026,12.792 Z" fill="#000000"/>
+</g>
+<path d="M347.976,118.5 L359.976,118.5 L359.976,130.5 L347.976,130.5 Z" fill="#0072b2"/>
+<text x="365.976" y="124.5" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">/</text>
+<path d="M347.976,135.6 L359.976,135.6 L359.976,147.6 L347.976,147.6 Z" fill="#d55e00"/>
+<text x="365.976" y="141.6" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">src</text>
+<path d="M347.976,152.7 L359.976,152.7 L359.976,164.7 L347.976,164.7 Z" fill="#009e73"/>
+<text x="365.976" y="158.7" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">docs</text>
+<path d="M347.976,169.8 L359.976,169.8 L359.976,181.8 L347.976,181.8 Z" fill="#f0e442"/>
+<text x="365.976" y="175.8" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">test</text>
+<path d="M347.976,186.9 L359.976,186.9 L359.976,198.9 L347.976,198.9 Z" fill="#56b4e9"/>
+<text x="365.976" y="192.9" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">geom</text>
+<path d="M347.976,204 L359.976,204 L359.976,216 L347.976,216 Z" fill="#e69f00"/>
+<text x="365.976" y="210" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">scale</text>
+<path d="M347.976,221.1 L359.976,221.1 L359.976,233.1 L347.976,233.1 Z" fill="#cc79a7"/>
+<text x="365.976" y="227.1" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">coord</text>
+<path d="M347.976,238.2 L359.976,238.2 L359.976,250.2 L347.976,250.2 Z" fill="#000000"/>
+<text x="365.976" y="244.2" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">guide</text>
+<path d="M347.976,255.3 L359.976,255.3 L359.976,267.3 L347.976,267.3 Z" fill="#0072b2"/>
+<text x="365.976" y="261.3" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">adr</text>
+<path d="M347.976,272.4 L359.976,272.4 L359.976,284.4 L347.976,284.4 Z" fill="#d55e00"/>
+<text x="365.976" y="278.4" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">unit</text>
+<path d="M347.976,289.5 L359.976,289.5 L359.976,301.5 L347.976,301.5 Z" fill="#009e73"/>
+<text x="365.976" y="295.5" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">golden</text>
+</svg>
