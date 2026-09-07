@@ -453,6 +453,18 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		fill()
 		density()
 		m.Overlap = d.Overlap
+	// The relational layouts. Each writes the gap it leaves between its shapes;
+	// the two that place nodes also write how thick a node is, and the one
+	// whose picture depends on where its rail sits writes that.
+	case geom.MarkTreemap, geom.MarkIcicle:
+		fill()
+		m.Padding = d.Padding
+	case geom.MarkSankey:
+		fill()
+		m.Padding, m.Thickness = d.Padding, d.Thickness
+	case geom.MarkArc:
+		fill()
+		m.Padding, m.Thickness, m.Origin = d.Padding, d.Thickness, d.Baseline
 	case geom.MarkHexbin:
 		fill()
 		m.DensityCells = d.CellSize
@@ -572,6 +584,21 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.ErrorXCol != "" {
 			enc.ErrorX = &Channel{Field: d.ErrorXCol}
+		}
+		if d.From != "" {
+			enc.From = &Channel{Field: d.From, Type: "nominal"}
+		}
+		if d.To != "" {
+			enc.To = &Channel{Field: d.To, Type: "nominal"}
+		}
+		if d.ID != "" {
+			enc.ID = &Channel{Field: d.ID, Type: "nominal"}
+		}
+		if d.ParentCol != "" {
+			enc.Parent = &Channel{Field: d.ParentCol, Type: "nominal"}
+		}
+		if d.ValueCol != "" {
+			enc.Value = &Channel{Field: d.ValueCol, Type: "quantitative"}
 		}
 		if d.SizeCol != "" && d.SizeScale != nil {
 			ss, err := encodeSizeScale(d.SizeScale)

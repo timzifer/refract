@@ -430,8 +430,11 @@ func TestALayerThatCannotDescribeItselfIsAnError(t *testing.T) {
 }
 
 func TestAnUnknownMarkIsAnError(t *testing.T) {
-	// "violin" used to be the example here, until v0.9 made it a mark.
-	s := spec.Spec{Layer: []spec.Layer{{Mark: spec.Mark{Type: "sunburst"}}}}
+	// "violin" used to be the example here, until v0.9 made it a mark, and
+	// "sunburst" until the relational layouts arrived — a sunburst is an
+	// icicle under a polar coord, so naming it here read as a contradiction of
+	// its own documentation.
+	s := spec.Spec{Layer: []spec.Layer{{Mark: spec.Mark{Type: "venn"}}}}
 	if _, err := s.Chart(); err == nil {
 		t.Fatal("an unknown mark was accepted")
 	}
