@@ -12,12 +12,14 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: release candidate for v1.0.** Every milestone through **v0.9**,
-> "distributions, density and size", has shipped, and the
-> [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change before the
-> freeze has changed. The API freezes at the `v1.0.0` tag; until then a release
-> may still contain a breaking change without a deprecation cycle. See
-> [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
+> **Status: v1.0.0, released.** Every milestone through **v1.0** has shipped,
+> and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
+> before the freeze has changed. The API is frozen at the `v1.0.0` tag and
+> follows semver from here, so a breaking change means a major version and a
+> deprecation cycle precedes it. The nested modules are tagged alongside:
+> `backend/gg` and `backend/window` at `v1.0.0`, the opt-in GPU tier at
+> `v0.1.0`, and the Arrow adapter at `arrow/v18.0.0`, whose major is Arrow's.
+> See [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
@@ -937,6 +939,16 @@ of every mark and a window shows what a file would
   reference, generated from the doc comments.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — building a five-module repository, how
   to regenerate golden files and figures, and how a release is tagged.
+
+## A note on how this was built
+
+Much of refract was written with an AI assistant — Claude, in Claude Code — in
+the loop, under human direction and review. The design decisions and the
+arguments in the ADRs are the ones a human signed off on; a good deal of the
+typing was not. What makes that workable is the same thing the rest of this
+README describes: every claim here is held up by a golden file, a test or a
+benchmark that CI runs on every commit, so the code is checked against the
+behaviour rather than against a plausible-sounding explanation of it.
 
 ## License
 

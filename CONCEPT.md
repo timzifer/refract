@@ -962,7 +962,7 @@ answer, with better hit-testing as a bonus. And **`stat` still does no sorting**
 `Quantile`, `ECDF` and `Loess` take ordered columns, because sorting means a
 buffer and the geom already keeps one.
 
-### v1.0 — Stable & complete enough
+### v1.0 — Stable & complete enough — **shipped**
 
 - API freeze; semver. The audit that precedes it is
   [docs/v1-api-audit.md](docs/v1-api-audit.md): every exported identifier with
@@ -981,8 +981,11 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- What remains is the tag. The order — the core first, then the nested
-  modules' `require` lines, then their own tags — is in
+- Tagged. The core is `v1.0.0`; `backend/gg` and `backend/window` share it,
+  the opt-in GPU tier is `backend/gg/gpu/v0.1.0`, and the Arrow adapter is
+  `arrow/v18.0.0`. The milestones before it were tagged at the same time, so
+  every one of them names a commit. The order — the core first, then the
+  nested modules' `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
 ### Beyond v1.0

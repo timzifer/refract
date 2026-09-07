@@ -370,6 +370,16 @@ to exist before a `require` line can name it.
    get. Run `go mod tidy` in each and commit. `go.work` overrides these during
    development, so the change is invisible locally; it is what a downstream
    `go get` resolves.
+
+   This step is two commits, not one, because `go mod tidy` resolves for real:
+   it fetches the version the `require` line names, and a tag that does not
+   exist yet is a `404` from the module proxy. So `backend/gg` and `arrow/v18`
+   — which require only the core — are bumped, tidied, committed and **pushed**
+   first, and `backend/gg`'s own tag from step 3 goes on that commit. Only then
+   can `backend/gg/gpu` and `backend/window` be tidied at all. Both halves need
+   the tag *and the commit it points at* to be reachable from a pushed branch:
+   the proxy caches a negative lookup for a few minutes, so a tag pushed ahead
+   of its commit costs a wait rather than an error you can retry away.
 3. **The nested modules.** Tag each with its directory as the prefix:
    `backend/gg/vX.Y.Z`, `backend/window/vX.Y.Z`, `backend/gg/gpu/v0.N.0` and
    `arrow/v18.N.M`. The first two share the core's version — they are the
