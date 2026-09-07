@@ -256,10 +256,16 @@ The dependency order is not a preference:
 8. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
 
-9. **The rest of G** — the gaps that are not chart types at all. They are
-   listed above because sorting by machinery is what makes a schedule, and
-   these have none: each is small, independent, and blocks a whole class of
-   charts from being *usable* rather than from being drawn.
+9. ~~**Bucket G**~~ — shipped: the gaps that are not chart types at all. They
+   are listed above because sorting by machinery is what makes a schedule and
+   these have none — each is small, independent, and was blocking a whole
+   class of charts from being *usable* rather than from being drawn. What is
+   left of the bucket is an **overlay layer the chart itself owns** — a
+   tooltip, a crosshair, a brush rectangle — which `interact` cannot draw
+   because it only reads, and which linked brushing across panels needs before
+   anything else; and a **de-overlap pass for labels**, which
+   [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a layout question rather
+   than a mark's.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this
 catalogue that benefits from none of the plumbing above: its own data shape, its

@@ -22,6 +22,12 @@ everywhere — built on the GoGPU stack.**
 > tagged alongside: `backend/gg` and `backend/window` at `v1.1.0`, the opt-in
 > GPU tier at `v0.1.3`, and the Arrow adapter at `arrow/v18.0.1`, whose major
 > is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the road ahead.
+>
+> **On `main` since:** the six gaps that were not chart types — a null that is
+> a missing value in a text or temporal column, a tick format and a language a
+> *document* can choose, an interval mark, a second vertical axis, and a PDF
+> that carries the font its labels need. All additive; see
+> [CONCEPT §14](CONCEPT.md#14-roadmap--milestones).
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
