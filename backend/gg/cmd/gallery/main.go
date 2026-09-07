@@ -856,6 +856,21 @@ func figures() []figure {
 			},
 		},
 		{
+			// The Cartesian half of the pair below, and the figure that would
+			// have shown the ribbons closing to nothing over their apexes if it
+			// had existed when they did. Each band is as thick as the traffic
+			// it carries and arcs as high as it reaches.
+			name: "arc", width: 620, high: 400, title: "Service traffic",
+			theme: bareLayout(theme.Light),
+			build: func(p *refract.Plot) {
+				p.X(scale.Linear())
+				p.Y(scale.Linear())
+				p.Add(geom.Arc(requestFlow(),
+					geom.From("from"), geom.To("to"), geom.Value("rps"),
+					geom.Padding(0.01)))
+			},
+		},
+		{
 			// And the second recipe. This is an arc diagram with its rail moved
 			// to the rim: geom.Baseline is the whole difference, and the coord
 			// does the rest.

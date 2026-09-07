@@ -158,7 +158,8 @@ picture here cannot drift away from the code that produced it.
 | ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
 | ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) |
 | ![Disk usage by directory as a treemap, one rectangle per file sized by its share](docs/images/treemap.png) | ![The same directory tree as a sunburst, the root at the middle and the files at the rim](docs/images/sunburst.png) |
-| ![Requests per second through a service, drawn as a sankey diagram](docs/images/sankey.png) | ![The same traffic as a chord diagram, each service an arc and each route a ribbon](docs/images/chord.png) |
+| ![Requests per second through a service, drawn as a sankey diagram](docs/images/sankey.png) | ![The same traffic as an arc diagram, each service a segment of the rail and each route a band arcing over it](docs/images/arc.png) |
+| ![The same traffic again as a chord diagram, each service an arc and each route a ribbon crossing the disc](docs/images/chord.png) | |
 
 ## What it does
 
@@ -542,9 +543,18 @@ p.Add(geom.Sankey(src, geom.From("from"), geom.To("to"), geom.Value("rps")))
 ![Requests per second through a service, as a sankey diagram](docs/images/sankey.png)
 
 And the same trick again: `geom.Arc` puts the nodes on a rail with the ribbons
-rising off it, which is an arc diagram. Move the rail to the rim and wrap it
-round a circle, and the ribbons cross the middle — a **chord diagram**, from the
-same layer with one option and one coord different.
+rising off it, which is an arc diagram. Each band is as thick as what it
+carries and arcs as high as it reaches, so the height reads as distance:
+
+```go
+p.Add(geom.Arc(src, geom.From("from"), geom.To("to"), geom.Value("rps")))
+```
+
+![The same traffic as an arc diagram](docs/images/arc.png)
+
+Move the rail to the rim and wrap it round a circle, and the ribbons cross the
+middle — a **chord diagram**, from the same layer with one option and one coord
+different.
 
 ```go
 p := refract.New(refract.Size(520, 460), refract.Theme(bare),

@@ -522,3 +522,65 @@ func TestARelationalLayerRedrawnTwiceDrawsTheSameThing(t *testing.T) {
 		}
 	}
 }
+
+// A ribbon is a band, and a band has thickness all the way over its apex.
+//
+// This is the test for the mistake that is easy to make here and invisible in
+// every count-the-shapes test above: a cubic whose two control points sit at
+// the same height peaks at the same height whatever its width, so two
+// boundaries pulled towards the hub by one number peak together and the ribbon
+// closes to nothing at the top. It draws as an outline rather than a band, and
+// nothing about the IR says so — the shape is still there, still one subpath,
+// still filled.
+func TestAnArcsRibbonHasThicknessAtItsApex(t *testing.T) {
+	src := data.NewTable().
+		String("from", []string{"a"}).
+		String("to", []string{"b"}).
+		Float64("v", []float64{1})
+	g := geom.Arc(src, geom.From("from"), geom.To("to"), geom.Value("v"))
+	rec, f := relFrame(t, g, nil, 400, 300)
+	if err := g.Build(rec, f); err != nil {
+		t.Fatal(err)
+	}
+
+	// The ribbon is the shape with curves in it; the two rails are rectangles.
+	var ribbon *ir.Path
+	for _, c := range rec.Filter("FillPath") {
+		if curves([]irtest.Call{c}) > 0 {
+			ribbon = c.Path
+			break
+		}
+	}
+	if ribbon == nil {
+		t.Fatal("no curved shape was drawn; a ribbon is a pair of cubics")
+	}
+
+	tops := apexes(ribbon)
+	if len(tops) != 2 {
+		t.Fatalf("the ribbon has %d crossings, want two", len(tops))
+	}
+	// Y is flipped under Cartesian, so higher on screen is a smaller number.
+	thickness := math.Abs(float64(tops[0] - tops[1]))
+	if thickness < 4 {
+		t.Errorf("the ribbon's two boundaries peak %.2f apart in a 300-unit panel: "+
+			"the band closes to nothing over its apex", thickness)
+	}
+}
+
+// apexes is the y of the midpoint of each cubic in a path, which for a
+// boundary pulled symmetrically towards the hub is where it peaks. A cubic's
+// midpoint is (P0 + 3·P1 + 3·P2 + P3) / 8.
+func apexes(p *ir.Path) []float32 {
+	var out []float32
+	var at ir.Point
+	p.Walk(func(op ir.PathOp, pts []ir.Point) {
+		switch op {
+		case ir.OpMoveTo, ir.OpLineTo:
+			at = pts[len(pts)-1]
+		case ir.OpCubicTo:
+			out = append(out, (at.Y+3*pts[0].Y+3*pts[1].Y+pts[2].Y)/8)
+			at = pts[2]
+		}
+	})
+	return out
+}

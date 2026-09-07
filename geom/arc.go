@@ -171,26 +171,30 @@ func (g *arcGeom) ribbons(b ir.Backend, sc *scratch, cd coord.Coord, f Frame, in
 // read: a crossing that reaches right across the plot arcs the whole way over,
 // and one between neighbours barely leaves the rail.
 //
-// The pull is one number for the whole ribbon rather than one per crossing, and
-// that is what keeps the ribbon a ribbon: two boundaries pulled by different
-// amounts converge, and a band that narrows to nothing halfway along says the
-// quantity did too.
+// Each crossing is pulled by its own reach rather than by the ribbon's, and
+// that is what keeps the band a band. A cubic whose two control points sit at
+// the same height peaks at the same height whatever its width, so two
+// boundaries pulled by one number peak together and the ribbon closes to
+// nothing at its apex. The outer boundary is wider than the inner one by
+// exactly the two spans it joins, so pulling each by its own reach lifts it
+// further — by about the width of the band, which is the thickness the band
+// keeps over the top.
 //
-// It is measured in device space, as the distance between the two spans'
-// middles, because that is the one measure that means the same thing under both
-// coords: under a Cartesian one it is a width against a height, and under a
-// polar one it is a chord against a diameter — so two nodes on opposite sides
-// of a disc pull all the way to the centre and two beside each other hug the
-// rim. One path, two pictures, and the coord decides which, which is the whole
-// reason the layout is in the unit square.
+// Under a polar coord the two come out nearly equal again, and not by
+// accident: a crossing of s of the circle and one of 1 − s subtend the same
+// chord, because 2R·sin(πs) = 2R·sin(π(1−s)). So a ribbon between two arcs is
+// still symmetric about the diameter between them, which is what a chord
+// diagram has to be, while an arc diagram gets the asymmetry it needs. One
+// path, two pictures, and the coord decides which — which is the whole reason
+// the layout is in the unit square.
 func chord(p *ir.Path, cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner, hub, reach float64) {
 	at := func(v, h float64) ir.Point { return cd.Point(x(v), y(h)) }
-	pull := 1.0
-	if reach > 0 {
-		pull = min(1, separation(cd, x, y, r, inner)/reach)
-	}
 	across := func(from, to float64) {
 		a, b := at(from, inner), at(to, inner)
+		pull := 1.0
+		if reach > 0 {
+			pull = min(1, float64(gap(a, b))/reach)
+		}
 		c1 := between(a, at(from, hub), pull)
 		c2 := between(b, at(to, hub), pull)
 		p.CubicTo(c1.X, c1.Y, c2.X, c2.Y, b.X, b.Y)
@@ -205,16 +209,8 @@ func chord(p *ir.Path, cd coord.Coord, x, y func(float64) float32, r stat.Ribbon
 	p.Close()
 }
 
-// separation is how far apart a ribbon's two ends are on the rail, in device
-// units, measured between the middles of the two spans.
-func separation(cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner float64) float64 {
-	a := cd.Point(x((r.Src.Lo+r.Src.Hi)/2), y(inner))
-	b := cd.Point(x((r.Dst.Lo+r.Dst.Hi)/2), y(inner))
-	return float64(gap(a, b))
-}
-
-// reach is what a ribbon's separation is measured against: the furthest apart
-// any two of this layer's ends are, but never more than the width of the axis
+// reach is what a crossing's span is measured against: the furthest apart any
+// two of this layer's ends are, but never more than the width of the axis
 // itself.
 //
 // The first half is what makes an arc diagram use the room it is given — the
@@ -223,14 +219,16 @@ func separation(cd coord.Coord, x, y func(float64) float32, r stat.Ribbon, inner
 // arc into a ripple. Under a polar coord the axis is the diameter, so two nodes
 // on opposite sides of the disc still pull all the way to the centre.
 func (g *arcGeom) reach(cd coord.Coord, x, y func(float64) float32, inner, hub float64) float64 {
+	at := func(v, h float64) ir.Point { return cd.Point(x(v), y(h)) }
 	widest := 0.0
 	for _, r := range g.lay.Ribbons {
 		if !(r.Src.Hi > r.Src.Lo) {
 			continue
 		}
-		widest = math.Max(widest, separation(cd, x, y, r, inner))
+		widest = math.Max(widest, float64(gap(at(r.Src.Hi, inner), at(r.Dst.Lo, inner))))
+		widest = math.Max(widest, float64(gap(at(r.Dst.Hi, inner), at(r.Src.Lo, inner))))
 	}
-	depth := float64(gap(cd.Point(x(0), y(inner)), cd.Point(x(0), y(hub))))
+	depth := float64(gap(at(0, inner), at(0, hub)))
 	return math.Min(widest, 2*depth)
 }
 
