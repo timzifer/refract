@@ -687,6 +687,85 @@ func figures() []figure {
 			},
 		},
 		{
+			name: "errorbars", width: 700, high: 400, theme: theme.Light,
+			title: "Mean latency, with its 95 % interval",
+			build: func(p *refract.Plot) {
+				src := refract.NewTable().
+					String("service", []string{"auth", "search", "cart", "checkout", "media"}).
+					Float64("mean", []float64{42, 118, 63, 91, 210}).
+					Float64("ci", []float64{6, 22, 9, 14, 38})
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("# ms")))
+				// The bars are faded and the intervals are not, because the
+				// interval is the reading this figure is about and a solid
+				// bar behind it hides the marker at the mean.
+				ink := palette.OkabeIto.At(0)
+				p.Add(
+					geom.Bar(src, geom.X("service"), geom.Y("mean"),
+						geom.Fill(palette.Lerp(ir.RGB(255, 255, 255), ink, 0.3)),
+						geom.Label("mean")),
+					geom.ErrorBar(src, geom.X("service"), geom.Y("mean"), geom.ErrorBy("ci"),
+						geom.Color(ink), geom.Width(1.5)),
+				)
+			},
+		},
+		{
+			name: "twoaxes", width: 760, high: 420, theme: theme.Light,
+			title: "Revenue and margin",
+			opts:  []refract.Option{refract.YTitle("revenue (k€)"), refract.Y2Title("margin")},
+			build: func(p *refract.Plot) {
+				src := refract.NewTable().
+					String("month", []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"}).
+					Float64("revenue", []float64{820, 910, 870, 1040, 1180, 1120}).
+					Float64("margin", []float64{0.11, 0.13, 0.09, 0.15, 0.18, 0.16})
+				p.X(scale.Ordinal())
+				p.Y(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("#,")))
+				p.Y2(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("#.0%")))
+				p.Add(
+					geom.Bar(src, geom.X("month"), geom.Y("revenue"),
+						geom.Color(palette.OkabeIto.At(0)), geom.Label("revenue")),
+					geom.Line(src, geom.X("month"), geom.Y("margin"), geom.OnY2(),
+						geom.Color(palette.OkabeIto.At(1)), geom.Width(2), geom.Label("margin")),
+				)
+			},
+		},
+		{
+			name: "twoextents", width: 720, high: 400, theme: theme.Light,
+			title: "Oven temperature through a run",
+			opts: []refract.Option{
+				refract.XTitle("elapsed (min)"),
+				refract.X2Title("cycle"),
+				// The fill and the line are one reading in two layers, so the
+				// legend would name it twice and explain nothing.
+				refract.Legend(false),
+			},
+			build: func(p *refract.Plot) {
+				// One reading with two rulers under it, which is the common
+				// shape of this chart: the operator thinks in cycles and the
+				// process engineer in minutes, and neither should have to
+				// divide in their head.
+				mins := ramp(0, 120, 240)
+				temp := apply(mins, func(t float64) float64 {
+					return 20 + 160*(1-math.Exp(-t/18)) - 12*math.Sin(t/4)
+				})
+				src := refract.Float64Columns(map[string][]float64{"t": mins, "c": temp})
+
+				p.X(scale.Linear(scale.Domain(0, 120)))
+				// The top axis carries no layer of its own: it is the same
+				// extent counted differently, one cycle every five minutes, so
+				// its domain is pinned rather than trained. An axis nobody
+				// draws on is still a statement about the chart.
+				p.X2(scale.Linear(scale.Domain(0, 24)))
+				p.Y(scale.Linear(scale.Nice(), scale.Zero(), scale.NumberFormat("# °C")))
+				p.Add(
+					geom.Area(src, geom.X("t"), geom.Y("c"),
+						geom.Fill(palette.Lerp(ir.RGB(255, 255, 255), palette.OkabeIto.At(1), 0.3))),
+					geom.Line(src, geom.X("t"), geom.Y("c"),
+						geom.Color(palette.OkabeIto.At(1)), geom.Width(1.5)),
+				)
+			},
+		},
+		{
 			// The third coordinate system, and still not a new mark. A Smith
 			// chart is a geom.Line over two columns holding a normalised
 			// impedance, in a coord that maps the pair through Γ = (z−1)/(z+1)

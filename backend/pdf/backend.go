@@ -31,6 +31,12 @@ type backend struct {
 
 	faces map[faceKey]fontmetrics.Face
 
+	// embeds holds the faces this document carries its own copy of, keyed by
+	// the face they stand for. It is empty for a document using the base-14
+	// Helvetica, which is every document that did not ask for a font.
+	embeds map[embedKey]*embedded
+	order  []*embedded
+
 	desc ir.Description
 
 	rootRef int
@@ -53,6 +59,14 @@ type faceKey struct {
 	italic bool
 }
 
+// embedKey is a face rather than a face at a size: an embedded font is one
+// program however many sizes it is drawn at, which is the whole reason the
+// scaling happens in the text matrix.
+type embedKey struct {
+	weight int
+	italic bool
+}
+
 func newBackend(w, h int, o options) *backend {
 	return &backend{
 		opts:    o,
@@ -62,6 +76,7 @@ func newBackend(w, h int, o options) *backend {
 		gstates: map[string]string{},
 		res:     map[string][]resource{},
 		faces:   map[faceKey]fontmetrics.Face{},
+		embeds:  map[embedKey]*embedded{},
 	}
 }
 
@@ -371,10 +386,15 @@ func (b *backend) Text(run ir.TextRun) {
 	if size <= 0 {
 		size = 12
 	}
-	name := b.font(baseFont(run.Font.Weight, run.Font.Italic))
+	emb := b.embedded(run.Font)
+	name := ""
+	if emb != nil {
+		name = emb.name
+	} else {
+		name = b.font(baseFont(run.Font.Weight, run.Font.Italic))
+	}
 
-	f := b.face(run.Font)
-	dx, dy := textOffset(run, f)
+	dx, dy := textOffset(run, b.face(run.Font))
 
 	// The text matrix carries the anchor and undoes the page's Y flip for the
 	// glyphs, so they read upright while every other coordinate stays in
@@ -395,7 +415,20 @@ func (b *backend) Text(run ir.TextRun) {
 		nums(&b.content, dx, dy)
 		b.content.WriteString(" Td\n")
 	}
-	writeString(&b.content, run.Text)
+	if emb != nil {
+		// An Identity-H font is addressed by glyph id, so the string is two
+		// bytes per glyph and is written as hex — the one encoding that can
+		// carry a zero byte without escaping, which half of them have.
+		b.content.WriteByte('<')
+		for _, c := range emb.encode(run.Text) {
+			const hex = "0123456789ABCDEF"
+			b.content.WriteByte(hex[c>>4])
+			b.content.WriteByte(hex[c&0xF])
+		}
+		b.content.WriteByte('>')
+	} else {
+		writeString(&b.content, run.Text)
+	}
 	b.content.WriteString(" Tj\n")
 	b.op("ET")
 	b.op("Q")
@@ -585,6 +618,34 @@ func (b *backend) Measure(run ir.TextRun) ir.TextMetrics {
 	}
 }
 
+// embedded is the face this document carries for a font reference, or nil when
+// it carries none — which is every document that did not ask for one.
+//
+// The resource is created on first use and its object number is reserved
+// rather than written: the font program is a subset of the glyphs the whole
+// document draws, and that set is not known until the last label has been
+// laid down.
+func (b *backend) embedded(f ir.FontRef) *embedded {
+	if b.opts.fonts == nil {
+		return nil
+	}
+	k := embedKey{weight: f.Weight, italic: f.Italic}
+	if got, ok := b.embeds[k]; ok {
+		return got
+	}
+	face := b.opts.fonts.face(f.Weight, f.Italic)
+	if face == nil {
+		return nil
+	}
+	obj := b.doc.reserve()
+	name := "E" + strconv.Itoa(obj)
+	e := newEmbedded(face, name, obj, subsetTag(len(b.order)))
+	b.embeds[k] = e
+	b.order = append(b.order, e)
+	b.intern("Font", name, obj)
+	return e
+}
+
 func (b *backend) face(f ir.FontRef) fontmetrics.Face {
 	size := f.Size
 	if size <= 0 {
@@ -594,8 +655,18 @@ func (b *backend) face(f ir.FontRef) fontmetrics.Face {
 	if got, ok := b.faces[k]; ok {
 		return got
 	}
-	face := fontmetrics.Builtin(size, f.Weight, f.Italic)
-	b.faces[k] = face
+	// An embedded face measures with its own tables, which is what makes a
+	// margin the width the label turns out to have rather than the width
+	// Helvetica would have been. The base-14 path is unchanged: that one is
+	// already exact, because Helvetica's metric table *is* the font it draws
+	// with.
+	var face fontmetrics.Face
+	if e := b.embedded(f); e != nil {
+		face = embeddedFace{e: e, size: size}
+		b.faces[k] = face
+		return face
+	}
+	face = fontmetrics.Builtin(size, f.Weight, f.Italic)
 	return face
 }
 
@@ -616,6 +687,15 @@ func (b *backend) Flush() error {
 	}
 	if b.depth != 0 {
 		return fmt.Errorf("refract/backend/pdf: %d unclosed graphics state(s) at Flush", b.depth)
+	}
+
+	// The embedded fonts are written first, because their glyph lists are
+	// complete only now: a subset holds what the whole document drew, and the
+	// last label was laid down a moment ago.
+	for _, e := range b.order {
+		if err := e.write(&b.doc, b.opts.compress); err != nil {
+			return err
+		}
 	}
 
 	pages := b.doc.reserve()

@@ -181,3 +181,34 @@ func (d *domainRange) rangeOf() (float32, float32) {
 	}
 	return d.rlo, d.rhi
 }
+
+// Labeller is implemented by a scale that can write any value the way it
+// writes its tick labels. It is an optional interface, for the reason
+// [Zoomer] is: [Scale] is implemented outside this package and never gains a
+// method.
+//
+// It exists because a tick label is not the only place a chart writes a
+// number. A tooltip, a data table beside the plot and an accessible
+// description all write the same values, and a chart whose axis says
+// "1.234,5 €" while its tooltip says "1234.5" is a chart that has been
+// localised in one place.
+type Labeller interface {
+	// LabelOf writes v the way this scale would label a tick at v: its
+	// format, its locale, and the precision its current tick sequence uses.
+	LabelOf(v float64) string
+}
+
+// LabelOf writes v the way s labels its ticks, falling back to the label of a
+// tick at exactly v for a scale that is not a [Labeller], and to the empty
+// string when there is none.
+func LabelOf(s Scale, v float64) string {
+	if l, ok := s.(Labeller); ok {
+		return l.LabelOf(v)
+	}
+	for _, t := range s.Ticks(defaultTickCount) {
+		if t.Value == v {
+			return t.Label
+		}
+	}
+	return ""
+}

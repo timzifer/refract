@@ -169,10 +169,28 @@ labels and nothing else. `gg/recording` therefore stays out of `backend/gg`,
 and [ADR 0006](docs/adr/0006-gg-coupling-surface.md)'s import rule is unchanged.
 See [ADR 0009](docs/adr/0009-pdf-backend.md) for the evidence.
 
-**The PDF backend measures with the font it draws with.** `internal/fontmetrics`
-carries Helvetica's advance table, and PDF's base-14 Helvetica is that font.
-Every other backend approximates; this one does not. Do not "improve" it by
-measuring with something else.
+**The PDF backend measures with the font it draws with, whichever font that
+is.** `internal/fontmetrics` carries Helvetica's advance table and PDF's
+base-14 Helvetica is that font; an *embedded* face measures through
+`embeddedFace`, out of its own `hmtx` and `hhea`
+([ADR 0038](docs/adr/0038-embedded-fonts.md)). Every other backend
+approximates; this one does not, and the promise has to survive the font
+changing — measuring against Helvetica and drawing in Noto Sans sizes every
+margin from a typeface the document does not contain. Do not "improve" either
+half by measuring with something else.
+
+**An embedded font's glyphs are numbered on first use, and that is what makes
+writing a PDF one pass.** A content stream names glyphs by id and a subset's
+ids depend on what the whole document drew, so a writer that waited would have
+to buffer every text run in the file. Numbering on first use inverts it, and
+`sfnt.Font.Subset` honours the order it is given — which is also the only order
+that is a pure function of the drawing, per ADR 0012. Two things there are
+load-bearing. A composite glyph's component ids are references into the same
+font and are **rewritten** to the new numbering; copying one unrewritten draws
+a plausible wrong letter, which is the worst kind of wrong. And the subset tag
+comes from the face's index rather than from a hash of the glyphs, because a
+hash would make the file depend on which labels the chart happened to draw and
+the golden tests compare bytes.
 
 **Colour ramps interpolate in linear light.** `palette.Lerp` decodes sRGB,
 blends, and re-encodes. Averaging the encoded bytes instead is about 20% too
@@ -320,6 +338,91 @@ returns the pinned domain before nicing or zero-forcing get a chance. An axis
 that snapped to round numbers after every wheel notch would not follow the
 pointer, and on a log axis nicing rounds the view out to whole decades. `fixed`
 alone stops *training*; `pinned` also stops *framing*.
+
+**A second axis is a scale on the chart and a binding on the layer, and five
+places had to learn it.** `render.Panel.axesOf` asks the layer through
+`geom.Describe` — not a method on `Geom`, which never gains one — so the chart
+and the document agree by construction
+([ADR 0037](docs/adr/0037-secondary-axis.md)). The two directions are
+independent: a layer may name `OnX2` and `OnY2` together. Four consequences are
+load-bearing. `Panel.setRange` frames the coord against the **secondary** pair as
+well as the primary one, or the layers on a second axis map through a scale
+with no device range. `coord.Opposite` is an optional interface and `Polar` deliberately does
+not implement it — a ring has no far side — so a chart that names a second axis
+under a polar coord simply does not draw one. The second axis draws **no grid
+lines**, and there is a test comparing the count against a one-axis chart:
+two ladders of rules at different values are a moiré, and which scale a line
+belongs to is unanswerable by looking. And `render.LayerAxes` is what makes a
+hit report the right number — an index that inverted every mark through the
+panel's own scales would name 4200 on a chart whose right axis reads 12 %,
+which is wrong by a *unit* on the feature whose whole purpose is that the units
+differ. The layout's right and top gutters are zero for a column or row with no
+second axis, which is what leaves every golden file unchanged; the guide column
+is anchored past the right one, because the width was already reserved and an
+anchor on the panel edge puts a legend on top of the labels. A facet's strip
+sits **outside** the top gutter: a strip between a panel and its own tick
+labels reads as though it named the axis.
+
+Steering has to move both. `Live.Wheel`, `ZoomTo`, `PanBy` and `Autoscale` all
+reach `Panel.Y2` as well as `Panel.Y`, or the two series slide apart under the
+reader's hand — a chart with two axes is one chart, so a zoom is one zoom.
+`interact.Panel` learns about the second axis from `LayerY` rather than from
+`Observer.Panel`, which carries the two scales a panel has always had and never
+gains a third.
+
+**An error bar's orientation is its encoding, and its bounds are derived in
+`Train`.** `Y2`/`ErrorBy` runs it vertically and `X2`/`ErrorXBy` horizontally —
+the rule `Rect` already follows about its edges, which is why there is no
+orientation option to contradict — and naming both is `ErrBothAxes` rather than
+a guess that depends on option order ([ADR 0036](docs/adr/0036-error-bars.md)).
+The bounds are computed in `Train` because the axis has to describe them: an
+interval whose top runs off the plot is the reading the chart was opened for,
+which is the same boundary ADR 0019 draws for a stack's totals. `errorGeom.half`
+is measured once per `Train` out of a buffer the layer keeps — `smallestGap`
+sorts, and asking it per row is what made a bar layer quadratic once already.
+And every segment goes through the coord: a cap drawn as two device points
+would be a straight line under a polar coord, where the mark is an arc.
+
+**A tick label has two spellings and the Go one wins, but both are written
+down.** `scale.Format` takes a function and `scale.NumberFormat` takes a spec;
+`Desc` carries `Formatted` *and* `Format`, because a Desc that dropped the spec
+when a function was present would silently change the chart the day somebody
+deleted the Go code — [ADR 0035](docs/adr/0035-label-format-and-locale.md). Two
+things there are easy to break. A spec that names no precision must keep the
+axis's own, which is derived from the tick *step* and is what keeps a column of
+labels aligned: that is why `autoFor` returns a description rather than a
+formatter, and why the two meet in `numberFormat.label`. And an unlocalised
+scale must take the *old* path exactly — `punctuate` with English's separators
+is the identity on `strconv`'s output, and a time scale with no locale calls
+`time.Format` itself rather than the layout-splitting path — because that is
+what leaves every golden file in the repository unchanged. There is a test
+asserting that naming English changes nothing; do not "simplify" the default
+branch away.
+
+**A locale reaches a chart's axes by a walk, and the walk is the feature.**
+`refract.Locale` localises the scales in the *chart description*, after it is
+built, which is what reaches a track's own scale and a free facet axis's clone
+— neither of which the caller holds. Setting it in `Plot.X` instead compiles
+and misses both. It happens before the parallel path, and a locale is read
+from then on and never written, so there is nothing for `Snapshotter` to fix.
+
+**A null is a missing value, and only a numeric column can say so by itself.**
+`""` is a string somebody may have measured and the zero time is an instant, so
+absence in a text or temporal column is stated beside the values through
+`data.Nulls` rather than inside them — [ADR 0034](docs/adr/0034-null-values.md).
+It is read in exactly one place, `geom.column`, which writes NaN whatever the
+column is stored as; every policy, traversal and mark downstream is the
+machinery that already handled a NaN, and no geom knows about nulls. Three
+things there are load-bearing. A column with **no** nulls must answer `ok ==
+false`, because that answer is what every reader decides between the borrowed
+column and a copy on — a mask of all false makes a chart copy a column to
+change none of it. `masks` compares the mask against the values before copying,
+so an Arrow numeric column, whose nulls are already NaN, is still handed on
+untouched. And `series.detach` copies before writing, because `s.x` may be the
+caller's own slice: a neighbouring column's null takes a row's *position* away,
+and doing that in place edits the table rather than the chart. A genuine `""`
+is still a category and there is a test for it — dropping every empty string
+passes every null test and is a different feature.
 
 **`data.Stream` is deliberately not a `data.Source`.** A Source is read column
 by column over several calls, and a table appended to between two of them
@@ -888,7 +991,12 @@ different decision with a different shape. And the Arrow adapter does not handle
 `float16`, decimals or extension types; nothing that plots produces them yet,
 and an untested conversion is worse than an absent one.
 
-Two things v0.3 deliberately did not do, still true. A PDF is one page with no
-embedded font: text outside WinAnsi becomes `?`, and fixing that means embedding
-a font. And a colourbar is vertical, in the guide column; a horizontal one under
-the plot is a layout question, not a drawing one.
+One thing v0.3 deliberately did not do, still true: a colourbar is vertical, in
+the guide column; a horizontal one under the plot is a layout question, not a
+drawing one. The other — "a PDF is one page with no embedded font: text outside
+WinAnsi becomes `?`" — is half closed. It is still one page, and the *default*
+is still Helvetica and WinAnsi, byte for byte; `pdf.WithFont` is the way past
+it ([ADR 0038](docs/adr/0038-embedded-fonts.md)), and there is no per-glyph
+fallback: a document draws every label in the face it was given, because a
+fallback chain is a font-matching policy and a plotting library is the wrong
+place to hold one.

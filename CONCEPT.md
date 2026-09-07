@@ -1081,6 +1081,68 @@ scale emits — the same constraint that made the columns an impedance rather
 than the reflection coefficient an instrument reports.
 See [ADR 0033](docs/adr/0033-smith-charts.md).
 
+### v1.3 — What is not a chart type — **on `main`**
+
+Six gaps that [docs/chart-types.md](docs/chart-types.md) could not hold,
+because a catalogue sorted by machinery has no line for a mark that needs
+neither a coordinate system nor a stat, and no line at all for the three that
+are not marks. None of them is a shape; all of them were the difference
+between a chart being *drawable* and being *usable*. The catalogue grew a
+bucket H for them.
+
+- **A null is a missing value, in every column kind.** A missing number is NaN
+  and every policy refract has is written against that; a missing *category*
+  read back as `""` became a band of its own on an ordinal axis and a missing
+  *instant* as the zero time stretched a three-hour domain across two
+  millennia. `data.Nulls` is the optional interface `data.Source`'s own
+  documentation promised, `geom.column` is the one place it is read, and
+  everything downstream is the machinery that already handled a NaN
+  ([ADR 0034](docs/adr/0034-null-values.md)).
+- **A tick label is described rather than computed.** `scale.Desc` carried an
+  honest field saying a document had lost the axis's formatter and gave it
+  nowhere to put one, so a chart authored as JSON could not set a thousands
+  separator, a currency or a decimal place at all. `scale.NumberFormat` and
+  `scale.TimeLayout` are the declarative spelling, beside the Go function
+  rather than instead of it ([ADR 0035](docs/adr/0035-label-format-and-locale.md)).
+- **A chart in a language.** The time ladder rendered through Go's own English
+  tables and `strconv` writes a decimal point — which for a German reader is
+  not foreign but wrong, because "1.234" reads as one and a bit.
+  `refract.Locale` walks the scales the chart description holds, which is what
+  reaches a track's own scale and a free facet axis's clone.
+- **An interval around a measurement.** Every chart of a mean, a forecast or a
+  tolerance carries two numbers per row and refract drew fifteen marks with
+  nowhere to put the second. `geom.ErrorBar` takes either spelling a table
+  comes in, and which axis it runs along follows from the encoding
+  ([ADR 0036](docs/adr/0036-error-bars.md)).
+- **A second axis, in both directions.** A `Plot` had one scale per direction
+  and a layer no way to name another. `Plot.Y2`/`geom.OnY2` and
+  `Plot.X2`/`geom.OnX2` are a scale on the chart and a binding on the layer,
+  and each axis reaches the layout, the coord's furniture, hit-testing,
+  steering, the description and the document
+  ([ADR 0037](docs/adr/0037-secondary-axis.md)). The vertical one is two
+  quantities in different units — revenue against margin; the horizontal one is
+  most often one reading with two rulers, an oven curve counted in cycles and
+  in minutes, which needs no second layer because an axis with nothing drawn on
+  it is still an axis. The two are independent: a layer may name both.
+- **A PDF in a script WinAnsi cannot hold.** The emitter named the base-14
+  Helvetica, so every rune outside Latin-1 became `?` — in the format people
+  send to customers. `pdf.WithFont` embeds a face, subset to the glyphs the
+  document drew, with a `ToUnicode` map so the text is still selectable
+  ([ADR 0038](docs/adr/0038-embedded-fonts.md)). It needed an sfnt parser, and
+  it is in `internal/sfnt` because the core module has no dependencies and
+  keeps none.
+- *DoD:* a null in a text or temporal column is gapped rather than drawn; a
+  chart written down as JSON labels its ticks the way it was told to, in the
+  language it was told to; a mean and its interval are one mark; revenue and
+  margin are one chart with two axes that zoom together and describe
+  themselves separately, and so are minutes and cycles along the bottom and the
+  top; and a Japanese label reaches a PDF as a glyph rather
+  than as a question mark. ✔
+
+Every one of them is additive: no interface gained a method, no struct lost a
+field, and a chart that mentions none of them draws exactly what it drew —
+which is what every golden file in the repository asserts.
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1100,6 +1162,10 @@ See [ADR 0033](docs/adr/0033-smith-charts.md).
   layer does not change to accommodate it: an edge list is two string columns
   and a value column, which `data.Source` already returns.
 - More stats: contour, and a QQ plot over the ECDF v0.9 shipped.
+- The rest of bucket G in [docs/chart-types.md](docs/chart-types.md): an
+  overlay layer the chart itself owns — a tooltip, a crosshair, a brush
+  rectangle — which is what linked brushing across panels needs before
+  anything else, and a de-overlap pass for labels.
 - Animations / transitions (gg retained-scene + damage tracking make this cheap).
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.

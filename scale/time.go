@@ -113,7 +113,15 @@ type timeScale struct {
 	fixed  bool
 	origin int64 // the instant the domain is measured from, in Unix nanoseconds
 	format func(time.Time, time.Duration) string
+
+	// layout is the declarative half of the same choice and locale the
+	// language the names in it are written in. See [TimeLayout] and [Locale].
+	layout string
+	locale *Locale
 }
+
+// SetLocale implements [Localizer].
+func (s *timeScale) SetLocale(l *Locale) { s.locale = l }
 
 // Value converts an instant into this scale's domain space, exactly: the
 // subtraction happens in int64, so no precision is lost before the float64.
@@ -297,5 +305,15 @@ func (s *timeScale) label(t time.Time, u timeUnit) string {
 	if s.format != nil {
 		return s.format(t, u.approx())
 	}
-	return t.Format(u.layout)
+	layout := u.layout
+	if s.layout != "" {
+		layout = s.layout
+	}
+	// A scale nobody localised takes the fast path, which is Format itself —
+	// so every chart drawn before locales existed goes through exactly the
+	// call it went through then, and every golden file still matches.
+	if s.locale == nil || s.locale == English {
+		return t.Format(layout)
+	}
+	return localTime(t, layout, s.locale)
 }

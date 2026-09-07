@@ -3,7 +3,6 @@ package scale
 import (
 	"math"
 	"sort"
-	"strconv"
 )
 
 // LinearOption configures a linear scale.
@@ -82,6 +81,13 @@ type linear struct {
 	// afterwards, which is why Clone and Snapshot share it rather than copying
 	// it: unlike an ordinal scale's labels, nothing here grows during training.
 	ticks []float64
+
+	// numFormat is the declarative spelling of the same choice, and loc the
+	// language it is punctuated in. A Go formatter outranks both: a caller who
+	// wrote one has answered the question, and a spec is what a document can
+	// carry rather than a better answer. See [NumberFormat].
+	numFormat numberFormat
+	loc       *Locale
 
 	// cached nicing, invalidated whenever the domain changes
 	nicedFor [2]float64
@@ -166,6 +172,9 @@ func (l *linear) Invert(pos float32) float64 {
 	return lo + t*(hi-lo)
 }
 
+// SetLocale implements [Localizer].
+func (l *linear) SetLocale(loc *Locale) { l.loc = loc }
+
 func (l *linear) Ticks(want int) []Tick {
 	lo, hi := l.effective()
 	var vals []float64
@@ -178,7 +187,7 @@ func (l *linear) Ticks(want int) []Tick {
 	}
 	fmtFn := l.format
 	if fmtFn == nil {
-		fmtFn = formatterFor(step)
+		fmtFn = labeller(autoFor(step), l.numFormat, l.loc)
 	}
 	out := make([]Tick, 0, len(vals))
 	for _, v := range vals {
@@ -206,18 +215,23 @@ func closestSpacing(vs []float64) float64 {
 	return step
 }
 
-// formatterFor picks a label format from the tick step: enough decimals to
+// autoFor picks a label format from the tick step: enough decimals to
 // distinguish adjacent ticks, and scientific notation once plain digits get
 // unreadable. Deriving this from the step rather than from each value is what
 // keeps a column of labels aligned and consistent.
-func formatterFor(step float64) func(float64) string {
+//
+// It answers with a description rather than with a function so that a
+// [NumberFormat] naming a prefix but no precision still gets the axis's own
+// precision — the two choices meet in [numberFormat.label] rather than one
+// replacing the other.
+func autoFor(step float64) autoFormat {
 	step = math.Abs(step)
 	if step == 0 || math.IsNaN(step) || math.IsInf(step, 0) {
-		return func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+		return autoFormat{mode: 'g'}
 	}
 	exp := int(math.Floor(math.Log10(step)))
 	if exp < -6 || exp > 8 {
-		return func(v float64) string { return strconv.FormatFloat(v, 'e', 2, 64) }
+		return autoFormat{mode: 'e', decimals: 2}
 	}
 	// Use as many decimals as the step itself needs, not as many as its
 	// magnitude suggests: a step of 2.5 is a one-decimal step even though it is
@@ -230,15 +244,14 @@ func formatterFor(step float64) func(float64) string {
 		}
 		scaled *= 10
 	}
-	return func(v float64) string {
-		// Snap values that are a hair off an exact tick, so 0.30000000000000004
-		// prints as 0.3 and -0 prints as 0.
-		s := strconv.FormatFloat(v, 'f', decimals, 64)
-		if s == "-0" || (decimals > 0 && s == "-0."+zeros(decimals)) {
-			s = s[1:]
-		}
-		return s
-	}
+	return autoFormat{mode: 'f', decimals: decimals}
+}
+
+// labeller is the tick formatter a scale uses when the caller gave it no Go
+// function: the axis's own precision, shaped by whatever spec it carries and
+// punctuated in whatever language it was given.
+func labeller(a autoFormat, f numberFormat, loc *Locale) func(float64) string {
+	return func(v float64) string { return f.label(v, a, loc) }
 }
 
 // maxDecimals caps label precision. Beyond six decimals a linear axis is

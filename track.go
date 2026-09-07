@@ -267,10 +267,22 @@ func (p *Plot) tracked(c render.Chart) render.Chart {
 		Col:    panelCol,
 		X:      c.X,
 		Y:      c.Y,
+		Y2:     c.Y2,
+		X2:     c.X2,
 		Coord:  p.coord,
 		Layers: p.layers,
 		ShowX:  panelRow == lastRow,
 		ShowY:  panelCol == 0,
+		// The second axis belongs to the data panel and is written at the
+		// right-hand edge of the grid, which is the last column — a right
+		// track puts a band there instead, and the axis then sits between the
+		// panel and the band rather than outside it.
+		ShowY2: panelCol == cols-1,
+		// The second horizontal axis is written at the top of the grid, which
+		// is the mirror of where the first is written at the bottom — a top
+		// track puts a band there instead, and the axis then sits between the
+		// panel and the band.
+		ShowX2: panelRow == 0,
 	})
 
 	// A band nearest the panel is the first one added at its edge, so the

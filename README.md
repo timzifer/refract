@@ -24,6 +24,12 @@ everywhere — built on the GoGPU stack.**
 > the opt-in GPU tier at `v0.1.4`, and the Arrow adapter at `arrow/v18.0.2`,
 > whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
 > road ahead.
+>
+> **On `main` since:** the six gaps that were not chart types — a null that is
+> a missing value in a text or temporal column, a tick format and a language a
+> *document* can choose, an interval mark, a second axis in either direction,
+> and a PDF that carries the font its labels need. All additive; see
+> [CONCEPT §14](CONCEPT.md#14-roadmap--milestones).
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
@@ -145,7 +151,8 @@ picture here cannot drift away from the code that produced it.
 | ![Latency by service as violins, one per region within each service](docs/images/violin.png) | ![A year of daily maxima as a ridgeline, one density per month](docs/images/ridgeline.png) |
 | ![Scores by cohort as a beeswarm, every observation placed](docs/images/beeswarm.png) | ![Scores by cohort as three empirical CDFs on one axis](docs/images/ecdf.png) |
 | ![Fifty thousand observations binned into hexagons with a loess trend through them](docs/images/hexbin.png) | ![Income against life expectancy as bubbles sized by population, with a size key beside the legend](docs/images/bubbles.png) |
-| ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) | |
+| ![Mean latency per service with a 95 % interval drawn over each bar](docs/images/errorbars.png) | ![Revenue as bars against a left axis and margin as a percentage line against a right one](docs/images/twoaxes.png) |
+| ![An oven temperature curve read against elapsed minutes along the bottom and cycle number along the top](docs/images/twoextents.png) | ![A patch antenna's reflection swept across its band, on a Smith chart](docs/images/smith.png) |
 
 ## What it does
 

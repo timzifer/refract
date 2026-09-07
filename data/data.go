@@ -93,6 +93,12 @@ type Table struct {
 	names []string
 	n     int
 	fixed bool // true once the row count has been established
+
+	// nulls holds a mask per column that has one, and nothing for a column
+	// that does not — see [Table.WithNulls]. A table nobody told about a
+	// null carries no map at all, which is what makes [Table.Nulls] free
+	// for every table written before the interface existed.
+	nulls map[string][]bool
 }
 
 // NewTable returns an empty Table.
@@ -173,4 +179,53 @@ func (t *Table) TimeColumn(name string) ([]time.Time, bool) {
 func (t *Table) StringColumn(name string) ([]string, bool) {
 	c, ok := t.strs[name]
 	return c, ok
+}
+
+// WithNulls marks rows of an existing column as absent, borrowing the mask. It
+// returns t so calls can be chained. It panics if the column does not exist or
+// the mask is not one flag per row.
+//
+// A text or temporal column needs this because it has no NaN to be missing
+// with: "" is a string somebody may have measured and the zero time is an
+// instant, so absence has to be said beside the values rather than inside
+// them. A numeric column may use it too, and the two spellings agree — a NaN
+// and a marked row are both missing, and neither outranks the other.
+//
+// A mask that marks nothing is not stored: [Nulls] answers "no nulls" either
+// way, and a reader that asked would otherwise copy a column to change none of
+// it.
+func (t *Table) WithNulls(name string, null []bool) *Table {
+	if !t.has(name) {
+		panic("refract/data: no column " + name + " to mark null")
+	}
+	if len(null) != t.n {
+		panic("refract/data: null mask for column " + name + " has a different length than the columns")
+	}
+	if !AnyNull(null) {
+		return t
+	}
+	if t.nulls == nil {
+		t.nulls = map[string][]bool{}
+	}
+	t.nulls[name] = null
+	return t
+}
+
+// Nulls implements [Nulls]. ok is false for a column with no nulls, which is
+// every column of a table that was never told about one.
+func (t *Table) Nulls(name string) ([]bool, bool) {
+	c, ok := t.nulls[name]
+	return c, ok
+}
+
+// has reports whether the table carries a column of that name, of any type.
+func (t *Table) has(name string) bool {
+	if _, ok := t.nums[name]; ok {
+		return true
+	}
+	if _, ok := t.times[name]; ok {
+		return true
+	}
+	_, ok := t.strs[name]
+	return ok
 }

@@ -140,13 +140,23 @@ type Plot struct {
 	dpr           float64
 	theme         themepkg.Theme
 
-	title  string
-	xTitle string
-	yTitle string
+	title   string
+	xTitle  string
+	yTitle  string
+	y2Title string
+	x2Title string
 
 	x, y   scale.Scale
+	y2, x2 scale.Scale
 	coord  coordpkg.Coord
 	layers []geom.Geom
+
+	// locale is the language every axis of this plot writes its labels in,
+	// and nil for English. It is a plot-level option rather than a scale one
+	// because a chart is in one language: setting it per scale means saying
+	// it once per axis and once per track, and forgetting it somewhere is a
+	// chart with two languages in it. See [Locale].
+	locale *scale.Locale
 
 	facet *facet.Spec
 
@@ -288,6 +298,28 @@ func Math(ts mathtext.Typesetter) Option { return func(p *Plot) { p.math = ts } 
 // facet all share it.
 func Coord(c coordpkg.Coord) Option { return func(p *Plot) { p.coord = c } }
 
+// Locale sets the language every axis of this plot writes its tick labels in:
+// the decimal and group separators of a number, the percent sign, and the
+// month and weekday names of a time axis.
+//
+// It reaches the scales through [scale.Localizer], which every scale in the
+// scale package implements except the ordinal one — an ordinal axis labels its
+// ticks with the caller's own categories, and translating those would be
+// inventing data. A scale from somewhere else that does not implement it is
+// left alone rather than refused.
+//
+// It is a plot option rather than a scale one because a chart is in one
+// language: setting it per scale means saying it once per axis and once per
+// track, and forgetting it somewhere is a chart with two languages in it.
+//
+// The default is [scale.English], which is what every chart drew before this
+// option existed.
+//
+//	p := refract.New(refract.Locale(scale.LocaleDE))
+//	p.X(scale.Time()).Y(scale.Linear(scale.NumberFormat("#,.1")))
+//	// → "1.234,5" on the Y axis and "Mär 2026" on the X one
+func Locale(l *scale.Locale) Option { return func(p *Plot) { p.locale = l } }
+
 // Theme sets the visual tokens. The default is [theme.Light].
 func Theme(t themepkg.Theme) Option { return func(p *Plot) { p.theme = t } }
 
@@ -299,6 +331,14 @@ func XTitle(s string) Option { return func(p *Plot) { p.xTitle = s } }
 
 // YTitle sets the vertical axis title.
 func YTitle(s string) Option { return func(p *Plot) { p.yTitle = s } }
+
+// Y2Title sets the title of the secondary vertical axis, written down the
+// chart's right-hand side. It is ignored by a chart with no [Plot.Y2].
+func Y2Title(s string) Option { return func(p *Plot) { p.y2Title = s } }
+
+// X2Title sets the title of the secondary horizontal axis, written along the
+// chart's top. It is ignored by a chart with no [Plot.X2].
+func X2Title(s string) Option { return func(p *Plot) { p.x2Title = s } }
 
 // Legend forces the legend on or off. By default a legend appears once a plot
 // has more than one layer: one series does not need to be told apart from
@@ -384,6 +424,38 @@ func (p *Plot) X(s scale.Scale) *Plot { p.x = s; return p }
 // Y sets the vertical scale. The default is [scale.Linear] with nicing.
 func (p *Plot) Y(s scale.Scale) *Plot { p.y = s; return p }
 
+// Y2 sets the chart's secondary vertical axis: a second scale, drawn down the
+// right-hand side, read by the layers that asked for it with [geom.OnY2].
+//
+// It is the chart of two quantities in different units — revenue as bars
+// against the left axis, margin as a percentage line against the right — and
+// it is one chart with two axes rather than two charts overlaid, which is why
+// the binding is on the layer and the scale is on the plot.
+//
+// The second axis draws **no grid lines**. Two ladders of horizontal rules at
+// different values are a moiré rather than a reading, and which of the two a
+// line belongs to is unanswerable by looking; the grid stays the primary
+// axis's. See [ADR 0037](docs/adr/0037-secondary-axis.md).
+//
+// A chart with no layer on it draws the axis anyway, because an axis somebody
+// asked for is a statement about the chart even where nothing reaches it yet —
+// a live chart whose second series has not arrived is the case.
+func (p *Plot) Y2(s scale.Scale) *Plot { p.y2 = s; return p }
+
+// X2 sets the chart's secondary horizontal axis: a second scale, drawn along
+// the top, read by the layers that asked for it with [geom.OnX2].
+//
+// It is [Plot.Y2] turned a quarter turn and everything said there holds,
+// including that the second axis draws no grid lines. What it is *for* is
+// different: two series measured over different extents of the same thing —
+// a run indexed by cycle beside one indexed by elapsed time, a spectrum read
+// in wavelength against the same spectrum in wavenumber, a backlog by date
+// against a backlog by sprint.
+//
+// The two directions are independent. A layer may name [geom.OnX2] and
+// [geom.OnY2] together, and then it reads the top axis and the right one.
+func (p *Plot) X2(s scale.Scale) *Plot { p.x2 = s; return p }
+
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
@@ -444,7 +516,36 @@ func (p *Plot) Render(t Target) (err error) {
 
 // chart resolves the plot into what render draws: one panel, or the grid of
 // panels a facet spec cuts it into.
+// chart builds the render description and puts every axis it holds into the
+// plot's language.
+//
+// Localising here rather than in [Plot.X] is what makes the option reach a
+// scale the plot was given afterwards, a track's own scale and a free facet
+// axis's clone alike — they are all in the description by the time this runs,
+// and the walk is one place rather than four call sites that can drift.
+//
+// It is safe against the parallel path because it happens before it: the
+// panels are built after this returns, and a locale is read from then on and
+// never written.
 func (p *Plot) chart() (render.Chart, error) {
+	c, err := p.describe()
+	if err != nil {
+		return render.Chart{}, err
+	}
+	if p.locale != nil {
+		scale.Localize(c.X, p.locale)
+		scale.Localize(c.Y, p.locale)
+		scale.Localize(c.Y2, p.locale)
+		scale.Localize(c.X2, p.locale)
+		for i := range c.Panels {
+			scale.Localize(c.Panels[i].X, p.locale)
+			scale.Localize(c.Panels[i].Y, p.locale)
+		}
+	}
+	return c, nil
+}
+
+func (p *Plot) describe() (render.Chart, error) {
 	c := render.Chart{
 		Width:       p.width,
 		Height:      p.height,
@@ -455,6 +556,10 @@ func (p *Plot) chart() (render.Chart, error) {
 		YTitle:      p.yTitle,
 		X:           p.scaleX(),
 		Y:           p.scaleY(),
+		Y2:          p.y2,
+		X2:          p.x2,
+		Y2Title:     p.y2Title,
+		X2Title:     p.x2Title,
 		Coord:       p.coord,
 		Layers:      p.layers,
 		ShowLegend:  p.showLegend(),
@@ -488,6 +593,8 @@ func (p *Plot) chart() (render.Chart, error) {
 			Layers:     fp.Layers,
 			X:          c.X,
 			Y:          c.Y,
+			Y2:         c.Y2,
+			X2:         c.X2,
 			// A shared axis is written once, at the edge of the grid — which
 			// is the last panel in the column, not the last row: a wrapped
 			// facet whose final row is short would otherwise leave the
@@ -497,15 +604,35 @@ func (p *Plot) chart() (render.Chart, error) {
 			// panel but one.
 			ShowX: freeX || outermost(panels, fp, below),
 			ShowY: freeY || outermost(panels, fp, leftOf),
+			// The second axis is written at the *right* edge of the grid,
+			// which is the mirror of where the first one is written and the
+			// same rule: a shared axis belongs at the outside, and a free one
+			// is a different axis in every panel and has to be written in each.
+			ShowY2: c.Y2 != nil && (freeY || outermost(panels, fp, rightOf)),
+			ShowX2: c.X2 != nil && (freeX || outermost(panels, fp, above)),
 		}
 		if freeX {
 			if rp.X, err = freeScale(c.X); err != nil {
 				return render.Chart{}, err
 			}
+			if c.X2 != nil {
+				if rp.X2, err = freeScale(c.X2); err != nil {
+					return render.Chart{}, err
+				}
+			}
 		}
 		if freeY {
 			if rp.Y, err = freeScale(c.Y); err != nil {
 				return render.Chart{}, err
+			}
+			if c.Y2 != nil {
+				// A free Y axis frees both of them. One panel's data must not
+				// move another panel's axis, and that is as true of the second
+				// as of the first — a shared second axis under a free first
+				// one would be half a free facet, which is not a reading.
+				if rp.Y2, err = freeScale(c.Y2); err != nil {
+					return render.Chart{}, err
+				}
 			}
 		}
 		c.Panels = append(c.Panels, rp)
@@ -524,12 +651,14 @@ func outermost(panels []facet.Panel, p facet.Panel, beyond func(a, b facet.Panel
 	return true
 }
 
-// below and leftOf are the two directions that matter. A shared X axis is
+// below, above, leftOf and rightOf are the four directions that matter. A shared X axis is
 // written by the last panel in its column — not by the bottom row, because a
 // wrapped facet whose final row is short would leave the panels above the gap
 // unlabelled. A shared Y axis is written by the first panel in its row.
-func below(a, b facet.Panel) bool  { return a.Col == b.Col && b.Row > a.Row }
-func leftOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col < a.Col }
+func below(a, b facet.Panel) bool   { return a.Col == b.Col && b.Row > a.Row }
+func above(a, b facet.Panel) bool   { return a.Col == b.Col && b.Row < a.Row }
+func leftOf(a, b facet.Panel) bool  { return a.Row == b.Row && b.Col < a.Col }
+func rightOf(a, b facet.Panel) bool { return a.Row == b.Row && b.Col > a.Col }
 
 // freeScale copies a scale so that one panel's data cannot move another
 // panel's axis.

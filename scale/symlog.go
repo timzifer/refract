@@ -73,6 +73,11 @@ type symlogScale struct {
 	fixed  bool
 	minor  bool
 	format func(float64) string
+
+	// numFormat and loc are the declarative half of the same choice; see
+	// [NumberFormat].
+	numFormat numberFormat
+	loc       *Locale
 }
 
 func (s *symlogScale) Train(vs ...float64) {
@@ -132,7 +137,7 @@ func (s *symlogScale) Ticks(want int) []Tick {
 	lo, hi := s.span()
 	fmtFn := s.format
 	if fmtFn == nil {
-		fmtFn = formatLog
+		fmtFn = labeller(autoFormat{mode: 'l'}, s.numFormat, s.loc)
 	}
 
 	// Candidate magnitudes: the threshold, then a decade at a time until the
@@ -213,3 +218,6 @@ func (s *symlogScale) tickAt(v float64, label string, minor bool) (Tick, bool) {
 // and the cap keeps a pathological range from generating an unbounded
 // sequence.
 const maxSymLogDecades = 40
+
+// SetLocale implements [Localizer].
+func (s *symlogScale) SetLocale(loc *Locale) { s.loc = loc }

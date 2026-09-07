@@ -34,6 +34,13 @@ const (
 // [TimeFormat] therefore have no place in a Desc, and a scale carrying one
 // says so through Formatted — a chart that is written down and read back
 // labels its ticks the standard way. Nothing else about the scale is lost.
+//
+// The *declarative* spelling of the same choice does survive, which is what
+// [NumberFormat] and [TimeLayout] are for: Format, Layout and Locale below
+// hold it, and a chart configured in a document can say how its ticks read.
+// A scale carrying both writes both, and the function is what it uses — a
+// document that dropped the spec would silently change what the chart says
+// the first time somebody deleted the Go code.
 type Desc struct {
 	// Kind is which scale this is.
 	Kind Kind
@@ -74,6 +81,21 @@ type Desc struct {
 
 	// Formatted reports a scale carrying a formatter that a Desc cannot hold.
 	Formatted bool
+
+	// Format is the declarative tick format of a numeric scale, as
+	// [NumberFormat] spells it, and empty for a scale that labels its ticks
+	// the standard way.
+	Format string
+	// Layout is a time scale's fixed tick layout, as [TimeLayout] spells it —
+	// a Go reference layout — and empty for a scale choosing one per tick
+	// spacing.
+	Layout string
+	// Locale is the name of the language the labels are punctuated and named
+	// in, and empty for [English]. It is a name rather than the tables
+	// themselves for the reason a registered scale kind is a name: a document
+	// carries what it is, and the process carries what it means. See
+	// [RegisterLocale].
+	Locale string
 }
 
 // Describer is implemented by a scale that can say what it is. It is optional:
@@ -103,6 +125,10 @@ var ErrUnknownKind = fmt.Errorf("refract/scale: unknown scale kind")
 func FromDesc(d Desc) (Scale, error) {
 	switch d.Kind {
 	case KindLinear, "":
+		f, err := parseNumberFormat(d.Format)
+		if err != nil {
+			return nil, err
+		}
 		var opts []LinearOption
 		if d.Nice {
 			opts = append(opts, Nice())
@@ -116,6 +142,7 @@ func FromDesc(d Desc) (Scale, error) {
 		if len(d.TickValues) > 0 {
 			opts = append(opts, TickValues(d.TickValues...))
 		}
+		opts = append(opts, func(l *linear) { l.numFormat = f; l.loc = localeNamed(d.Locale) })
 		return Linear(opts...), nil
 
 	case KindLog:
@@ -129,6 +156,11 @@ func FromDesc(d Desc) (Scale, error) {
 		if d.Fixed {
 			opts = append(opts, LogDomain(d.Min, d.Max))
 		}
+		f, err := parseNumberFormat(d.Format)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, func(l *logScale) { l.numFormat = f; l.loc = localeNamed(d.Locale) })
 		return Log(opts...), nil
 
 	case KindSymLog:
@@ -142,6 +174,11 @@ func FromDesc(d Desc) (Scale, error) {
 		if d.Fixed {
 			opts = append(opts, SymLogDomain(d.Min, d.Max))
 		}
+		f, err := parseNumberFormat(d.Format)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, func(s *symlogScale) { s.numFormat = f; s.loc = localeNamed(d.Locale) })
 		return SymLog(opts...), nil
 
 	case KindTime:
@@ -156,6 +193,10 @@ func FromDesc(d Desc) (Scale, error) {
 		if d.Origin != 0 {
 			opts = append(opts, Origin(time.Unix(0, d.Origin)))
 		}
+		if d.Layout != "" {
+			opts = append(opts, TimeLayout(d.Layout))
+		}
+		opts = append(opts, func(t *timeScale) { t.locale = localeNamed(d.Locale) })
 		s := Time(opts...)
 		if d.Fixed {
 			s.(Zoomer).SetDomain(d.Min, d.Max)
@@ -176,7 +217,10 @@ func FromDesc(d Desc) (Scale, error) {
 }
 
 func (l *linear) Describe() Desc {
-	d := Desc{Kind: KindLinear, Nice: l.nice, Zero: l.zero, Fixed: l.fixed, Formatted: l.format != nil}
+	d := Desc{
+		Kind: KindLinear, Nice: l.nice, Zero: l.zero, Fixed: l.fixed,
+		Formatted: l.format != nil, Format: l.numFormat.spec, Locale: localeName(l.loc),
+	}
 	if l.fixed {
 		d.Min, d.Max = l.dmin, l.dmax
 	}
@@ -190,6 +234,7 @@ func (l *logScale) Describe() Desc {
 	d := Desc{
 		Kind: KindLog, Base: l.base, Nice: l.nice, Fixed: l.fixed,
 		MinorTicks: l.minor, Formatted: l.format != nil,
+		Format: l.numFormat.spec, Locale: localeName(l.loc),
 	}
 	if l.fixed {
 		d.Min, d.Max = l.dmin, l.dmax
@@ -201,6 +246,7 @@ func (s *symlogScale) Describe() Desc {
 	d := Desc{
 		Kind: KindSymLog, Base: s.base, Threshold: s.thr, Fixed: s.fixed,
 		MinorTicks: s.minor, Formatted: s.format != nil,
+		Format: s.numFormat.spec, Locale: localeName(s.loc),
 	}
 	if s.fixed {
 		d.Min, d.Max = s.dmin, s.dmax
@@ -209,7 +255,10 @@ func (s *symlogScale) Describe() Desc {
 }
 
 func (s *timeScale) Describe() Desc {
-	d := Desc{Kind: KindTime, Fixed: s.fixed, Origin: s.origin, Formatted: s.format != nil}
+	d := Desc{
+		Kind: KindTime, Fixed: s.fixed, Origin: s.origin, Formatted: s.format != nil,
+		Layout: s.layout, Locale: localeName(s.locale),
+	}
 	if s.loc != nil {
 		d.Location = s.loc.String()
 	}

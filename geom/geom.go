@@ -133,6 +133,9 @@ type config struct {
 
 	groupCol   string
 	widthCol   string
+	midCol     string
+	errCol     string
+	errXCol    string
 	explode    float64
 	explodeCol string
 	stack      Stacking
@@ -160,6 +163,7 @@ type config struct {
 	colorScale scale.ColorScale
 	whisker    float64
 	outliers   bool
+	caps       bool
 	decimate   Decimation
 	budget     int
 	cellSize   float64
@@ -173,6 +177,8 @@ type config struct {
 	overlap   float64
 
 	closed    bool
+	onY2      bool
+	onX2      bool
 	elide     bool
 	dashSet   bool
 	markerSet bool
@@ -449,6 +455,79 @@ func Whisker(k float64) Option { return func(c *config) { c.whisker = k } }
 // rows a reader opened the chart to find.
 func Outliers(show bool) Option { return func(c *config) { c.outliers = show } }
 
+// OnY2 binds this layer to the chart's secondary vertical axis, the one
+// [github.com/timzifer/refract.Plot.Y2] sets, instead of to its primary one.
+//
+// It is the option a chart of two quantities in different units needs —
+// revenue as bars against a left axis, margin as a percentage line against a
+// right one — and it is on the *layer* because that is where the binding is: a
+// scale does not know which marks read it, and a chart with two Y axes is one
+// chart with two of them rather than two charts overlaid.
+//
+// A layer that asks for it in a chart with no secondary axis draws against the
+// primary one, silently, for the reason [Explode] is silent under a Cartesian
+// coord: an option every mark accepts must not make a chart's validity depend
+// on something set somewhere else.
+func OnY2() Option { return func(c *config) { c.onY2 = true } }
+
+// OnX2 is [OnY2] turned a quarter turn: it binds this layer to the chart's
+// secondary *horizontal* axis, the one [github.com/timzifer/refract.Plot.X2]
+// sets, drawn along the top of the panel.
+//
+// It is the option two series measured over different extents of the same
+// thing need — a run indexed by cycle against one indexed by elapsed time, or
+// a spectrum read in wavelength against the same spectrum in wavenumber. The
+// two are independent: a layer may name both, and then it reads the top axis
+// and the right one.
+func OnX2() Option { return func(c *config) { c.onX2 = true } }
+
+// Mid selects the column an [ErrorBar] marks the measurement at, inside the
+// interval it draws.
+//
+// It is the third number an interval needs and the reason this mark has a
+// channel of its own: [Y] and [Y2] are the two ends, exactly as they are for
+// the band an [Area] draws and the box a [Rect] draws, which leaves the
+// measurement itself nowhere to go. A layer that names no Mid draws the
+// interval alone, which is the honest picture when the interval is all that
+// was measured — a min and a max are not evidence of a mean.
+//
+// The symmetric spelling needs no Mid: [ErrorBy] reads the measurement from
+// [Y] and derives both ends from it, so the value is already named.
+func Mid(col string) Option { return func(c *config) { c.midCol = col } }
+
+// ErrorBy selects a column of half-widths, and makes an [ErrorBar] symmetric
+// about its [Y] value: the interval runs from y−e to y+e.
+//
+// It is the spelling a table usually has. A mean and a standard deviation, or
+// a mean and a margin of error, are two columns; turning them into a low and a
+// high column first is arithmetic the caller should not have to do to draw a
+// chart of what they measured.
+//
+// The measurement is marked, because with this spelling there always is one:
+// the centre is the [Y] column, so a layer given a spread is a point with an
+// interval around it rather than an interval alone.
+func ErrorBy(col string) Option { return func(c *config) { c.errCol = col } }
+
+// ErrorXBy is [ErrorBy] along the horizontal axis: the interval runs from x−e
+// to x+e about the [X] value, and the mark lies on its side.
+//
+// Which axis an error bar runs along follows from the encoding and nothing
+// else, exactly as a [Rect]'s edges do: naming [Y2] or [ErrorBy] puts the
+// interval on the vertical axis, naming [X2] or this puts it on the
+// horizontal one. That is what a chart of measurements against categories on
+// the Y axis needs, and it is why there is no orientation option.
+func ErrorXBy(col string) Option { return func(c *config) { c.errXCol = col } }
+
+// Caps turns the crossbars at the ends of an [ErrorBar] on or off. They are on
+// by default.
+//
+// Turning them off is the point-range look: a rule with a marker on it and
+// nothing at the ends, which is what a chart with many intervals close
+// together wants — caps that touch read as a grid. The cap is half as wide as
+// a [Bar] of the same [BarWidth] would be, so an error bar drawn over a bar
+// chart is narrower than the bar it annotates.
+func Caps(show bool) Option { return func(c *config) { c.caps = show } }
+
 // Align sets how a text annotation sits about its position. The default is
 // the run's start on the point, on the baseline — except in a [Text] layer
 // that labels a box, where a label with nothing said about it is centred in
@@ -477,7 +556,7 @@ func Extend(on bool) Option { return func(c *config) { c.extend = on } }
 
 func newConfig(opts []Option) config {
 	c := config{
-		barWidth: 0.8, whisker: 1.5, outliers: true, opacity: -1, extend: true,
+		barWidth: 0.8, whisker: 1.5, outliers: true, caps: true, opacity: -1, extend: true,
 		span: stat.DefaultSpan, overlap: defaultOverlap,
 	}
 	for _, o := range opts {
@@ -623,6 +702,7 @@ func resolve(src data.Source, c config, x, y scale.Scale) (series, error) {
 		}
 		s.sz = v
 	}
+	dropNulls(src, &s, c.groupCol, c.sizeCol, c.widthCol)
 	return s, nil
 }
 
@@ -642,7 +722,9 @@ func resolveOne(src data.Source, c config, x scale.Scale) (series, error) {
 	if err != nil {
 		return series{}, err
 	}
-	return series{x: xs, y: xs, origin: data.Origins(src)}, nil
+	s := series{x: xs, y: xs, origin: data.Origins(src)}
+	dropNulls(src, &s, c.groupCol)
+	return s, nil
 }
 
 // colorColumn reads the column a colour scale paints from.
@@ -661,8 +743,17 @@ func colorColumn(src data.Source, c config) ([]float64, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: %q", ErrNoColumn, c.colorCol)
 		}
+		// A row with no category is not given one. NaN is the value every
+		// colour scale answers with its undefined colour, so an absent
+		// category reads as "not one of these" rather than as a category
+		// named "" holding a slot in the palette.
+		null, _ := data.NullMask(src, c.colorCol)
 		out := make([]float64, len(labels))
 		for i, l := range labels {
+			if data.IsNull(null, i) {
+				out[i] = math.NaN()
+				continue
+			}
 			out[i] = d.Encode(l)
 		}
 		return out, nil
@@ -691,25 +782,47 @@ func column(src data.Source, name string, s scale.Scale) ([]float64, error) {
 		return nil, fmt.Errorf("%w: no column selected (use geom.X/geom.Y)", ErrNoColumn)
 	}
 	cat, _ := s.(scale.Categorical)
+	// A row the source calls absent becomes NaN, whatever the column is stored
+	// as. That is the whole of the null rule on a position axis: no scale
+	// places a NaN, so plottable rejects the row and [OnMissing] decides what
+	// happens to it — the same three answers a numeric column's own NaN
+	// already gets. Doing it here rather than per geom is what makes it true
+	// of every mark, including the ones that do not exist yet. See
+	// [data.Nulls].
+	null, _ := data.NullMask(src, name)
 
 	if v, ok := src.StringColumn(name); ok {
 		if cat == nil {
 			return nil, fmt.Errorf("%w: column %q holds category names; give that axis a scale.Ordinal", ErrCategorical, name)
 		}
-		return encode(cat, v, func(l string) string { return l }), nil
+		return encode(cat, v, null, func(l string) string { return l }), nil
 	}
 	if v, ok := src.Float64Column(name); ok {
 		if cat == nil {
-			return v, nil
+			if !masks(v, null) {
+				return v, nil
+			}
+			out := make([]float64, len(v))
+			copy(out, v)
+			for i := range out {
+				if data.IsNull(null, i) {
+					out[i] = math.NaN()
+				}
+			}
+			return out, nil
 		}
-		return encode(cat, v, data.FormatNumber), nil
+		return encode(cat, v, null, data.FormatNumber), nil
 	}
 	if t, ok := src.TimeColumn(name); ok {
 		if cat != nil {
-			return encode(cat, t, func(tv time.Time) string { return tv.Format(time.RFC3339) }), nil
+			return encode(cat, t, null, func(tv time.Time) string { return tv.Format(time.RFC3339) }), nil
 		}
 		out := make([]float64, len(t))
 		for i, tv := range t {
+			if data.IsNull(null, i) {
+				out[i] = math.NaN()
+				continue
+			}
 			out[i] = scale.ValueOf(s, tv)
 		}
 		return out, nil
@@ -717,14 +830,96 @@ func column(src data.Source, name string, s scale.Scale) ([]float64, error) {
 	return nil, fmt.Errorf("%w: %q", ErrNoColumn, name)
 }
 
+// masks reports whether applying null to vs would change any of them.
+//
+// It is what keeps the zero-copy path in [data.Float64Columns] intact for the
+// source that needs the mask least: an Arrow null is already NaN in a numeric
+// column, so the mask agrees with the values and the caller's slice is handed
+// on untouched. A source that says a row is absent while leaving a number in
+// it — which is the whole point of the interface for text and time, and is
+// permitted for numbers — forces the copy, and only then.
+func masks(vs []float64, null []bool) bool {
+	for i := range vs {
+		if data.IsNull(null, i) && finite(vs[i]) {
+			return true
+		}
+	}
+	return false
+}
+
 // encode maps a column through a categorical scale, naming each value with
 // label.
-func encode[T any](cat scale.Categorical, vs []T, label func(T) string) []float64 {
+//
+// A null row is not encoded at all. Registering it would give the scale a
+// category for a value that is not there — "" for a text column, the zero
+// time for a temporal one — and an ordinal axis would grow a band for it,
+// between the categories somebody did measure.
+func encode[T any](cat scale.Categorical, vs []T, null []bool, label func(T) string) []float64 {
 	out := make([]float64, len(vs))
 	for i, v := range vs {
+		if data.IsNull(null, i) {
+			out[i] = math.NaN()
+			continue
+		}
 		out[i] = cat.Encode(label(v))
 	}
 	return out
+}
+
+// dropNulls marks a row missing when a column the layer reads *beside* its
+// position has no value there.
+//
+// The position columns need none of this: [column] has already turned their
+// nulls into NaN, and a NaN has no position. These are the others — the group
+// column, the size column, the width column — where the value is absent but
+// the row still has somewhere to go, and where drawing it would mean drawing a
+// mark whose series, or whose size, nobody measured. The colour column is
+// deliberately not among them: a colour scale has an answer for a value it
+// cannot place ([scale.ColorUndefined]), so a row with an unknown category is
+// still a reading and is painted in the undefined colour. That colour is
+// transparent unless the scale was given one, so such a row is invisible by
+// default — which is the answer every unmappable colour value already got,
+// reached without a rule of its own.
+//
+// The copy is made on the first row it has to change and not before, because
+// s.x and s.y may be the caller's own slices — the zero-copy path — and
+// writing a NaN into those would edit the table rather than the chart.
+func dropNulls(src data.Source, s *series, cols ...string) {
+	owned := false
+	for _, col := range cols {
+		if col == "" {
+			continue
+		}
+		null, ok := data.NullMask(src, col)
+		if !ok {
+			continue
+		}
+		for i := range s.x {
+			if !data.IsNull(null, i) {
+				continue
+			}
+			if !owned {
+				s.detach()
+				owned = true
+			}
+			s.x[i], s.y[i] = math.NaN(), math.NaN()
+		}
+	}
+}
+
+// detach replaces the series' position columns with copies it owns.
+//
+// x and y are the same slice for a layer that summarises one column — see
+// [resolveOne] — so the aliasing is preserved rather than broken into two
+// copies that happen to hold the same numbers.
+func (s *series) detach() {
+	alias := len(s.x) > 0 && len(s.y) == len(s.x) && &s.x[0] == &s.y[0]
+	s.x = append([]float64(nil), s.x...)
+	if alias {
+		s.y = s.x
+		return
+	}
+	s.y = append([]float64(nil), s.y...)
 }
 
 // finite reports whether v can be plotted.

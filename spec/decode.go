@@ -46,6 +46,12 @@ func (s Spec) Chart() (Chart, error) {
 		if c.Y, c.YTitle, err = axisScale(s.Encoding.Y); err != nil {
 			return Chart{}, fmt.Errorf("refract/spec: y axis: %w", err)
 		}
+		if c.Y2, c.Y2Title, err = axisScale(s.Encoding.YSecondary); err != nil {
+			return Chart{}, fmt.Errorf("refract/spec: secondary y axis: %w", err)
+		}
+		if c.X2, c.X2Title, err = axisScale(s.Encoding.XSecondary); err != nil {
+			return Chart{}, fmt.Errorf("refract/spec: secondary x axis: %w", err)
+		}
 	}
 
 	if c.Coord, err = decodeCoord(s.Coord); err != nil {
@@ -127,10 +133,18 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 			typ = "linear"
 		}
 	}
-	d := scale.Desc{Nice: s.Nice, Zero: s.Zero, Base: s.Base, Threshold: s.Constant}
+	d := scale.Desc{Nice: s.Nice, Zero: s.Zero, Base: s.Base, Threshold: s.Constant, Locale: s.Locale}
 	d.MinorTicks = true
 	if s.MinorTicks != nil {
 		d.MinorTicks = *s.MinorTicks
+	}
+
+	// The one format field is read as whichever of the two the scale's type
+	// makes it; see [Scale.Format].
+	if typ == "time" || typ == "utc" {
+		d.Layout = s.Format
+	} else {
+		d.Format = s.Format
 	}
 
 	switch typ {
@@ -218,6 +232,7 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		BarWidth:  0.8,
 		Whisker:   l.Mark.Extent,
 		Outliers:  true,
+		Caps:      true,
 		Missing:   missingPolicy(l.Mark.Missing),
 		Decimate:  decimationMode(l.Mark.Decimate),
 		Budget:    l.Mark.Budget,
@@ -233,6 +248,8 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Marker:    markerShape(l.Mark.Shape),
 		MarkerSet: l.Mark.Shape != "",
 		Closed:    l.Mark.Closed,
+		OnY2:      l.Mark.YAxis == axisSecondaryY,
+		OnX2:      l.Mark.XAxis == axisSecondaryX,
 		Steps:     stepPos(l.Mark.Interpolate),
 		HAlign:    hAlignOf(l.Mark.Align),
 		VAlign:    vAlignOf(l.Mark.Baseline),
@@ -255,6 +272,9 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 	}
 	if l.Mark.Outliers != nil {
 		d.Outliers = *l.Mark.Outliers
+	}
+	if l.Mark.Caps != nil {
+		d.Caps = *l.Mark.Caps
 	}
 	if l.Mark.Extend != nil {
 		d.Extend = *l.Mark.Extend
@@ -307,6 +327,7 @@ func decodeLayerEncoding(d *geom.Desc, enc *Encoding) error {
 	d.X2 = fieldOf(enc.X2)
 	d.Group, d.WidthCol = fieldOf(enc.Detail), fieldOf(enc.Width)
 	d.ExplodeCol = fieldOf(enc.Explode)
+	d.MidCol, d.ErrorCol, d.ErrorXCol = fieldOf(enc.Mid), fieldOf(enc.Error), fieldOf(enc.ErrorX)
 	// The stack rides the channel it adjusts. A document that names none
 	// leaves the mark's own default in place, which is why this is a pair
 	// rather than a value — see [geom.Desc].

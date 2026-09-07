@@ -74,12 +74,16 @@ func (p *Plot) DataTable(w io.Writer) error { return a11y.WriteTable(w, p.a11yCh
 // happens to them.
 func (p *Plot) a11yChart() a11y.Chart {
 	c := a11y.Chart{
-		Title:  p.plain(p.title),
-		XTitle: p.plain(p.xTitle),
-		YTitle: p.plain(p.yTitle),
-		X:      p.scaleX(),
-		Y:      p.scaleY(),
-		Layers: p.layers,
+		Title:   p.plain(p.title),
+		XTitle:  p.plain(p.xTitle),
+		YTitle:  p.plain(p.yTitle),
+		Y2Title: p.plain(p.y2Title),
+		X2Title: p.plain(p.x2Title),
+		X:       p.scaleX(),
+		Y:       p.scaleY(),
+		Y2:      p.y2,
+		X2:      p.x2,
+		Layers:  p.layers,
 	}
 	if p.facet != nil {
 		d := p.facet.Describe()

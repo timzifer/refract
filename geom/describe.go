@@ -38,6 +38,10 @@ const (
 	MarkECDF      Mark = "ecdf"
 	MarkTrend     Mark = "trend"
 
+	// MarkErrorBar is the interval mark: a rule between two bounds, with a cap
+	// at each end and a marker at the measurement.
+	MarkErrorBar Mark = "errorbar"
+
 	MarkHLine   Mark = "hline"
 	MarkVLine   Mark = "vline"
 	MarkHBand   Mark = "hband"
@@ -155,7 +159,12 @@ type Desc struct {
 	MarkerSet bool
 	// Closed reports a connected layer that joins its last mark back to its
 	// first — the radar contour of [Closed].
-	Closed   bool
+	Closed bool
+	// OnY2 and OnX2 report a layer bound to the chart's secondary vertical or
+	// horizontal axis. They are independent: a layer may be on both. See
+	// [OnY2] and [OnX2].
+	OnY2     bool
+	OnX2     bool
 	Size     float32
 	BarWidth float64
 	Baseline float64
@@ -163,12 +172,22 @@ type Desc struct {
 	Steps    StepPos
 	Whisker  float64
 	Outliers bool
-	Decimate Decimation
-	Budget   int
-	CellSize float64
-	FontSize float64
-	HAlign   ir.HAlign
-	VAlign   ir.VAlign
+	// MidCol is the column an [ErrorBar] marks its measurement at, ErrorCol
+	// and ErrorXCol the half-widths of a symmetric interval on each axis, and
+	// Caps whether the ends carry a crossbar. Caps needs no companion flag
+	// the way [Desc.DashSet] does: it defaults to true rather than to its zero
+	// value, so a document that says nothing and one that says false are
+	// already different.
+	MidCol    string
+	ErrorCol  string
+	ErrorXCol string
+	Caps      bool
+	Decimate  Decimation
+	Budget    int
+	CellSize  float64
+	FontSize  float64
+	HAlign    ir.HAlign
+	VAlign    ir.VAlign
 	// AlignSet is whether the layer was told how to align its text. The start
 	// of a run on the baseline is both the zero value and an alignment
 	// somebody may have asked for, and a [Text] layer centres a label in its
@@ -274,6 +293,8 @@ func FromDesc(d Desc) (Geom, error) {
 		return ECDF(d.Source, opts...), nil
 	case MarkTrend:
 		return Trend(d.Source, opts...), nil
+	case MarkErrorBar:
+		return ErrorBar(d.Source, opts...), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownMark, d.Mark)
 }
@@ -295,6 +316,7 @@ func (d Desc) options() []Option {
 		Steps(d.Steps),
 		Whisker(d.Whisker),
 		Outliers(d.Outliers),
+		Caps(d.Caps),
 		Decimate(d.Decimate),
 		Budget(d.Budget),
 		DensityCells(d.CellSize),
@@ -303,6 +325,7 @@ func (d Desc) options() []Option {
 		Extend(d.Extend),
 		Order(d.Order),
 		Closed(d.Closed),
+		onSecondary(d.OnY2, d.OnX2),
 		Bins(d.Bins),
 		BinRange(d.BinLo, d.BinHi),
 		Bandwidth(d.Bandwidth),
@@ -346,6 +369,15 @@ func (d Desc) options() []Option {
 	}
 	if d.TextCol != "" {
 		opts = append(opts, TextBy(d.TextCol))
+	}
+	if d.MidCol != "" {
+		opts = append(opts, Mid(d.MidCol))
+	}
+	if d.ErrorCol != "" {
+		opts = append(opts, ErrorBy(d.ErrorCol))
+	}
+	if d.ErrorXCol != "" {
+		opts = append(opts, ErrorXBy(d.ErrorXCol))
 	}
 	if d.Color != nil {
 		opts = append(opts, Color(*d.Color))
@@ -425,6 +457,8 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Marker:     c.marker,
 		MarkerSet:  c.markerSet,
 		Closed:     c.closed,
+		OnY2:       c.onY2,
+		OnX2:       c.onX2,
 		Size:       c.size,
 		BarWidth:   c.barWidth,
 		Baseline:   c.baseline,
@@ -432,6 +466,10 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Steps:      c.steps,
 		Whisker:    c.whisker,
 		Outliers:   c.outliers,
+		MidCol:     c.midCol,
+		ErrorCol:   c.errCol,
+		ErrorXCol:  c.errXCol,
+		Caps:       c.caps,
 		Decimate:   c.decimate,
 		Budget:     c.budget,
 		CellSize:   c.cellSize,
@@ -535,3 +573,32 @@ var (
 	_ Describer = (*regionGeom)(nil)
 	_ Describer = (*noteGeom)(nil)
 )
+
+// onSecondary is [OnY2] and [OnX2] as plain setters, so that [FromDesc]'s
+// option list can carry the flags either way round. The exported options only
+// ever turn them on, because a layer that says nothing is on the primary axes
+// and an option spelling "not secondary" would read as though there were a
+// third state.
+func onSecondary(y2, x2 bool) Option {
+	return func(c *config) { c.onY2, c.onX2 = y2, x2 }
+}
+
+// OnSecondaryY and OnSecondaryX report whether a layer draws against the
+// chart's secondary vertical or horizontal axis.
+//
+// They are asked through [Describer] rather than through a method on [Geom],
+// because Geom is implemented outside this package and never gains one — and
+// because the binding is already part of what a layer says about itself, so
+// the answer and the document agree by construction. A layer that cannot
+// describe itself reads the primary axes, which is what every layer written
+// before there were two of them means.
+func OnSecondaryY(g Geom) bool {
+	d, ok := Describe(g)
+	return ok && d.OnY2
+}
+
+// OnSecondaryX is [OnSecondaryY] for the horizontal axis.
+func OnSecondaryX(g Geom) bool {
+	d, ok := Describe(g)
+	return ok && d.OnX2
+}

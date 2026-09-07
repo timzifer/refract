@@ -63,6 +63,11 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		// Both are a rect and neither is oriented, so the type does not tell
 		// them apart — the encoding does. See [geomMark].
 		return "rect", "", nil
+	case geom.MarkErrorBar:
+		// Vega-Lite spells it "errorbar" too, and reaches it with an aggregate
+		// transform; refract's reads the bounds from columns, so the name is
+		// the same and what it carries is not.
+		return "errorbar", "", nil
 	case geom.MarkNote, geom.MarkText:
 		// Both are text and neither is oriented, so the type does not tell
 		// them apart — the encoding does, exactly as it does for a rect and a
@@ -112,6 +117,8 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		return geom.MarkECDF, nil
 	case "trend":
 		return geom.MarkTrend, nil
+	case "errorbar":
+		return geom.MarkErrorBar, nil
 	case "rule":
 		switch m.Orient {
 		case "horizontal":
@@ -145,13 +152,23 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 	return geom.Mark(m.Type), nil
 }
 
+// axisSecondaryY and axisSecondaryX are what a document calls the chart's
+// second axes. They are constants rather than literals because the encoder
+// writes them and the decoder reads them, and a vocabulary that drifted
+// between the two would be a round trip that quietly moved a layer to the
+// other axis.
+const (
+	axisSecondaryY = "y2"
+	axisSecondaryX = "x2"
+)
+
 // hasField reports whether a layer's encoding names any column, which is what
 // separates a layer with data from an annotation placed at literal values.
 func hasField(enc *Encoding) bool {
 	if enc == nil {
 		return false
 	}
-	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text} {
+	for _, ch := range [...]*Channel{enc.X, enc.Y, enc.X2, enc.Y2, enc.Color, enc.Detail, enc.Width, enc.Explode, enc.Size, enc.Text, enc.Mid, enc.Error, enc.ErrorX} {
 		if ch != nil && ch.Field != "" {
 			return true
 		}

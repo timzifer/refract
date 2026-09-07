@@ -46,6 +46,15 @@ type Chart struct {
 	X, Y           scale.Scale
 	Layers         []geom.Geom
 
+	// Y2, X2 and their titles are the chart's secondary axes, when it has
+	// them. A reader who cannot see the picture needs to be told there are
+	// two: a description that named one axis for a chart with two would say
+	// the line runs from 0.09 to 0.17 on an axis it called "revenue".
+	Y2      scale.Scale
+	Y2Title string
+	X2      scale.Scale
+	X2Title string
+
 	// Facet names the column a faceted chart is split by, if any. The panels
 	// themselves are not described one by one: "one panel per region" is the
 	// fact a reader needs, and thirty near-identical paragraphs is not.
@@ -80,6 +89,10 @@ type Series struct {
 	// Time reports whether the corresponding axis is temporal, which decides
 	// whether a bound reads as a number or as an instant.
 	XTime, YTime bool
+	// SecondaryY and SecondaryX report a layer read against the chart's second
+	// vertical or horizontal axis, so that a reading of it names the right
+	// one.
+	SecondaryY, SecondaryX bool
 }
 
 // Range is the extent of a column. Ok is false when there was nothing finite
@@ -122,7 +135,19 @@ func describeLayer(i int, g geom.Geom, c Chart) Series {
 	if out.Label == "" {
 		out.Label = string(d.Mark)
 	}
-	out.XTime, out.YTime = isTime(c.X), isTime(c.Y)
+	// The layer's own vertical axis, which is not always the chart's first:
+	// whether a bound reads as a number or as an instant is a fact about the
+	// scale the layer was drawn against.
+	out.SecondaryY = c.Y2 != nil && geom.OnSecondaryY(g)
+	out.SecondaryX = c.X2 != nil && geom.OnSecondaryX(g)
+	x, y := c.X, c.Y
+	if out.SecondaryY {
+		y = c.Y2
+	}
+	if out.SecondaryX {
+		x = c.X2
+	}
+	out.XTime, out.YTime = isTime(x), isTime(y)
 	if d.Source == nil {
 		// An annotation carries values rather than columns, and its extent is
 		// the values it was given.
@@ -241,9 +266,19 @@ func detail(c Chart, series []Series) string {
 	}
 
 	fmt.Fprintf(&b, "%s with %s.", plural(len(series), "layer", "layers"), listMarks(series))
-	if c.XTitle != "" || c.YTitle != "" {
+	if c.XTitle != "" || c.YTitle != "" || c.Y2Title != "" || c.X2Title != "" {
 		b.WriteString(" Axes: ")
 		b.WriteString(axisPhrase(c.XTitle, c.YTitle))
+		if c.Y2Title != "" {
+			b.WriteString(", and ")
+			b.WriteString(c.Y2Title)
+			b.WriteString(" on a second vertical axis")
+		}
+		if c.X2Title != "" {
+			b.WriteString(", and ")
+			b.WriteString(c.X2Title)
+			b.WriteString(" on a second horizontal axis")
+		}
 		b.WriteString(".")
 	}
 	if c.Facet != "" {
@@ -285,6 +320,9 @@ func nameOr(name, fallback string) string {
 }
 
 func axisPhrase(x, y string) string {
+	if x == "" && y == "" {
+		return "none named"
+	}
 	switch {
 	case x != "" && y != "":
 		return x + " horizontally, " + y + " vertically"

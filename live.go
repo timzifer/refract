@@ -425,6 +425,10 @@ func (l *Live) Wheel(x, y, factor float64) error {
 	mx, my := cd.Invert(pt)
 	zoomAxis(p.X, x0, x1, mx, factor)
 	zoomAxis(p.Y, y0, y1, my, factor)
+	// Every axis in each direction, or the series slide apart: a chart with a
+	// second axis is one chart, and a zoom is one zoom.
+	zoomAxis(p.Y2, y0, y1, my, factor)
+	zoomAxis(p.X2, x0, x1, mx, factor)
 	l.fire(Event{Kind: Zoom, Point: pt, Panel: l.panelIndex(pt), Factor: factor})
 	return l.Draw()
 }
@@ -445,6 +449,8 @@ func (l *Live) ZoomTo(r ir.Rect) error {
 	bx, by := cd.Invert(r.Max)
 	setDomain(p.X, ax, bx)
 	setDomain(p.Y, ay, by)
+	setDomain(p.Y2, ay, by)
+	setDomain(p.X2, ax, bx)
 	l.fire(Event{Kind: Zoom, Point: mid, Panel: l.panelIndex(mid), Rect: r})
 	return l.Draw()
 }
@@ -466,6 +472,8 @@ func (l *Live) PanBy(dx, dy float64) error {
 	toX, toY := cd.Invert(ir.Point{X: l.last.X + float32(dx), Y: l.last.Y + float32(dy)})
 	panAxis(p.X, x0, x1, toX-fromX)
 	panAxis(p.Y, y0, y1, toY-fromY)
+	panAxis(p.Y2, y0, y1, toY-fromY)
+	panAxis(p.X2, x0, x1, toX-fromX)
 	l.fire(Event{
 		Kind:  Pan,
 		Point: l.last,
@@ -481,6 +489,8 @@ func (l *Live) Autoscale() error {
 	for _, p := range l.idx.Panels() {
 		autoscale(p.X)
 		autoscale(p.Y)
+		autoscale(p.Y2)
+		autoscale(p.X2)
 	}
 	return l.Draw()
 }

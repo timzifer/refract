@@ -1,13 +1,13 @@
 # Chart types: what exists, what is missing, and what each one costs
 
-refract draws fourteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
-`Area`, `Step`, `Boxplot`, `Rect`, `Histogram`, `Violin`, `Ridgeline`, `Hexbin`,
-`Beeswarm`, `ECDF` and `Trend`, plus the annotations in `geom/annotate.go`. This
-document is
-the catalogue of what it does not draw yet, sorted **by the machinery each form
-needs** rather than by how popular it is. Sorted that way the list stops being a
-wish list and becomes a schedule: half of these charts share four pieces of
-plumbing, and once those exist the charts themselves are small.
+refract draws sixteen data-bearing marks today — `Line`, `Scatter`, `Bar`,
+`Area`, `Step`, `Boxplot`, `Rect`, `Text`, `ErrorBar`, `Histogram`, `Violin`,
+`Ridgeline`, `Hexbin`, `Beeswarm`, `ECDF` and `Trend`, plus the annotations in
+`geom/annotate.go`. This document is the catalogue of what it does not draw
+yet, sorted **by the machinery each form needs** rather than by how popular it
+is. Sorted that way the list stops being a wish list and becomes a schedule:
+half of these charts share four pieces of plumbing, and once those exist the
+charts themselves are small.
 
 The milestone column follows [CONCEPT §14](../CONCEPT.md). Nothing here is a
 commitment to draw every form as a named constructor; several are recipes over a
@@ -240,10 +240,29 @@ and a combined ZY overlay are each a third grid family, and there are two tick
 lists. That is the same constraint that chose the data model, and the two would
 be reopened together.
 
+## H — what is not a chart type
+
+The forms above are shapes. This bucket is the other kind of gap: things a
+chart says that no mark draws, and that were missing for long enough to be
+worth naming as a class. They share no machinery with each other either, but
+each of them is small, and each of them was reachable only by giving up
+something else.
+
+| Gap | Status | What it was |
+|---|---|---|
+| Two quantities in different units | **shipped** — [ADR 0037](adr/0037-secondary-axis.md) | `Plot.Y2` and `geom.OnY2`. A plot had one Y scale and a layer no way to name another, so revenue-and-margin — bars against the left axis, a percentage against the right — could not be drawn at all; normalising into the primary axis's units draws it and makes the axis, the zoom and the tooltip all read in units nobody measured. |
+| One reading with two rulers | **shipped** — [ADR 0037](adr/0037-secondary-axis.md#amendment-the-horizontal-direction) | `Plot.X2` and `geom.OnX2`, the same machinery a quarter turn round. An oven curve the operator counts in cycles and the engineer counts in minutes is one series and two ladders; an axis with no layer on it is still drawn, so that shape needs no second layer at all. |
+| An interval around a measurement | **shipped** — [ADR 0036](adr/0036-error-bars.md) | `geom.ErrorBar`. Every chart of a mean, a forecast or a tolerance has one number and a claim about how well it is known, and the second half had nowhere to go: a band through `Area` is the continuous version and is wrong for three categories. |
+| A tick label a document can choose | **shipped** — [ADR 0035](adr/0035-label-format-and-locale.md) | `scale.NumberFormat` and `scale.TimeLayout`. `scale.Format` takes a Go function, so a chart authored as JSON could not set a thousands separator, a currency or a decimal place at all. |
+| A chart in a language | **shipped** — [ADR 0035](adr/0035-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
+| A PDF in a script WinAnsi cannot hold | **shipped** — [ADR 0038](adr/0038-embedded-fonts.md) | `pdf.WithFont`. The PDF emitter named the base-14 Helvetica and encoded WinAnsi, so every rune outside Latin-1 became `?` — Greek, Cyrillic, Hebrew, Thai and every CJK script, in the format people send to customers. |
+| Absence in a text or temporal column | **shipped** — [ADR 0034](adr/0034-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
+
 ## Already possible today
 
 Worth saying plainly, because they look like gaps and are not: a **band /
-uncertainty ribbon** is `Area` with `Y2`; a **step chart** is `Step`; a
+uncertainty ribbon** is `Area` with `Y2` (and the discrete version of the same
+statement is `ErrorBar`); a **step chart** is `Step`; a
 **density cloud** over a million points is `Scatter` with
 `geom.Decimate(geom.DensityRaster)`; **reference lines, spans, regions and
 callouts** are the annotations in `geom/annotate.go`; a **slope chart** is a
@@ -270,7 +289,17 @@ The dependency order is not a preference:
    ([ADR 0028](adr/0028-distribution-stats.md)): F, less contour and QQ.
 8. ~~**A Smith coord**~~ — shipped in v1.2
    ([ADR 0033](adr/0033-smith-charts.md)): G, on the seam v0.8 already cut.
-9. **Relational layouts** — E, the only bucket that shares nothing with the
+9. ~~**Bucket H**~~ — shipped: the gaps that are not chart types at all. It is
+   listed last in this order and first in nothing, because sorting by
+   machinery is what makes a schedule and these have none — each is small,
+   independent, and was blocking a whole class of charts from being *usable*
+   rather than from being drawn. What is left of the bucket is an **overlay
+   layer the chart itself owns** — a tooltip, a crosshair, a brush rectangle —
+   which `interact` cannot draw because it only reads, and which linked
+   brushing across panels needs before anything else; and a **de-overlap pass
+   for labels**, which [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a
+   layout question rather than a mark's.
+10. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this

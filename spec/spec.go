@@ -84,10 +84,15 @@ type Chart struct {
 	Title         string
 	XTitle        string
 	YTitle        string
-	X, Y          scale.Scale
-	Coord         coord.Coord
-	Layers        []geom.Geom
-	Facet         *facet.Spec
+	// Y2Title and X2Title label the secondary axes, and Y2 and X2 are their
+	// scales. All four are zero for a chart with one axis in that direction.
+	Y2Title string
+	X2Title string
+	X, Y    scale.Scale
+	Y2, X2  scale.Scale
+	Coord   coord.Coord
+	Layers  []geom.Geom
+	Facet   *facet.Spec
 
 	// Tracks are the bands at the plot's edges, in the order they were added.
 	Tracks []Track
@@ -168,6 +173,24 @@ type Mark struct {
 	Baseline    string    `json:"baseline,omitempty"`
 	FontSize    float64   `json:"fontSize,omitempty"`
 	Angle       float64   `json:"angle,omitempty"`
+
+	// Caps is whether an error bar carries a crossbar at each end. It is
+	// refract's own, it is a pointer because the default is true rather than
+	// false, and a document that omits it gets the caps — writing `false`
+	// is the point-range look.
+	Caps *bool `json:"caps,omitempty"`
+
+	// XAxis and YAxis name the scales this layer's values are read against:
+	// "x2" and "y2" for the chart's secondary axes, and empty for its primary
+	// ones. They are two fields rather than one because the two directions are
+	// independent — a layer may read the top axis and the right one — and a
+	// single field would have to spell a set.
+	//
+	// They are refract's own: Vega-Lite reaches a second axis by layering two
+	// specs with independent resolves, which is a different picture and a
+	// different set of scales.
+	XAxis string `json:"xAxis,omitempty"`
+	YAxis string `json:"yAxis,omitempty"`
 
 	// Elide is whether a text layer truncates a label too wide for the box its
 	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
@@ -326,11 +349,35 @@ type Encoding struct {
 	// a rect apart from a region.
 	Text *Channel `json:"text,omitempty"`
 
+	// YSecondary and XSecondary are the chart's secondary axes: the scales a
+	// layer whose mark names `"yAxis": "y2"` or `"xAxis": "x2"` is drawn
+	// against, and the titles written down the chart's right-hand side and
+	// along its top. They are only ever set on the top-level encoding — a
+	// layer has one channel per direction, and which axis it reads is the
+	// mark's business rather than the channel's.
+	//
+	// They are not spelled `x2` and `y2` because those names are already the
+	// *layer* channels for the far end of a band, and two things called y2 in
+	// one document is how a reader ends up with a chart that draws neither.
+	YSecondary *Channel `json:"ySecondary,omitempty"`
+	XSecondary *Channel `json:"xSecondary,omitempty"`
+
 	// Size is the column a mark takes its size from — the bubble chart's third
 	// dimension. Vega-Lite has the same channel with the same name; what is
 	// refract's is that the scale behind it is read as an *area*, which the
 	// scale's `type: "size"` says.
 	Size *Channel `json:"size,omitempty"`
+
+	// Mid is the column an error bar marks its measurement at, inside the
+	// interval its positional channels describe. Error and ErrorX are the
+	// symmetric spelling: a column of half-widths about the value on that
+	// axis. All three are refract's, so no Vega-Lite name is borrowed —
+	// Vega-Lite reaches the same picture with an `errorbar` mark and an
+	// aggregate transform, which refract does not have because a stat runs in
+	// the layer.
+	Mid    *Channel `json:"mid,omitempty"`
+	Error  *Channel `json:"error,omitempty"`
+	ErrorX *Channel `json:"errorX,omitempty"`
 }
 
 // Channel is one encoding: a column, or a literal value, and the scale behind
@@ -382,6 +429,27 @@ type Scale struct {
 	// not zero. Anchoring anywhere but zero stops the drawing being a
 	// proportion, so it is written out rather than assumed.
 	SizeZero *float64 `json:"sizeZero,omitempty"`
+
+	// Format is how this axis writes its tick labels, and Locale the language
+	// it writes them in.
+	//
+	// A numeric scale reads Format as a number format —
+	// [github.com/timzifer/refract/scale.NumberFormat] gives the grammar,
+	// which is "#" for the number with an optional group comma, decimals,
+	// style letter, and any literal text around it: "€ #,.2". A time scale
+	// reads it as a Go reference layout, which is
+	// [github.com/timzifer/refract/scale.TimeLayout]. One field rather than
+	// two because the scale's own type already says which of the two an axis
+	// is, and Vega-Lite spells both of its equivalents `format` as well —
+	// there on the axis, which refract has no object for.
+	//
+	// Locale is a name, resolved against what the reading process registered
+	// through [github.com/timzifer/refract/scale.RegisterLocale]. A name
+	// nothing registered draws in English and is written back out unchanged,
+	// so a document does not lose what it asked for by passing through a
+	// process that cannot honour it.
+	Format string `json:"format,omitempty"`
+	Locale string `json:"locale,omitempty"`
 
 	// MinorTicks, Center, Undefined, TimeZone and Origin are refract's.
 	MinorTicks *bool    `json:"minorTicks,omitempty"`

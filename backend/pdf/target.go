@@ -3,9 +3,11 @@ package pdf
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 
+	"github.com/timzifer/refract/internal/sfnt"
 	"github.com/timzifer/refract/ir"
 )
 
@@ -17,6 +19,29 @@ type options struct {
 	author   string
 	subject  string
 	compress bool
+
+	// fonts are the faces the document embeds, or nil for the base-14
+	// Helvetica every reader already has. fontErr carries a parse failure to
+	// Open, because an Option cannot return one.
+	fonts   *fontSet
+	fontErr error
+}
+
+// fontSet is the three faces a chart draws in. A nil bold or italic falls back
+// to the regular one, which is what a caller supplying a single face gets and
+// is better than a bold label drawn in a font that is not there.
+type fontSet struct {
+	regular, bold, italic *sfnt.Font
+}
+
+func (s *fontSet) face(weight int, italic bool) *sfnt.Font {
+	if italic && s.italic != nil {
+		return s.italic
+	}
+	if weight >= 600 && s.bold != nil {
+		return s.bold
+	}
+	return s.regular
 }
 
 // Title sets the document title shown in a reader's properties panel. It is
@@ -33,6 +58,77 @@ func Subject(s string) Option { return func(o *options) { o.subject = s } }
 // it. The file is several times larger and can be read in a text editor, which
 // is what it is for: reading a diff of what the backend emitted.
 func Uncompressed() Option { return func(o *options) { o.compress = false } }
+
+// WithFont embeds the given TrueType or OpenType faces in the document and
+// draws every label with them, instead of naming the base-14 Helvetica that
+// every reader already has.
+//
+// It is what a chart labelled in anything but Latin-1 needs. Without it the
+// output carries no font at all — which is the right default, because it makes
+// a chart of Latin text a few kilobytes and universally readable — and a rune
+// outside WinAnsi becomes "?": no Greek, no Cyrillic, no Hebrew, no Thai, no
+// CJK. With it, the text is written as glyph ids through an Identity-H
+// encoding and the font travels with the document, so the label reads the same
+// on a machine that has never heard of the typeface.
+//
+//	ttf, err := os.ReadFile("NotoSansJP-Regular.ttf")
+//	// …
+//	p.Render(pdf.File("chart.pdf", pdf.WithFont(ttf, nil, nil)))
+//
+// bold and italic may be nil, and a face that is absent falls back to the
+// regular one — a bold label drawn in the regular weight is a better answer
+// than one drawn in a font the document does not carry.
+//
+// # What is embedded
+//
+// A TrueType font is **subset**: only the glyphs the document actually draws
+// are written out, so a chart with twenty Japanese labels carries twenty
+// glyphs rather than a twenty-megabyte font. A CFF-flavoured OpenType font —
+// usually an `.otf` — is embedded **whole**, because cutting up charstrings is
+// a second outline interpreter this package does not have; the document is
+// correct and larger, and a `.ttf` build of the same family avoids it.
+//
+// A `ToUnicode` map is always written, so the text in the document can still
+// be selected, copied, searched and read aloud. A picture of a label is what
+// the accessibility work exists to avoid, and it would be exactly what an
+// embedded font without one produced.
+//
+// A parse failure surfaces when the target is opened rather than here, because
+// an Option cannot return an error.
+func WithFont(regular, bold, italic []byte) Option {
+	return func(o *options) {
+		reg, err := sfnt.Parse(regular)
+		if err != nil {
+			o.fontErr = fmt.Errorf("refract/backend/pdf: parsing the supplied regular font: %w", err)
+			return
+		}
+		if !reg.HasUnicodeMap() {
+			o.fontErr = errors.New("refract/backend/pdf: the supplied regular font has no Unicode character map, so no label could be mapped to a glyph")
+			return
+		}
+		set := &fontSet{regular: reg}
+		if set.bold, err = optionalFont(bold, "bold"); err != nil {
+			o.fontErr = err
+			return
+		}
+		if set.italic, err = optionalFont(italic, "italic"); err != nil {
+			o.fontErr = err
+			return
+		}
+		o.fonts = set
+	}
+}
+
+func optionalFont(b []byte, which string) (*sfnt.Font, error) {
+	if len(b) == 0 {
+		return nil, nil
+	}
+	f, err := sfnt.Parse(b)
+	if err != nil {
+		return nil, fmt.Errorf("refract/backend/pdf: parsing the supplied %s font: %w", which, err)
+	}
+	return f, nil
+}
 
 // Writer returns a Target that writes a PDF document to w.
 func Writer(w io.Writer, opts ...Option) ir.Target {
@@ -70,6 +166,9 @@ type target struct {
 func (t *target) Open(widthPx, heightPx int, dpr float64) (ir.Backend, error) {
 	if widthPx <= 0 || heightPx <= 0 {
 		return nil, errors.New("refract/backend/pdf: chart size must be positive")
+	}
+	if t.opts.fontErr != nil {
+		return nil, t.opts.fontErr
 	}
 	if t.w == nil {
 		f, err := os.Create(t.path)

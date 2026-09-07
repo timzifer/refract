@@ -32,7 +32,13 @@ func Of(c Chart) (Spec, error) {
 	if enc.Y, err = axisChannel(c.Y, c.YTitle); err != nil {
 		return Spec{}, fmt.Errorf("refract/spec: y axis: %w", err)
 	}
-	if enc.X != nil || enc.Y != nil {
+	if enc.YSecondary, err = axisChannel(c.Y2, c.Y2Title); err != nil {
+		return Spec{}, fmt.Errorf("refract/spec: secondary y axis: %w", err)
+	}
+	if enc.XSecondary, err = axisChannel(c.X2, c.X2Title); err != nil {
+		return Spec{}, fmt.Errorf("refract/spec: secondary x axis: %w", err)
+	}
+	if enc.X != nil || enc.Y != nil || enc.YSecondary != nil || enc.XSecondary != nil {
 		s.Encoding = enc
 	}
 
@@ -46,7 +52,7 @@ func Of(c Chart) (Spec, error) {
 			return Spec{}, err
 		}
 	}
-	axes := axisKinds{x: kindOf(c.X), y: kindOf(c.Y)}
+	axes := axisKinds{x: kindOf(c.X), y: kindOf(c.Y), y2: kindOf(c.Y2), x2: kindOf(c.X2)}
 	for i, g := range c.Layers {
 		l, err := encodeLayer(g, hoist, axes)
 		if err != nil {
@@ -129,7 +135,7 @@ func channelType(k scale.Kind) string {
 }
 
 func encodeScale(d scale.Desc) *Scale {
-	out := &Scale{Nice: d.Nice, Zero: d.Zero}
+	out := &Scale{Nice: d.Nice, Zero: d.Zero, Format: d.Format, Locale: d.Locale}
 	switch d.Kind {
 	case scale.KindLinear:
 		out.Type, out.TickValues = "linear", d.TickValues
@@ -141,6 +147,10 @@ func encodeScale(d scale.Desc) *Scale {
 		out.MinorTicks = boolPtr(d.MinorTicks)
 	case scale.KindTime:
 		out.Type, out.TimeZone = "time", d.Location
+		// A time scale's declarative format is a layout, and it travels in
+		// the same field a numeric scale's number format does: the type says
+		// which of the two this is.
+		out.Format = d.Layout
 		if d.Origin != 0 {
 			out.Origin = time.Unix(0, d.Origin).UTC().Format(timeLayout)
 		}
@@ -270,6 +280,12 @@ func encodeLayer(g geom.Geom, hoisted bool, axes axisKinds) (Layer, error) {
 	}
 
 	m := Mark{Type: typ, Orient: orient, Extra: d.Extra}
+	if d.OnY2 {
+		m.YAxis = axisSecondaryY
+	}
+	if d.OnX2 {
+		m.XAxis = axisSecondaryX
+	}
 	if d.Color != nil {
 		m.Color = colorHex(*d.Color)
 	}
@@ -448,6 +464,14 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 		if d.MarkerSet {
 			m.Shape = shapeName(d.Marker)
 		}
+	case geom.MarkErrorBar:
+		stroke()
+		rows()
+		group()
+		m.Size, m.BarWidth, m.Caps = d.Size, float64Ptr(d.BarWidth), boolPtr(d.Caps)
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
 	case geom.MarkECDF:
 		stroke()
 		group()
@@ -503,6 +527,11 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 
 func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 	enc := &Encoding{}
+	// An annotation's literal values are written in the spelling of the axis
+	// it is placed against, which is the second one where the layer asked for
+	// it — a threshold on a temporal secondary axis is a timestamp even on a
+	// chart whose first axis is a number line.
+	axes.y, axes.x = axes.vertical(d.OnY2), axes.horizontal(d.OnX2)
 	if d.Source != nil {
 		if d.X != "" {
 			enc.X = &Channel{Field: d.X}
@@ -534,6 +563,15 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		}
 		if d.TextCol != "" {
 			enc.Text = &Channel{Field: d.TextCol}
+		}
+		if d.MidCol != "" {
+			enc.Mid = &Channel{Field: d.MidCol}
+		}
+		if d.ErrorCol != "" {
+			enc.Error = &Channel{Field: d.ErrorCol}
+		}
+		if d.ErrorXCol != "" {
+			enc.ErrorX = &Channel{Field: d.ErrorXCol}
 		}
 		if d.SizeCol != "" && d.SizeScale != nil {
 			ss, err := encodeSizeScale(d.SizeScale)
@@ -587,7 +625,27 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 // axisKinds remembers what each axis is, so that a value annotating a time
 // axis is written as the timestamp it is rather than as a count of
 // nanoseconds nobody can read.
-type axisKinds struct{ x, y axisKind }
+type axisKinds struct{ x, y, y2, x2 axisKind }
+
+// vertical and horizontal are the kinds of the axes a layer's values are read
+// against, which are the secondary ones where the layer asked for them. They
+// matter for an annotation rather than for a mark: a datum is written as a
+// timestamp on a temporal axis and as a number everywhere else, so a threshold
+// on a second axis of a different kind would otherwise be written in the first
+// axis's spelling.
+func (a axisKinds) vertical(onY2 bool) axisKind {
+	if onY2 && a.y2 != "" {
+		return a.y2
+	}
+	return a.y
+}
+
+func (a axisKinds) horizontal(onX2 bool) axisKind {
+	if onX2 && a.x2 != "" {
+		return a.x2
+	}
+	return a.x
+}
 
 type axisKind scale.Kind
 

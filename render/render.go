@@ -37,8 +37,27 @@ type Chart struct {
 	Title  string
 	XTitle string
 	YTitle string
+	// Y2Title labels the secondary vertical axis, down the right-hand side,
+	// and X2Title the secondary horizontal one, along the top.
+	Y2Title string
+	X2Title string
 
 	X, Y scale.Scale
+
+	// Y2 is the chart's secondary vertical axis, drawn down the right-hand
+	// side, and X2 its secondary horizontal one, drawn along the top. Each is
+	// read by the layers that asked for it with
+	// [github.com/timzifer/refract/geom.OnY2] or OnX2, and each is nil for a
+	// chart with one axis in that direction — which is every chart written
+	// before there were two.
+	//
+	// They are the chart's rather than a panel's for the reason the coord is:
+	// the panels of a facet are one plot over different rows, and a second
+	// axis that meant different things in different panels would be a
+	// different chart. A grid of subplots gives each panel its own through
+	// [Panel.Y2] and [Panel.X2].
+	Y2 scale.Scale
+	X2 scale.Scale
 
 	// Coord is the stage between the scales and the IR: what the interval a
 	// scale maps into means. Nil is [coord.Cartesian], which is the identity,
@@ -131,6 +150,26 @@ type Observer interface {
 	Layer(i int, label string)
 }
 
+// LayerAxes is an optional interface beside [Observer]: an observer that
+// implements it is told which scales the layer about to be opened reads.
+//
+// It exists because those are not always the panel's own. A layer bound to a
+// secondary axis with [github.com/timzifer/refract/geom.OnY2] or OnX2 is drawn
+// against a different scale, and an index that inverted its marks through the
+// panel's own would report a value from the wrong axis — a tooltip naming
+// 4 200 on a chart whose right axis reads 12 %.
+//
+// It is optional rather than a third method on Observer because Observer is
+// implemented outside this package and never gains one
+// ([CONCEPT §15](../CONCEPT.md#15-versioning--stability)). An observer that
+// does not implement it sees exactly what it saw before there were two axes.
+type LayerAxes interface {
+	// LayerAxes names the scales the next layer opened by [Observer.Layer] is
+	// drawn against. It is called immediately before it, and both are ranged
+	// for the panel already announced.
+	LayerAxes(x, y scale.Scale)
+}
+
 // Panel is one Cartesian area of a multi-panel chart.
 type Panel struct {
 	// Row and Col place the panel in the grid.
@@ -142,6 +181,13 @@ type Panel struct {
 	// X and Y are this panel's scales. Panels sharing an axis share the scale
 	// object, which is what makes the axis shared rather than merely similar.
 	X, Y scale.Scale
+
+	// Y2 and X2 are this panel's secondary vertical and horizontal axes, or
+	// nil for a panel with one in that direction. The layers that read them
+	// are the ones that answer
+	// [github.com/timzifer/refract/geom.OnSecondaryY] and OnSecondaryX.
+	Y2 scale.Scale
+	X2 scale.Scale
 
 	// Coord overrides the chart's coordinate system for this panel, and is nil
 	// for the panels that use it — which is every panel of a facet, because
@@ -157,8 +203,10 @@ type Panel struct {
 
 	// ShowX and ShowY report whether this panel writes its own tick labels. A
 	// panel that shares an axis with its neighbour leaves the labels to the
-	// edge of the grid.
-	ShowX, ShowY bool
+	// edge of the grid. ShowY2 and ShowX2 are the same question for the
+	// secondary axes, answered at the right-hand and top edges of the grid
+	// rather than the left and bottom ones.
+	ShowX, ShowY, ShowY2, ShowX2 bool
 
 	// HideGrid suppresses this panel's grid lines while leaving its fill, its
 	// axes and its tick marks alone. A track — a band on the panel's own X,
@@ -196,7 +244,7 @@ func Draw(b ir.Backend, c Chart) error {
 	//    measured.
 	for _, p := range panels {
 		for _, g := range p.Layers {
-			if err := g.Train(p.X, p.Y); err != nil {
+			if err := g.Train(p.axesOf(g)); err != nil {
 				return err
 			}
 		}
@@ -217,6 +265,8 @@ func Draw(b ir.Backend, c Chart) error {
 		Title:      c.Title,
 		XTitle:     c.XTitle,
 		YTitle:     c.YTitle,
+		Y2Title:    c.Y2Title,
+		X2Title:    c.X2Title,
 		Rows:       rows,
 		Cols:       cols,
 		Panels:     measurePanels(panels, th),
@@ -246,6 +296,7 @@ func Draw(b ir.Backend, c Chart) error {
 		drawPanelFill(b, area, th)
 		drawGrid(b, th, p, fur, xTicks, yTicks)
 		drawAxes(b, th, p, fur, xTicks, yTicks)
+		drawSecondaryAxes(b, th, p, cd, area)
 		drawStrip(b, lay.Strips[i], th, p.Strip, 0)
 		drawStrip(b, lay.RightStrips[i], th, p.RightStrip, halfPi)
 	}
@@ -303,7 +354,8 @@ func (c Chart) panels() ([]Panel, int, int) {
 		return c.Panels, rows, cols
 	}
 	return []Panel{{
-		X: c.X, Y: c.Y, Layers: c.Layers, ShowX: true, ShowY: true,
+		X: c.X, Y: c.Y, Y2: c.Y2, X2: c.X2, Layers: c.Layers,
+		ShowX: true, ShowY: true, ShowY2: true, ShowX2: true,
 	}}, 1, 1
 }
 
@@ -325,7 +377,44 @@ func (p Panel) rangeTo(cd coord.Coord, area ir.Rect, th theme.Theme) (coord.Coor
 // setRange is rangeTo without the ticks, for the data pass, which needs the
 // range and has no use for the tick list the furniture pass already drew.
 func (p Panel) setRange(cd coord.Coord, area ir.Rect) coord.Coord {
+	if p.Y2 != nil || p.X2 != nil {
+		// A second axis maps into the same interval the first does, so it is
+		// framed against the same rectangle — and it has to be framed at all,
+		// or the layers that read it would map through a scale with no device
+		// range. One extra call covers both, because Frame ranges the two
+		// scales it is handed; the framed coord is the same either way,
+		// because a coord's own state is the rectangle rather than the scales
+		// in it.
+		cd.Frame(area, orElse(p.X2, p.X), orElse(p.Y2, p.Y))
+	}
 	return cd.Frame(area, p.X, p.Y)
+}
+
+func orElse(s, fallback scale.Scale) scale.Scale {
+	if s != nil {
+		return s
+	}
+	return fallback
+}
+
+// axesOf is the pair of scales a layer reads: the panel's secondary axis in
+// each direction where the layer asked for it and the chart has one, and the
+// panel's own otherwise. The two are independent, so a layer may read the top
+// axis and the left one.
+//
+// A layer that asks for an axis the chart does not have reads the primary one
+// rather than failing, for the reason a break-out under a Cartesian coord
+// draws nothing rather than erroring: an option every mark accepts must not
+// make a chart's validity depend on something set somewhere else.
+func (p Panel) axesOf(g geom.Geom) (x, y scale.Scale) {
+	x, y = p.X, p.Y
+	if p.X2 != nil && geom.OnSecondaryX(g) {
+		x = p.X2
+	}
+	if p.Y2 != nil && geom.OnSecondaryY(g) {
+		y = p.Y2
+	}
+	return x, y
 }
 
 // measurePanels reports what each panel will write, so the solver can size the
@@ -335,6 +424,12 @@ func measurePanels(panels []Panel, th theme.Theme) []layout.Panel {
 	for i, p := range panels {
 		p.X.SetRange(0, 1)
 		p.Y.SetRange(1, 0)
+		if p.Y2 != nil {
+			p.Y2.SetRange(1, 0)
+		}
+		if p.X2 != nil {
+			p.X2.SetRange(0, 1)
+		}
 		out[i] = layout.Panel{
 			Row:        p.Row,
 			Col:        p.Col,
@@ -348,6 +443,12 @@ func measurePanels(panels []Panel, th theme.Theme) []layout.Panel {
 		}
 		if p.ShowY && th.ShowTicksY {
 			out[i].YLabels = labelsOf(p.Y.Ticks(th.TickCountHintY))
+		}
+		if p.Y2 != nil && p.ShowY2 && th.ShowTicksY {
+			out[i].Y2Labels = labelsOf(p.Y2.Ticks(th.TickCountHintY))
+		}
+		if p.X2 != nil && p.ShowX2 && th.ShowTicksX {
+			out[i].X2Labels = labelsOf(p.X2.Ticks(th.TickCountHintX))
 		}
 	}
 	return out
@@ -591,6 +692,80 @@ func drawAxes(b ir.Backend, th theme.Theme, p Panel, fur *coord.Furniture, xTick
 	}
 }
 
+// drawSecondaryAxes strokes the panel's second axes: a line, its tick marks
+// and its labels, and no grid.
+//
+// It takes a Furniture of its own out of the pool rather than a second set of
+// fields on the one the panel already filled. The coord fills one side of
+// whatever it is given, so one struct with two of everything in it would mean
+// a wider Furniture for every chart to carry and a coord that had to know
+// which half it was filling.
+//
+// A coord that cannot place a second axis draws none. That is [coord.Polar]:
+// a ring has one angular axis and one radial one and no far side to put
+// another on, and a second one over the first would be two scales sharing one
+// line.
+func drawSecondaryAxes(b ir.Backend, th theme.Theme, p Panel, cd coord.Coord, area ir.Rect) {
+	if p.Y2 != nil {
+		drawOppositeAxis(b, th, cd, area, p.Y2, p.ShowY2, true,
+			th.ShowTicksY, th.ShowAxisLineY, th.TickCountHintY)
+	}
+	if p.X2 != nil {
+		drawOppositeAxis(b, th, cd, area, p.X2, p.ShowX2, false,
+			th.ShowTicksX, th.ShowAxisLineX, th.TickCountHintX)
+	}
+}
+
+// drawOppositeAxis is one of the two, written once: the sides differ in which
+// furniture slot the coord fills and which of the theme's switches apply, and
+// in nothing else.
+func drawOppositeAxis(b ir.Backend, th theme.Theme, cd coord.Coord, area ir.Rect,
+	s scale.Scale, labels, vertical, showTicks, showLine bool, want int,
+) {
+	if !showTicks && !showLine {
+		return
+	}
+	ticks := s.Ticks(want)
+	fur := acquireFurniture()
+	defer releaseFurniture(fur)
+	fur.Reset()
+	if !coord.OppositeFurniture(cd, fur, area, metricsOf(th), ticks, vertical) {
+		return
+	}
+
+	axis := ir.Stroke{Color: th.AxisColor, Width: th.AxisWidth, Cap: ir.CapButt}
+	line, marks, places, in := &fur.AxisY, fur.TickY, fur.LabelY, fur.InY
+	if !vertical {
+		line, marks, places, in = &fur.AxisX, fur.TickX, fur.LabelX, fur.InX
+	}
+	if showLine {
+		strokeShape(b, line, axis)
+	}
+	if !showTicks {
+		return
+	}
+	tickFont := th.Font(th.TickSize)
+	// A second horizontal axis's labels share a row exactly as the first
+	// one's do, so the same collision pass runs over them — two labels along
+	// the top of a panel run into each other on the same evidence.
+	keep := []bool(nil)
+	if !vertical {
+		keep = selectXLabels(b, fur, ticks, tickFont, th.TickLabelPad)
+	}
+	for i, t := range ticks {
+		if !inFurniture(in, i) {
+			continue
+		}
+		if axis.Visible() {
+			strokeShape(b, shapeAt(marks, i), axis)
+		}
+		if t.Label == "" || !labels || (keep != nil && !keep[i]) {
+			continue
+		}
+		b.Text(labelRun(t.Label, tickFont, places[i], th.TickColor))
+	}
+}
+
 // inFurniture reports whether tick i falls inside the panel. A coord that
 // reported no answer for it has nothing to draw.
 func inFurniture(in []bool, i int) bool { return i < len(in) && in[i] }
@@ -668,6 +843,29 @@ func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 			Color:    th.LabelColor,
 		})
 	}
+	if c.X2Title != "" && c.X2 != nil {
+		b.Text(ir.TextRun{
+			Text:  c.X2Title,
+			Font:  labelFont,
+			At:    lay.X2Title,
+			H:     ir.AlignCenter,
+			Color: th.LabelColor,
+		})
+	}
+	if c.Y2Title != "" && c.Y2 != nil {
+		// A quarter turn the other way, so that the right-hand title reads
+		// from the outside of the chart exactly as the left-hand one does.
+		// Rotating both the same way would leave one of them upside down to a
+		// reader standing where that axis is.
+		b.Text(ir.TextRun{
+			Text:     c.Y2Title,
+			Font:     labelFont,
+			At:       lay.Y2Title,
+			H:        ir.AlignCenter,
+			Rotation: halfPi,
+			Color:    th.LabelColor,
+		})
+	}
 }
 
 // halfPi is a quarter turn. The Y axis title reads bottom-to-top, which is a
@@ -686,8 +884,16 @@ func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observe
 	defer b.Pop()
 
 	for i, g := range p.Layers {
-		f := geom.Frame{Area: plot, X: p.X, Y: p.Y, Coord: cd, Theme: th, Index: i, Rows: rows}
+		x, y := p.axesOf(g)
+		f := geom.Frame{Area: plot, X: x, Y: y, Coord: cd, Theme: th, Index: i, Rows: rows}
 		if obs != nil {
+			// Which scales this layer reads are told before the layer is
+			// opened, so an observer that indexes the marks that follow knows
+			// which to invert them through. An observer that does not care is
+			// not asked.
+			if ax, ok := obs.(LayerAxes); ok {
+				ax.LayerAxes(x, y)
+			}
 			obs.Layer(i, layerLabel(g, f))
 		}
 		if err := g.Build(b, f); err != nil {

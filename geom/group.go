@@ -265,8 +265,20 @@ func (gs *groups) train(src data.Source, s series, c config, x, y scale.Scale, s
 			c.groupCol, len(labels), len(s.x))
 	}
 
+	// A row whose series is absent registers no key. It is left in group 0
+	// so that every index downstream stays valid, and it is never drawn:
+	// [dropNulls] has already taken its position away, so gs.ok below is
+	// false for it and both the cumulative sum and the drawing traversal skip
+	// it. Registering the key instead would put a series named "" in the
+	// legend and spend a colour of the palette on it. See [data.Nulls].
+	null, _ := data.NullMask(src, c.groupCol)
+
 	gs.of = grow(gs.of, len(labels))
 	for i, l := range labels {
+		if data.IsNull(null, i) {
+			gs.of[i] = 0
+			continue
+		}
 		j, seen := gs.at[l]
 		if !seen {
 			j = len(gs.keys)
@@ -274,6 +286,12 @@ func (gs *groups) train(src data.Source, s series, c config, x, y scale.Scale, s
 			gs.at[l] = j
 		}
 		gs.of[i] = j
+	}
+	if len(gs.keys) == 0 {
+		// Every row's series was absent, so there are no series. That is the
+		// ungrouped layer, reached by the same road as a layer that named no
+		// group column at all.
+		return nil
 	}
 	gs.split(len(labels))
 
