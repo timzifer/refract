@@ -135,7 +135,7 @@ func decodeScale(s Scale, channelType string) (scale.Desc, error) {
 
 	switch typ {
 	case "linear":
-		d.Kind = scale.KindLinear
+		d.Kind, d.TickValues = scale.KindLinear, s.TickValues
 	case "log":
 		d.Kind = scale.KindLog
 	case "symlog":

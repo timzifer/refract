@@ -42,6 +42,7 @@ depends on.
 | [0030](0030-arrow-major-version.md) | The Arrow adapter's major version is its upstream's, and its import path says so | Accepted | — |
 | [0031](0031-tracks.md) | A track is a panel with a fixed extent, on a scale it shares | Accepted | — |
 | [0032](0032-text-as-a-mark.md) | Text is a mark that reads a column, and it labels the box a row spans | Accepted | — |
+| [0033](0033-smith-charts.md) | A Smith chart is the polar-shaped coord seam, over normalised impedance | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

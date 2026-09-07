@@ -376,51 +376,14 @@ func (p *polar) sector(path *ir.Path, a0, sweep, ra, rb float64) {
 
 // onCircle is [polar.at] for an angle that is already a canvas angle.
 func (p *polar) onCircle(angle float64, r float64) ir.Point {
-	s, c := math.Sincos(angle)
-	return ir.Point{X: p.cx + float32(r*s), Y: p.cy - float32(r*c)}
+	return onCircleAt(p.cx, p.cy, angle, r)
 }
 
 // spiral appends the cubics of a sweep from (a0, r0) to (a0+sweep, r1),
-// continuing from the path's current point.
-//
-// A sweep at a constant radius is a circular arc, and this is the exact
-// construction for one: the control points sit a distance k = (4/3)·tan(φ/4)
-// times the radius along the tangent, which at a quarter turn is the
-// kappa in internal/markers. Longer sweeps are cut into quarter turns or less,
-// because that identity degrades badly past one. A sweep whose two radii
-// differ is the same construction with each end scaled by its own radius,
-// which is the honest reading of an edge that is straight in data space when
-// the radius is part of the data.
+// continuing from the path's current point. The construction is [arcTo]; this
+// is only the panel's own centre filled in.
 func (p *polar) spiral(path *ir.Path, a0, r0, sweep, r1 float64) {
-	if sweep == 0 {
-		end := p.onCircle(a0, r1)
-		path.LineTo(end.X, end.Y)
-		return
-	}
-	n := int(math.Ceil(math.Abs(sweep)/(math.Pi/2) - 1e-9))
-	if n < 1 {
-		n = 1
-	}
-	phi := sweep / float64(n)
-	k := 4.0 / 3.0 * math.Tan(phi/4)
-	for i := range n {
-		t0 := float64(i) / float64(n)
-		t1 := float64(i+1) / float64(n)
-		b0, b1 := a0+sweep*t0, a0+sweep*t1
-		ra := r0 + (r1-r0)*t0
-		rb := r0 + (r1-r0)*t1
-		s0, c0 := math.Sincos(b0)
-		s1, c1 := math.Sincos(b1)
-		// The point at angle b is (cx + r·sin b, cy − r·cos b), so the tangent
-		// in the direction of increasing b is (cos b, sin b).
-		p0 := ir.Point{X: p.cx + float32(ra*s0), Y: p.cy - float32(ra*c0)}
-		p3 := ir.Point{X: p.cx + float32(rb*s1), Y: p.cy - float32(rb*c1)}
-		c1x := p0.X + float32(k*ra*c0)
-		c1y := p0.Y + float32(k*ra*s0)
-		c2x := p3.X - float32(k*rb*c1)
-		c2y := p3.Y - float32(k*rb*s1)
-		path.CubicTo(c1x, c1y, c2x, c2y, p3.X, p3.Y)
-	}
+	arcTo(path, p.cx, p.cy, a0, r0, sweep, r1)
 }
 
 // Clip is the disc the panel's data lives in. The hole is not cut out of it:
@@ -431,10 +394,7 @@ func (p *polar) Clip(path *ir.Path, area ir.Rect) {
 		path.Rect(area)
 		return
 	}
-	start := p.onCircle(0, float64(p.r1))
-	path.MoveTo(start.X, start.Y)
-	p.spiral(path, 0, float64(p.r1), 2*math.Pi, float64(p.r1))
-	path.Close()
+	closedCircle(path, p.cx, p.cy, float64(p.r1))
 }
 
 func (p *polar) Invert(pt ir.Point) (x, y float32) {
@@ -547,14 +507,19 @@ func (p *polar) radial(s side, ticks []scale.Tick, m Metrics) {
 }
 
 // ring makes s a full circle of radius r, as four cubics.
-func (p *polar) ring(s *Shape, r float64) {
+func (p *polar) ring(s *Shape, r float64) { closedCircle(&s.Path, p.cx, p.cy, r) }
+
+// closedCircle appends a whole circle as four cubics, starting and ending at
+// twelve o'clock. It is a ring of grid, the rim of a polar panel and the unit
+// circle of a Smith chart, all of which are the same four curves.
+func closedCircle(path *ir.Path, cx, cy float32, r float64) {
 	if r <= 0 {
 		return
 	}
-	start := p.onCircle(0, r)
-	s.Path.MoveTo(start.X, start.Y)
-	p.spiral(&s.Path, 0, r, 2*math.Pi, r)
-	s.Path.Close()
+	start := onCircleAt(cx, cy, 0, r)
+	path.MoveTo(start.X, start.Y)
+	arcTo(path, cx, cy, 0, r, 2*math.Pi, r)
+	path.Close()
 }
 
 // radialAlign is how a label outside the rim sits about its anchor: away from

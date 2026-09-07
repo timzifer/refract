@@ -25,6 +25,7 @@ mark that does not exist yet, and the catalogue says which.
 | A band at a panel's edge on a shared axis (`Plot.Track`) | **shipped in v0.10** — [ADR 0031](adr/0031-tracks.md) | gantt strip under a trace, rug plot, event ribbon, sparkline gutter, shift bands; beside it, colour keys and marginal distributions |
 | A size channel (`geom.SizeBy` + a size scale) | **shipped in v0.9** — [ADR 0027](adr/0027-size-channel-and-the-guide-column.md) | bubble |
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
+| A Smith coordinate system (`coord.Smith`) + pinned ticks (`scale.TickValues`) | **shipped in v1.2** — [ADR 0033](adr/0033-smith-charts.md) | Smith chart, admittance (Y) chart, matching-network locus, impedance region |
 | Relational layouts (squarify, sankey, chord) | missing | treemap, sunburst, sankey, alluvial, chord, arc diagram |
 
 ## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
@@ -208,6 +209,37 @@ and `Silverman` takes two spread measures, because sorting means a buffer and th
 geoms already keep one — one per layer, for the reason `barGeom.gaps` is on the
 layer rather than in the frame's pool.
 
+## G — needs a Smith coordinate system — **shipped in v1.2**
+
+See [ADR 0033](adr/0033-smith-charts.md). A Smith chart is a conformal map of
+the impedance half-plane onto the unit disc, Γ = (z−1)/(z+1). It is the one form
+in this catalogue that no general-purpose library draws, and it needed exactly
+one piece of plumbing — a coord — because everything else it wants shipped
+between v0.1 and v0.9.
+
+| Chart | Recipe |
+|---|---|
+| Smith chart | `Line` over two columns holding r = R/Z₀ and x = X/Z₀, in `coord.Smith` |
+| Measured sweep (S₁₁) | the same, with `coord.SmithZ` converting Γ into the pair — see `examples/smith` |
+| Matching-network locus | `Line` + `coord.SmithArc`, whose steps are straight in impedance and therefore arcs on the disc |
+| Admittance (Y) chart | `coord.SmithAdmittance(true)`, with the columns holding g and b |
+| An impedance tolerance region | `Rect` or a `Region` annotation, whose cell is curvilinear here |
+
+**Three things worth knowing.** The columns are an **impedance**, not a
+reflection coefficient, and that is forced rather than chosen: `render` takes a
+grid line's geometry from the coord and its label from the scale's own tick, so
+a coord may draw one grid line per tick and label nothing the scale did not — so
+the two tick families have to be the two things the reader wants labelled, r and
+x. Both axes are **linear** and their domains are **pinned**, because the
+chart's extent is the whole disc whatever the data does. And an edge is a
+**chord** by default: a line between two measured samples asserting a linear
+sweep in impedance is an assertion the instrument did not make.
+
+**Not drawn, and for one reason.** Constant-|Γ| (VSWR) circles, constant-Q arcs
+and a combined ZY overlay are each a third grid family, and there are two tick
+lists. That is the same constraint that chose the data model, and the two would
+be reopened together.
+
 ## Already possible today
 
 Worth saying plainly, because they look like gaps and are not: a **band /
@@ -236,7 +268,9 @@ The dependency order is not a preference:
    column generalised.
 7. ~~**The stat family**~~ — shipped in v0.9
    ([ADR 0028](adr/0028-distribution-stats.md)): F, less contour and QQ.
-8. **Relational layouts** — E, the only bucket that shares nothing with the
+8. ~~**A Smith coord**~~ — shipped in v1.2
+   ([ADR 0033](adr/0033-smith-charts.md)): G, on the seam v0.8 already cut.
+9. **Relational layouts** — E, the only bucket that shares nothing with the
    others and therefore the only one that can be moved without cost.
 
 **Sankey deliberately sits last.** It is the single most-requested form in this

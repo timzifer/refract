@@ -150,3 +150,95 @@ func TestLinearTicksStayInsideTheDomain(t *testing.T) {
 		}
 	}
 }
+
+// The Smith chart's resistance grid is the reason TickValues exists: 0.2, 0.5,
+// 1, 2, 5 is a convention rather than the answer to a tick search, and no
+// amount of asking for a different tick count produces it.
+func TestTickValuesArePinnedExactly(t *testing.T) {
+	want := []float64{0, 0.2, 0.5, 1, 2, 5}
+	s := scale.Linear(scale.Domain(0, 20), scale.TickValues(5, 1, 0.2, 0, 2, 0.5))
+	s.SetRange(0, 100)
+	for _, want := range [][]float64{want, want} {
+		got := s.Ticks(3)
+		if len(got) != len(want) {
+			t.Fatalf("got %d ticks, want %d", len(got), len(want))
+		}
+		for i, tk := range got {
+			if tk.Value != want[i] {
+				t.Errorf("tick %d is %v, want %v (the list is sorted, not reordered)", i, tk.Value, want[i])
+			}
+			if tk.Pos != s.Map(tk.Value) {
+				t.Errorf("tick %d sits at %v but maps to %v", i, tk.Pos, s.Map(tk.Value))
+			}
+		}
+	}
+}
+
+func TestTickValuesOutsideTheDomainAreDropped(t *testing.T) {
+	s := scale.Linear(scale.Domain(0, 2), scale.TickValues(-1, 0, 1, 2, 5))
+	s.SetRange(0, 100)
+	got := s.Ticks(5)
+	if len(got) != 3 {
+		t.Fatalf("got %d ticks, want the three inside 0..2: %v", len(got), got)
+	}
+	for _, tk := range got {
+		if tk.Value < 0 || tk.Value > 2 {
+			t.Errorf("tick %v lies outside the domain; TickValues does not widen it", tk.Value)
+		}
+	}
+}
+
+// Labels come from the closest spacing, not from an average: 0.2 and 0.5 have
+// to print as different numbers on an axis whose other gaps are whole.
+func TestTickValuesLabelToTheTightestSpacing(t *testing.T) {
+	s := scale.Linear(scale.Domain(0, 5), scale.TickValues(0, 0.2, 0.5, 1, 2, 5))
+	s.SetRange(0, 100)
+	want := []string{"0.0", "0.2", "0.5", "1.0", "2.0", "5.0"}
+	for i, tk := range s.Ticks(5) {
+		if tk.Label != want[i] {
+			t.Errorf("tick %d is labelled %q, want %q", i, tk.Label, want[i])
+		}
+	}
+}
+
+func TestTickValuesYieldToAnExplicitFormat(t *testing.T) {
+	s := scale.Linear(scale.Domain(0, 5),
+		scale.TickValues(0, 1, 5), scale.Format(func(v float64) string { return "x" }))
+	s.SetRange(0, 100)
+	for _, tk := range s.Ticks(5) {
+		if tk.Label != "x" {
+			t.Fatalf("custom format not applied to a pinned tick: %q", tk.Label)
+		}
+	}
+}
+
+// An empty or unusable list leaves the automatic sequence alone: TickValues()
+// is not a way to ask for an axis with no ticks.
+func TestTickValuesIgnoresAnEmptyList(t *testing.T) {
+	s := scale.Linear(scale.Domain(0, 10), scale.TickValues())
+	s.SetRange(0, 100)
+	if len(s.Ticks(5)) == 0 {
+		t.Fatal("an empty TickValues silenced the axis")
+	}
+	s = scale.Linear(scale.Domain(0, 10), scale.TickValues(math.NaN(), math.Inf(1)))
+	s.SetRange(0, 100)
+	if len(s.Ticks(5)) == 0 {
+		t.Fatal("a list of non-finite values silenced the axis")
+	}
+}
+
+// A clone and a snapshot both keep the pinned sequence: it is part of what the
+// scale is, like a fixed domain, rather than something training put there.
+func TestTickValuesSurviveCloneAndSnapshot(t *testing.T) {
+	s := scale.Linear(scale.Domain(0, 5), scale.TickValues(0, 0.5, 2))
+	for name, copied := range map[string]scale.Scale{
+		"clone":    s.(scale.Cloner).Clone(),
+		"snapshot": s.(scale.Snapshotter).Snapshot(),
+	} {
+		copied.SetRange(0, 100)
+		got := copied.Ticks(5)
+		if len(got) != 3 || got[0].Value != 0 || got[1].Value != 0.5 || got[2].Value != 2 {
+			t.Errorf("%s lost the pinned ticks: %v", name, got)
+		}
+	}
+}

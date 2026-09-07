@@ -30,17 +30,30 @@ func encodeCoord(c coord.Coord) (*Coord, error) {
 		Radius:           d.Radius,
 		Start:            d.Start,
 		Counterclockwise: d.Counterclockwise,
+		Admittance:       d.Admittance,
 	}
-	if d.Theta == coord.FromY {
-		out.Theta = ThetaY
-	} else {
-		out.Theta = ThetaX
+	// The angular axis and the sweep are a polar coord's, and writing them onto
+	// every other coord's document would put a field there that means nothing —
+	// `"theta": "x"` is not omitted by omitempty, because "x" is not empty.
+	if d.Type == coord.TypePolar {
+		if d.Theta == coord.FromY {
+			out.Theta = ThetaY
+		} else {
+			out.Theta = ThetaX
+		}
+		if d.Sweep != 0 {
+			sweep := d.Sweep
+			out.Sweep = &sweep
+		}
 	}
-	if d.Sweep != 0 {
-		sweep := d.Sweep
-		out.Sweep = &sweep
-	}
-	if d.Chord {
+	// Each coord's default edge is the absent field, so that a document naming
+	// a type and nothing else draws what that type's constructor draws.
+	switch {
+	case d.Type == coord.TypeSmith:
+		if d.Arc {
+			out.Edge = EdgeArc
+		}
+	case d.Chord:
 		out.Edge = EdgeChord
 	}
 	return out, nil
@@ -58,8 +71,8 @@ func decodeCoord(c *Coord) (coord.Coord, error) {
 		Hole:             c.Hole,
 		Radius:           c.Radius,
 		Start:            c.Start,
-		Sweep:            coord.FullTurn,
 		Counterclockwise: c.Counterclockwise,
+		Admittance:       c.Admittance,
 	}
 	switch c.Theta {
 	case "", ThetaX:
@@ -69,13 +82,21 @@ func decodeCoord(c *Coord) (coord.Coord, error) {
 	default:
 		return nil, fmt.Errorf("refract/spec: unknown coord theta %q", c.Theta)
 	}
-	if c.Sweep != nil {
-		d.Sweep = *c.Sweep
+	if d.Type == coord.TypePolar {
+		d.Sweep = coord.FullTurn
+		if c.Sweep != nil {
+			d.Sweep = *c.Sweep
+		}
 	}
+	// The absent edge is each coord's own default, and the two coords default
+	// opposite ways: an arc round a ring, a chord across a Smith chart.
+	smith := d.Type == coord.TypeSmith
 	switch c.Edge {
-	case "", EdgeArc:
+	case "":
+	case EdgeArc:
+		d.Arc = smith
 	case EdgeChord:
-		d.Chord = true
+		d.Chord = !smith
 	default:
 		return nil, fmt.Errorf("refract/spec: unknown coord edge %q", c.Edge)
 	}

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="520" viewBox="0 0 560 520" role="img" aria-labelledby="refract-title">
+<title id="refract-title">A series RL load, swept</title>
+<defs>
+<clipPath id="c1"><path d="M290.154,55.601 C403.489,55.601 495.365,147.477 495.365,260.812 C495.365,374.148 403.489,466.024 290.154,466.024 C176.819,466.024 84.943,374.148 84.943,260.812 C84.943,147.477 176.819,55.601 290.154,55.601 Z"/></clipPath>
+<path id="m2" d="M3,0 C3,1.657 1.657,3 0,3 C-1.657,3 -3,1.657 -3,0 C-3,-1.657 -1.657,-3 0,-3 C1.657,-3 3,-1.657 3,0 Z" fill="#d55e00"/>
+</defs>
+<path d="M0,0 L560,0 L560,520 L0,520 Z" fill="#ffffff"/>
+<path fill="none" d="M324.356,89.803 C418.802,89.803 495.365,166.367 495.365,260.812 C495.365,355.258 418.802,431.822 324.356,431.822 C229.91,431.822 153.346,355.258 153.346,260.812 C153.346,166.367 229.91,89.803 324.356,89.803 Z" stroke="#dddddd"/>
+<path fill="none" d="M358.558,124.005 C434.114,124.005 495.365,185.256 495.365,260.812 C495.365,336.369 434.114,397.62 358.558,397.62 C283.001,397.62 221.75,336.369 221.75,260.812 C221.75,185.256 283.001,124.005 358.558,124.005 Z" stroke="#dddddd"/>
+<path fill="none" d="M392.76,158.207 C449.427,158.207 495.365,204.145 495.365,260.812 C495.365,317.48 449.427,363.418 392.76,363.418 C336.092,363.418 290.154,317.48 290.154,260.812 C290.154,204.145 336.092,158.207 392.76,158.207 Z" stroke="#dddddd"/>
+<path fill="none" d="M426.961,192.409 C464.74,192.409 495.365,223.034 495.365,260.812 C495.365,298.591 464.74,329.216 426.961,329.216 C389.183,329.216 358.558,298.591 358.558,260.812 C358.558,223.034 389.183,192.409 426.961,192.409 Z" stroke="#dddddd"/>
+<path fill="none" d="M461.163,226.611 C480.053,226.611 495.365,241.923 495.365,260.812 C495.365,279.702 480.053,295.014 461.163,295.014 C442.274,295.014 426.962,279.702 426.962,260.812 C426.962,241.923 442.274,226.611 461.163,226.611 Z" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C475.801,260.812 458.957,274.622 455.12,293.806 C451.283,312.99 461.521,332.215 479.58,339.74" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C456.501,260.812 420.973,282.77 403.592,317.531 C386.211,352.293 389.962,393.89 413.281,424.982" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C382.03,260.812 290.154,352.689 290.154,466.024" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C366.182,260.812 244.537,321.635 167.027,424.981" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C359.899,260.812 225.774,287.638 100.728,339.74" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C359.899,260.812 225.774,233.988 100.728,181.886" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C366.182,260.812 244.537,199.99 167.027,96.643" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C382.03,260.812 290.154,168.936 290.154,55.601" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C456.501,260.812 420.973,238.855 403.592,204.094 C386.211,169.332 389.962,127.735 413.281,96.644" stroke="#dddddd"/>
+<path fill="none" d="M495.365,260.812 C475.801,260.812 458.957,247.003 455.12,227.819 C451.283,208.635 461.521,189.41 479.58,181.885" stroke="#dddddd"/>
+<polyline fill="none" points="84.943,260.812 495.365,260.812" stroke="#333333"/>
+<path fill="none" d="M290.154,55.601 C403.489,55.601 495.365,147.477 495.365,260.812 C495.365,374.148 403.489,466.024 290.154,466.024 C176.819,466.024 84.943,374.148 84.943,260.812 C84.943,147.477 176.819,55.601 290.154,55.601 Z" stroke="#333333"/>
+<polyline fill="none" points="84.943,260.812 84.943,265.812" stroke="#333333"/>
+<text x="84.943" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.0</text>
+<polyline fill="none" points="153.346,260.812 153.346,265.812" stroke="#333333"/>
+<text x="153.346" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.2</text>
+<polyline fill="none" points="221.75,260.812 221.75,265.812" stroke="#333333"/>
+<text x="221.75" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.5</text>
+<polyline fill="none" points="290.154,260.812 290.154,265.812" stroke="#333333"/>
+<text x="290.154" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1.0</text>
+<polyline fill="none" points="358.558,260.812 358.558,265.812" stroke="#333333"/>
+<text x="358.558" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2.0</text>
+<polyline fill="none" points="426.961,260.812 426.961,265.812" stroke="#333333"/>
+<text x="426.961" y="269.812" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">5.0</text>
+<polyline fill="none" points="479.58,339.74 484.195,341.663" stroke="#333333"/>
+<text x="487.887" y="343.201" font-family="sans-serif" font-size="11" dominant-baseline="hanging" fill="#555555">-5.0</text>
+<polyline fill="none" points="413.281,424.982 416.281,428.982" stroke="#333333"/>
+<text x="418.681" y="432.182" font-family="sans-serif" font-size="11" dominant-baseline="hanging" fill="#555555">-2.0</text>
+<polyline fill="none" points="290.154,466.024 290.154,471.024" stroke="#333333"/>
+<text x="290.154" y="475.024" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">-1.0</text>
+<polyline fill="none" points="167.027,424.982 164.027,428.982" stroke="#333333"/>
+<text x="161.627" y="432.182" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="hanging" fill="#555555">-0.5</text>
+<polyline fill="none" points="100.728,339.74 96.113,341.663" stroke="#333333"/>
+<text x="92.421" y="343.202" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="hanging" fill="#555555">-0.2</text>
+<polyline fill="none" points="100.728,181.886 96.112,179.963" stroke="#333333"/>
+<text x="92.42" y="178.425" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="auto" fill="#555555">0.2</text>
+<polyline fill="none" points="167.027,96.643 164.027,92.643" stroke="#333333"/>
+<text x="161.627" y="89.443" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="auto" fill="#555555">0.5</text>
+<polyline fill="none" points="290.154,55.601 290.154,50.601" stroke="#333333"/>
+<text x="290.154" y="46.601" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="auto" fill="#555555">1.0</text>
+<polyline fill="none" points="413.281,96.643 416.281,92.643" stroke="#333333"/>
+<text x="418.681" y="89.443" font-family="sans-serif" font-size="11" dominant-baseline="auto" fill="#555555">2.0</text>
+<polyline fill="none" points="479.58,181.885 484.195,179.962" stroke="#333333"/>
+<text x="487.887" y="178.424" font-family="sans-serif" font-size="11" dominant-baseline="auto" fill="#555555">5.0</text>
+<text x="290.154" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">A series RL load, swept</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="396.864,392.148 392.475,393.349 387.85,394.447 382.978,395.423 377.851,396.253 372.459,396.912 366.796,397.372 360.857,397.601 354.639,397.564 348.142,397.223 341.371,396.536 334.336,395.459 327.051,393.943 319.539,391.938 311.828,389.392 303.96,386.253 295.982,382.47 287.954,377.994 279.949,372.781 272.047,366.794 264.343,360.008 256.94,352.411 249.951,344.004 243.49,334.81 237.674,324.871 232.619,314.252 228.43,303.04 225.2,291.34 223.002,279.278 221.89,266.993 221.89,254.632 223.002,242.347 225.2,230.285 228.43,218.586 232.62,207.372 237.674,196.754 243.489,186.816 249.951,177.621 256.94,169.214 264.343,161.616 272.047,154.831 279.948,148.845 287.954,143.631 295.982,139.155 303.96,135.372 311.828,132.233 319.538,129.688 327.051,127.682 334.336,126.166 341.371,125.089 348.142,124.402 354.638,124.061 360.857,124.024 366.796,124.253 372.459,124.713 377.851,125.372 382.978,126.202 387.85,127.178 392.475,128.276 396.864,129.477" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<use href="#m2" x="396.864" y="392.148"/>
+<use href="#m2" x="305.939" y="387.096"/>
+<use href="#m2" x="221.75" y="260.812"/>
+<use href="#m2" x="305.939" y="134.529"/>
+<use href="#m2" x="396.864" y="129.477"/>
+</g>
+</svg>
