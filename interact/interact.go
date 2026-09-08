@@ -356,6 +356,97 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	return best, true
 }
 
+// RowRef is one source row of one layer of one panel, and where it landed.
+//
+// It is what the reverse of a hit test reports. [Hit] answers "what is under
+// this point"; a RowRef answers "where did this row go", which is the question
+// a second chart asks when the first one says which row the pointer is on.
+type RowRef struct {
+	// Panel is which panel the row was drawn in, and Layer which layer of it.
+	Panel, Layer int
+	// Series is the layer's legend label, empty for a layer that has none.
+	Series string
+	// Row is the source row, in the table that was handed in.
+	Row int
+	// At is where the row landed, in device space.
+	At ir.Point
+}
+
+// Locate reports where a source row of a layer landed in the render just
+// watched.
+//
+// It is the inverse of [Index.At], and it is the far end of the wire between
+// two charts: the first says which row the pointer is on, the second says
+// where that row is on screen — which is what a caller drawing a highlight
+// ring, a crosshair or a leader line needs, without rebuilding anything.
+//
+// ok is false when row tracking was off for the render (see
+// [Index.TrackRows]), when the layer reported no row for this one, or when the
+// row is not on screen — a decimated line draws the rows that survived, and a
+// row that was reduced away is not somewhere the reader can be pointed at.
+//
+// A row reported at more than one position — which no built-in mark does, but
+// nothing forbids — reports the last, matching [Index.At]'s rule that a later
+// mark was drawn on top.
+func (ix *Index) Locate(panel, layer, row int) (ir.Point, bool) {
+	var at ir.Point
+	found := false
+	for _, r := range ix.rows {
+		if r.panel == panel && r.layer == layer && r.row == row {
+			at, found = r.at, true
+		}
+	}
+	return at, found
+}
+
+// RowsOf appends every row one layer reported to dst and returns it.
+//
+// The order is the order the layer reported them in, which is the order it
+// drew them. dst is the caller's, so a caller asking every frame keeps one
+// slice and allocates nothing — pass dst[:0] to reuse it.
+func (ix *Index) RowsOf(panel, layer int, dst []RowRef) []RowRef {
+	for _, r := range ix.rows {
+		if r.panel != panel || r.layer != layer {
+			continue
+		}
+		dst = append(dst, ix.refOf(r))
+	}
+	return dst
+}
+
+// RowsIn appends every row that landed inside r to dst and returns it, in
+// paint order.
+//
+// It is what a brush reads: the rectangle a reader dragged, and the rows under
+// it. The test is against the position the *row* was reported at rather than
+// the ink of the mark drawn through it, which is what makes a half-covered bar
+// a matter of where its value is rather than of where its corner is — and is
+// the same position [Index.Locate] hands back and [Hit.Row] resolves through.
+//
+// dst is the caller's; pass dst[:0] to reuse it.
+func (ix *Index) RowsIn(r ir.Rect, dst []RowRef) []RowRef {
+	for _, m := range ix.rows {
+		if r.Contains(m.at) {
+			dst = append(dst, ix.refOf(m))
+		}
+	}
+	return dst
+}
+
+// refOf names a row mark, recovering the layer's label from the marks that
+// layer drew. A rowMark does not carry it: rows and marks are separate lists
+// on purpose, and the label belongs to the layer rather than to either.
+func (ix *Index) refOf(r rowMark) RowRef {
+	ref := RowRef{Panel: r.panel, Layer: r.layer, Row: r.row, At: r.at}
+	for _, m := range ix.marks {
+		if m.panel == r.panel && m.layer == r.layer {
+			ref.Series = m.label
+			break
+		}
+	}
+	return ref
+}
+
 // rawRowAt finds the source row behind a hit: the nearest position its own
 // layer reported to at, within tol and — where within is given — within that
 // box as well.

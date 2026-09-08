@@ -346,6 +346,16 @@ type Encoding struct {
 	// no equivalent channel, so no name is borrowed for it.
 	Width *Channel `json:"width,omitempty"`
 
+	// Key is the field that identifies a row across renders, from
+	// [github.com/timzifer/refract/geom.KeyBy].
+	//
+	// The name is borrowed rather than coined: Vega-Lite spells this channel
+	// "key" and defines it for exactly this — the field that says which datum
+	// is which when the data behind a view is updated. A document that names
+	// none has rows with no identity, which is every document written before
+	// there was one.
+	Key *Channel `json:"key,omitempty"`
+
 	// From, To, ID, Parent and Value are the relational and hierarchical
 	// channels: the two ends of an edge, the two ends of a hierarchy's, and the
 	// magnitude of either. They are refract's own — Vega-Lite has no relational

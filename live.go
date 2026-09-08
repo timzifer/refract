@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/timzifer/refract/data"
+	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/interact"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/render"
@@ -19,6 +21,8 @@ type (
 	EventKind = interact.EventKind
 	// Hit is the mark under a pointer. See [interact.Hit].
 	Hit = interact.Hit
+	// RowRef is where one source row landed. See [interact.RowRef].
+	RowRef = interact.RowRef
 )
 
 // The event kinds. See [interact.EventKind].
@@ -496,8 +500,44 @@ func (l *Live) Autoscale() error {
 }
 
 func (l *Live) fire(ev Event) Event {
+	if ev.Found {
+		ev.Key = l.keyOf(ev.Hit)
+	}
 	l.p.emit(ev)
 	return ev
+}
+
+// keyOf reads the identity of the row a hit landed on, or "" when there is
+// none to read.
+//
+// The layer it reads is the plot's, l.p.layers[h.Layer] — not the panel's.
+// Those are different objects on a faceted chart: a panel holds a
+// [geom.Faceter] Subset copy whose Source is the *cut*, one panel's worth of
+// rows. A hit's Row has already been resolved back through [data.Subset] to
+// the table the caller handed in (see docs/adr/0015-hit-testing.md), so
+// reading the cut with it would index the wrong table — silently, and with a
+// plausible answer. The layer index is the same in both because a facet
+// preserves layer order.
+//
+// It costs one column lookup and, for a numeric or temporal key, one small
+// string. That is why it goes through [data.Label] rather than [data.Labels],
+// which would spell the whole column to answer about one row of it — on every
+// pointer move.
+func (l *Live) keyOf(h Hit) string {
+	if h.Row < 0 || h.Layer < 0 || h.Layer >= len(l.p.layers) {
+		return ""
+	}
+	g := l.p.layers[h.Layer]
+	col := geom.KeyOf(g)
+	if col == "" {
+		return ""
+	}
+	src, ok := geom.SourceOf(g)
+	if !ok {
+		return ""
+	}
+	key, _ := data.Label(src, col, h.Row)
+	return key
 }
 
 // panelAt returns the panel a device point is in, falling back to the first

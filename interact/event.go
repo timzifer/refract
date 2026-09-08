@@ -61,6 +61,26 @@ type Event struct {
 	Hit   Hit
 	Found bool
 
+	// Key identifies the row under the pointer: the value its layer's key
+	// column holds at [Hit.Row], from
+	// [github.com/timzifer/refract/geom.KeyBy].
+	//
+	// It is what a caller linking two charts sends across. A row number is an
+	// index into a table as it stands this frame, so it names a different
+	// measurement after an append, a filter or a window; a key is a value the
+	// data carries, so it survives all three and means the same thing in
+	// another chart drawn from another table.
+	//
+	// It is empty when the layer named no key column, when row tracking is off,
+	// and when the mark has no row behind it. Those are three different reasons
+	// for the same answer, and [Hit.Row] tells them apart when it matters.
+	//
+	// It is on the event rather than on [Hit] because reading it means reading
+	// the data, and this package does not: an Index knows where marks are and
+	// which layer drew them, not what the layer holds. The root package fills
+	// it in, where the plot's layers and their sources are both in scope.
+	Key string
+
 	// Rect is the region a rubber-band zoom selected, in device space. It is
 	// set on Zoom when the zoom came from a selection rather than a wheel;
 	// [ir.Rect.Empty] reports which.

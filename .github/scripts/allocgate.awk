@@ -157,6 +157,19 @@ END {
 	# escaped the pool, which is the same bug the gate above exists for.
 	flat("BenchmarkWatchedFrame", "BenchmarkWatchedFrameRows", 2)
 
+	# Row identity across frames, added after v1.6. A hover resolves the key of
+	# the row it landed on, and the whole reason that goes through data.Label
+	# rather than data.Labels is this line: Labels spells the column, which over
+	# a hundred thousand rows is a hundred thousand strings to name one of them.
+	# A pointer asks on every move, so the cost has to be a constant.
+	#
+	# Zero rather than a budget, because a string key is the value the table
+	# already holds and copying it would be the mistake. A numeric key formats
+	# one small string and would read as 1 here — which is why the benchmark
+	# keys on a string column: it pins the path that must not copy.
+	atMost("BenchmarkHover", 0)
+	flat("BenchmarkHover", "BenchmarkHoverKeyed", 0)
+
 	# The streaming path, added in v0.5. A live chart appends a row and freezes
 	# a view once per frame, for as long as the process runs; either of those
 	# allocating is a leak with a plot attached. Both measure the steady state,

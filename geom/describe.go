@@ -118,6 +118,11 @@ type Desc struct {
 	Order    Ordering
 	WidthCol string
 
+	// Key is the column that identifies a row across renders, from [KeyBy].
+	// Nothing in this package reads it; it is carried so that the layer can be
+	// written down and read back with the identity it was given.
+	Key string
+
 	// SizeCol and SizeScale are [SizeBy]'s two halves: the column each mark
 	// takes its size from, and the scale that turns a value into a diameter.
 	SizeCol   string
@@ -398,6 +403,9 @@ func (d Desc) options() []Option {
 	if d.Group != "" {
 		opts = append(opts, GroupBy(d.Group))
 	}
+	if d.Key != "" {
+		opts = append(opts, KeyBy(d.Key))
+	}
 	if d.From != "" {
 		opts = append(opts, From(d.From))
 	}
@@ -494,6 +502,7 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Smooth:     c.smooth,
 		Overlap:    c.overlap,
 		Group:      c.groupCol,
+		Key:        c.keyCol,
 		Stack:      c.stackFor(def),
 		StackSet:   c.stackSet,
 		Dodge:      c.dodge,
