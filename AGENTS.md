@@ -932,6 +932,19 @@ that is really a name gets the same treatment. And a `data.Stream` cannot be
 tweened at all: under a `Window` ring the row numbers slide, which is the whole
 reason a key exists.
 
+**A counting label needs `data.Round`, and that is not a formatting bug.**
+`geom.Text` re-spells its column through `data.Labels` in `Train`, every frame,
+so a *numeric* `geom.TextBy` column animates by itself — which is the useful
+half of "animated text" and works with nothing added. But `data.FormatNumber`
+spells a float at full precision, deliberately, because a facet panel key, a
+categorical tick and a text label all go through it and must agree; so an
+interpolated value reads `33.300000000000004`. Round the **value**, not the
+spelling. A format option on `geom.Text` would put a second spelling of a
+number into the model, which is what ADR 0035 exists to prevent. A *string*
+label snaps and cannot be faded — a cross-fade needs per-row opacity, the IR
+change ADR 0007 refuses — but its position still moves, which is usually the
+shape wanted anyway.
+
 **Watching a render is serial, and animating a watched one is too.** An
 `Observer` or a `RowSink` takes the serial path in `render/parallel.go`, so a
 chart that is being hovered does not build its panels concurrently. That is a

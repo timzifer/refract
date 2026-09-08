@@ -11,9 +11,33 @@ import (
 // key, saying which row of each table carries it.
 //
 // It is the join a transition is built on, and it is separate from [Tween] so
-// that a caller can ask what changed without interpolating anything — which
-// rows are new, which are going, which are the same thing in a different
-// place.
+// that a caller can ask what changed without interpolating anything.
+//
+// # Enter, update and exit
+//
+// This is D3's data join, and deliberately the same three words, because the
+// vocabulary is the useful part and there is nothing to be gained by inventing
+// a fourth name for it. A key in both tables is an **update** — the same thing,
+// somewhere else. A key only the end state has is an **enter**. A key only the
+// start state has is an **exit**. [Alignment.Updated], [Alignment.Entered] and
+// [Alignment.Exited] are those three lists.
+//
+// Where refract differs from D3 is what happens next, and it is worth being
+// clear about because the vocabulary invites the assumption. In D3 the three
+// selections are things you *attach behaviour to*: enter gets its own append
+// and its own transition, exit gets a transition that ends in remove. Here they
+// are three readings of one table. Every key is a row of the blend for the
+// whole transition — see the section below — so an entering row is not
+// something that arrives partway through, it is a row that spends the
+// transition travelling from wherever [EnterFrom] put it. There is no
+// enter selection to hang a different animation on, and no remove: an exiting
+// row is still drawn at f == 1, sitting at its [ExitTo].
+//
+// That is a smaller vocabulary than D3's on purpose. What it buys is that the
+// frame's structure never changes, which is what keeps an animation off the
+// full-repaint path.
+//
+// # Key order
 //
 // The key order is first appearance in a, then the keys only b has, in first
 // appearance in b. It is never map iteration order: a chart whose panels are
@@ -37,6 +61,18 @@ func (al Alignment) Entered() []string { return al.only(al.A) }
 
 // Exited lists the keys only a has: the rows a transition takes away.
 func (al Alignment) Exited() []string { return al.only(al.B) }
+
+// Updated lists the keys both tables have: the rows that are the same thing in
+// a different place, and the only ones anything is interpolated for.
+func (al Alignment) Updated() []string {
+	var out []string
+	for i := range al.Keys {
+		if al.A[i] >= 0 && al.B[i] >= 0 {
+			out = append(out, al.Keys[i])
+		}
+	}
+	return out
+}
 
 func (al Alignment) only(rows []int) []string {
 	var out []string
@@ -125,10 +161,42 @@ func keysOf(src Source, col string) ([]string, error) {
 // String columns do not. They take the end state's value where the key is in
 // it and the start's otherwise, because a string is a name rather than a
 // quantity: a sankey's from and to are which nodes an edge joins, and half of
-// "ingest" is not a node. That has a consequence worth knowing before reaching
-// for this — anything a geom decides from a string column decides it abruptly.
-// A bar's slot on a categorical axis, a discrete colour class, a GroupBy
-// membership: those snap at the moment the column changes rather than sliding.
+// "ingest" is not a node.
+//
+// # Text
+//
+// The rule above decides two different-looking things, and only one of them is
+// a limitation.
+//
+// **A label that is a string snaps.** A [geom.Text] layer over a string column
+// changes from one word to the other at the moment the column does, with
+// nothing in between. There is no cross-fade and no character-level morph:
+// both would need a per-row opacity or a second draw of the same label, and
+// opacity is a property of a layer rather than of a row — the IR change
+// docs/adr/0007-per-mark-colour.md exists to refuse. What *can* move is where
+// the label is, because that comes from its position columns, so a label
+// travelling to a new place while its text changes once is available and is
+// usually what was wanted.
+//
+// **A label that is a number counts.** A text layer reads its column through
+// [Labels], in Train, on every frame — so a numeric column bound to
+// [geom.TextBy] is re-spelled from whatever the blend currently holds, and the
+// label counts from one value to the other by itself. That is the animation
+// people mean by "animated text" nine times in ten, and it needs nothing but a
+// numeric column.
+//
+// It does need [Round]. [FormatNumber] spells a float at full precision, so a
+// third of the way from 0 to 100 reads "33.300000000000004" — arithmetic
+// rather than a number. Round("n", 0) makes it 33.
+//
+// The same rule reaches further than labels, and this is the part worth
+// knowing before reaching for a transition at all: **anything a geom decides
+// from a string column decides it abruptly.** A bar's slot on a categorical
+// axis, a discrete colour class, a GroupBy membership — those snap at the
+// moment the column changes rather than sliding, because the thing they are
+// deciding from has no halfway. A chart that needs a bar to *slide* between
+// categories has to say where it is going in a numeric column, which is what
+// [Hold]'s doc is about from the other direction.
 //
 // # The row set is the union, and it is fixed
 //
@@ -162,6 +230,7 @@ type Tween struct {
 	enter map[string]float64
 	exit  map[string]float64
 	hold  map[string]bool
+	round map[string]int
 
 	f float64
 	n int
@@ -182,6 +251,7 @@ type tweenConfig struct {
 	enter map[string]float64
 	exit  map[string]float64
 	hold  map[string]bool
+	round map[string]int
 }
 
 // EnterFrom is the value a numeric column takes, at f == 0, for a row only the
@@ -222,6 +292,29 @@ func Hold(cols ...string) TweenOption {
 	}
 }
 
+// Round quantises a column to a number of decimal places as it blends, so that
+// what comes out is a number somebody would write down.
+//
+// It exists for the label that counts up. A text layer reads its column
+// through [Labels], which spells a float at full precision — so a value
+// interpolated a third of the way from 0 to 100 is drawn as
+// "33.300000000000004", which is arithmetic rather than a number. Rounding it
+// to zero places makes the label read 33, and the count is the animation
+// anybody wanted from it.
+//
+// It is not formatting. [FormatNumber] is deliberately shared by a facet panel
+// key, a categorical tick and a text label, so that one number is spelled one
+// way everywhere; what this changes is the *value*, before anything spells it.
+// That means a column bound to a position as well as to a label will move in
+// steps, which is usually a reason to blend the position from a column of its
+// own.
+//
+// Negative digits round to tens, hundreds and so on, the way [math.Round]
+// scaled would: Round("n", -3) counts in thousands.
+func Round(col string, digits int) TweenOption {
+	return func(c *tweenConfig) { c.round[col] = digits }
+}
+
 // NewTween lines up two tables by a key column and returns the blend between
 // them, positioned at f == 0.
 func NewTween(a, b Source, key string, opts ...TweenOption) (*Tween, error) {
@@ -233,6 +326,7 @@ func NewTween(a, b Source, key string, opts ...TweenOption) (*Tween, error) {
 		enter: map[string]float64{},
 		exit:  map[string]float64{},
 		hold:  map[string]bool{},
+		round: map[string]int{},
 	}
 	for _, o := range opts {
 		if o != nil {
@@ -245,7 +339,7 @@ func NewTween(a, b Source, key string, opts ...TweenOption) (*Tween, error) {
 		nums:  map[string][]float64{},
 		times: map[string][]time.Time{},
 		strs:  map[string][]string{},
-		enter: cfg.enter, exit: cfg.exit, hold: cfg.hold,
+		enter: cfg.enter, exit: cfg.exit, hold: cfg.hold, round: cfg.round,
 		n: al.Len(),
 	}
 	if err := t.plan(); err != nil {
@@ -356,33 +450,63 @@ func (t *Tween) blendNumeric(name string, f float64) {
 	av, hasA := t.a.Float64Column(name)
 	bv, hasB := t.b.Float64Column(name)
 	held := t.hold[name]
+	digits, rounding := t.round[name]
 	for i := range dst {
 		ra, rb := t.al.A[i], t.al.B[i]
 		lo, okLo := at64(av, hasA, ra)
 		hi, okHi := at64(bv, hasB, rb)
+
+		var v float64
 		switch {
 		case okLo && okHi:
 			if held {
-				dst[i] = pick(lo, hi, f)
-				continue
+				v = pick(lo, hi, f)
+				break
 			}
-			dst[i] = lo + (hi-lo)*f
+			v = lo + (hi-lo)*f
 		case okHi: // entering
+			v = hi
 			if from, ok := t.enter[name]; ok && !held {
-				dst[i] = from + (hi-from)*f
-				continue
+				v = from + (hi-from)*f
 			}
-			dst[i] = hi
 		case okLo: // exiting
+			v = lo
 			if to, ok := t.exit[name]; ok && !held {
-				dst[i] = lo + (to-lo)*f
-				continue
+				v = lo + (to-lo)*f
 			}
-			dst[i] = lo
 		default:
-			dst[i] = math.NaN()
+			v = math.NaN()
 		}
+		// Rounding is applied to the value the blend arrived at, whichever way
+		// it arrived: a counting label that rounded while it moved and not
+		// while it entered would count in whole numbers and then land on a
+		// fraction.
+		if rounding {
+			v = roundTo(v, digits)
+		}
+		dst[i] = v
 	}
+}
+
+// roundTo quantises v to a number of decimal places. Negative digits round to
+// tens, hundreds and so on.
+//
+// The scale is built by repeated multiplication rather than by math.Pow so
+// that the common cases — nought to a few places — are exact powers of ten
+// rather than whatever Pow's series lands on, which is what keeps a label that
+// should read 33 from reading 33.000000000000004.
+func roundTo(v float64, digits int) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	scale := 1.0
+	for range max(digits, -digits) {
+		scale *= 10
+	}
+	if digits < 0 {
+		return math.Round(v/scale) * scale
+	}
+	return math.Round(v*scale) / scale
 }
 
 func (t *Tween) blendTime(name string, f float64) {

@@ -38,6 +38,21 @@ state of a table; between two steps is a keyed join and a numeric blend.**
   each table carries it. Key order is first appearance in the start state, then
   the keys only the end state has — never map iteration order, per
   [ADR 0012](0012-parallel-panels.md).
+
+  This is **D3's data join**, and `Alignment` uses D3's three words on purpose:
+  `Entered`, `Updated`, `Exited`. The vocabulary is the useful part and there
+  was nothing to gain by coining a fourth name for a thing every reader of this
+  code has already met.
+
+  Where it diverges is what the three *are*. In D3 they are selections you
+  attach behaviour to — enter gets its own append and its own transition, exit
+  gets a transition ending in `remove`. Here they are three readings of one
+  table, because of the property below: every key is a row of the blend for the
+  whole transition. So there is no enter selection to hang a different
+  animation on, and no remove; an entering row spends the transition travelling
+  from its `EnterFrom`, and an exiting one is still drawn at `f == 1`. That is
+  the smaller vocabulary, and what it buys is that the frame's structure never
+  changes.
 - `data.Tween` is the blend, and it is **one `Source` whose contents change**
   rather than a `Source` per frame. Columns are allocated once at the joined
   row count and rewritten in place. That is exactly the arrangement
@@ -106,7 +121,8 @@ the target from inside a render loop is a silent one.
   half of "ingest" is not a node. Anything a geom decides from a string column
   therefore decides it abruptly: a bar's slot on a categorical axis, a discrete
   colour class, `GroupBy` membership. `data.Hold` gives a *numeric* column the
-  same abruptness, for a number that is really a name.
+  same abruptness, for a number that is really a name. What that means for text
+  specifically is its own section below.
 - **A scale-type change is not a path.** Linear to log has no halfway.
 - **A `data.Stream` has no identities to join on.** Under a `Window` ring the
   row numbers slide between snapshots, which is the whole reason a key exists.
@@ -126,6 +142,47 @@ the target from inside a render loop is a silent one.
 - A frame of a transition allocates what a frame allocates:
   `BenchmarkTransitionFrame1k` and `…100k` are both 80, and the gate compares
   them.
+
+### Text, which is two different questions
+
+The string rule decides both, and only one of them is a limitation. It is worth
+separating because "can text animate" gets asked as one question and has two
+answers.
+
+**A label that is a number counts, and this works.** `geom.Text` reads its
+column through `data.Labels`, in `Train`, on every frame — so a numeric column
+bound to `geom.TextBy` is re-spelled from whatever the blend currently holds,
+and the label counts from one value to the other with nothing added. That is
+the animation people mean by "animated text" nine times out of ten.
+
+It needs `data.Round`, which is why that option exists. `data.FormatNumber`
+spells a float at full precision, and deliberately so: it is shared by a facet
+panel key, a categorical tick and a text label, so that one number is spelled
+one way everywhere. A value a third of the way from 0 to 100 therefore reads
+`33.300000000000004`, which is arithmetic rather than a number. `Round` changes
+the *value* before anything spells it, which keeps the shared formatting shared.
+The alternative — a format option on `geom.Text` — would have put a second
+spelling of a number into the model, and a chart whose label and whose axis
+disagreed about the same value is the thing
+[ADR 0035](0035-label-format-and-locale.md) exists to prevent.
+
+**A label that is a string snaps, and this is the limitation.** It changes from
+one word to the other at the moment its column does, with nothing in between.
+There is no cross-fade and no character-level morph. A cross-fade needs a
+per-row opacity, which is the IR change [ADR 0007](0007-per-mark-colour.md)
+refuses; a morph needs two draws of one label plus a rule for pairing
+characters, which is a text-shaping feature rather than a charting one.
+
+What *is* available is that the label moves: its position comes from its
+position columns, which interpolate like anything else. A label travelling to a
+new place while its words change once is the usual shape of the thing anyway,
+and `TestALabelMovesWhileItsTextSnaps` pins it.
+
+The snap is also visible in the damage: a label that changes text and does not
+move produces one changed frame and then nothing at all, because every
+subsequent frame is byte-identical and `Live.Draw` paints none of them. That is
+the strongest statement of the rule the codebase can make, and it is what
+`TestALabelOverAStringSnaps` asserts.
 
 ## Revisit if
 

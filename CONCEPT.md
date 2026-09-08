@@ -1283,7 +1283,11 @@ link and `examples/linked` is what that looks like. See
 Not in v1.7, in case they look like oversights. A **string does not
 interpolate** — half of "ingest" is not a node — so anything a geom decides
 from one decides it abruptly: a categorical slot, a discrete colour class, a
-group membership. **Enter and exit do not fade**, because opacity is a property
+group membership. That answers "can text animate" twice: a label over a
+*number* counts, because a text layer re-spells its column every frame, and
+`data.Round` is what stops it counting in raw floats; a label over a *string*
+snaps, with no cross-fade and no character morph, though its position still
+moves. **Enter and exit do not fade**, because opacity is a property
 of a layer rather than of a row and a per-row opacity channel is the IR change
 [ADR 0007](docs/adr/0007-per-mark-colour.md) refuses; `EnterFrom` puts the
 answer in data space instead, so a bar grows out of its baseline. A

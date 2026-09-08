@@ -6,6 +6,7 @@ package refract_test
 import (
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -505,3 +506,194 @@ func benchmarkTransitionFrame(b *testing.B, n int) {
 
 func BenchmarkTransitionFrame1k(b *testing.B)   { benchmarkTransitionFrame(b, 1_000) }
 func BenchmarkTransitionFrame100k(b *testing.B) { benchmarkTransitionFrame(b, 100_000) }
+
+// textLine is the trace of the Text call carrying want, which is where that
+// label's position is written down. A chart's other Text calls are its tick
+// labels and its titles, and they do not move.
+func textLine(t *testing.T, rec *irtest.Recorder, want string) string {
+	t.Helper()
+	for _, line := range rec.Trace() {
+		if strings.HasPrefix(line, "Text "+strconv.Quote(want)+" ") {
+			return line
+		}
+	}
+	t.Fatalf("no label reading %q was drawn", want)
+	return ""
+}
+
+// Text, both ways round.
+//
+// A label bound to a numeric column counts, because a text layer re-spells its
+// column from the blend on every frame. A label bound to a string column
+// snaps, because there is nothing between two names. Both are consequences of
+// one rule and both are worth pinning: the first is the animation people mean
+// by "animated text", and the second is the limitation.
+func TestALabelOverANumberCounts(t *testing.T) {
+	a := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		Float64("n", []float64{0})
+	b := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		Float64("n", []float64{100})
+
+	tw, err := data.NewTween(a, b, "id", data.Round("n", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := refract.New(refract.Size(400, 300))
+	p.X(scale.Linear(scale.Domain(0, 2)))
+	p.Y(scale.Linear(scale.Domain(0, 2)))
+	p.Add(geom.Text(tw.Source(), geom.X("x"), geom.Y("y"), geom.TextBy("n")))
+
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+
+	want := map[float64]string{0: "0", 1.0 / 3: "33", 0.5: "50", 1: "100"}
+	for _, f := range []float64{0, 1.0 / 3, 0.5, 1} {
+		tw.At(f)
+		rec.Reset()
+		if err := live.Draw(); err != nil {
+			t.Fatal(err)
+		}
+		texts := rec.Texts()
+		if len(texts) == 0 {
+			t.Fatalf("at f=%v nothing was drawn", f)
+		}
+		// The layer's label is the last text drawn; the rest are tick labels.
+		if got := texts[len(texts)-1]; got != want[f] {
+			t.Errorf("at f=%v the label reads %q, want %q", f, got, want[f])
+		}
+	}
+}
+
+// Without Round the same label reads its full float, which is arithmetic
+// rather than a number. This is the reason Round exists, so it is worth a test
+// that fails if the formatting ever starts rounding on its own.
+func TestAnUnroundedCountingLabelShowsItsFloat(t *testing.T) {
+	a := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		Float64("n", []float64{0})
+	b := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		Float64("n", []float64{100})
+
+	tw, err := data.NewTween(a, b, "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := refract.New(refract.Size(400, 300))
+	p.X(scale.Linear(scale.Domain(0, 2)))
+	p.Y(scale.Linear(scale.Domain(0, 2)))
+	p.Add(geom.Text(tw.Source(), geom.X("x"), geom.Y("y"), geom.TextBy("n")))
+
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+
+	tw.At(1.0 / 3)
+	if err := live.Draw(); err != nil {
+		t.Fatal(err)
+	}
+	texts := rec.Texts()
+	if got := texts[len(texts)-1]; got == "33" {
+		t.Error("the label rounded itself, so data.Round has nothing to do")
+	}
+}
+
+// A label that is a string changes once, at the moment its column does. There
+// is no cross-fade and no character-level morph — see data.Tween's doc for why.
+func TestALabelOverAStringSnaps(t *testing.T) {
+	a := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		String("s", []string{"start"})
+	b := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{1}).Float64("y", []float64{1}).
+		String("s", []string{"end"})
+
+	tw, err := data.NewTween(a, b, "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := refract.New(refract.Size(400, 300))
+	p.X(scale.Linear(scale.Domain(0, 2)))
+	p.Y(scale.Linear(scale.Domain(0, 2)))
+	p.Add(geom.Text(tw.Source(), geom.X("x"), geom.Y("y"), geom.TextBy("s")))
+
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+
+	// The first frame establishes the label.
+	tw.At(0)
+	if err := live.Draw(); err != nil {
+		t.Fatal(err)
+	}
+	texts := rec.Texts()
+	if got := texts[len(texts)-1]; got != "end" {
+		t.Errorf("the label reads %q, want the end state's %q — a string has no halfway", got, "end")
+	}
+
+	// Every frame after it is byte-identical, so Draw paints nothing at all.
+	// That is the snap, stated as strongly as it can be: there is no
+	// intermediate frame because there is nothing to draw between two names.
+	for _, f := range []float64{0.25, 0.5, 0.75, 1} {
+		tw.At(f)
+		rec.Reset()
+		if err := live.Draw(); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(rec.Trace()); n != 0 {
+			t.Errorf("at f=%v the chart repainted %d calls, want none — the label snapped and nothing else moved", f, n)
+		}
+	}
+}
+
+// The position moves even though the text does not, which is the thing that is
+// actually available for a label whose words change.
+func TestALabelMovesWhileItsTextSnaps(t *testing.T) {
+	a := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{0}).Float64("y", []float64{1}).
+		String("s", []string{"start"})
+	b := refract.NewTable().String("id", []string{"a"}).
+		Float64("x", []float64{2}).Float64("y", []float64{1}).
+		String("s", []string{"end"})
+
+	tw, err := data.NewTween(a, b, "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := refract.New(refract.Size(400, 300))
+	p.X(scale.Linear(scale.Domain(0, 2)))
+	p.Y(scale.Linear(scale.Domain(0, 2)))
+	p.Add(geom.Text(tw.Source(), geom.X("x"), geom.Y("y"), geom.TextBy("s")))
+
+	rec := irtest.New()
+	live, err := p.Live(rec.Target())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+
+	var seen []string
+	for _, f := range []float64{0, 0.5, 1} {
+		tw.At(f)
+		rec.Reset()
+		if err := live.Draw(); err != nil {
+			t.Fatal(err)
+		}
+		seen = append(seen, textLine(t, rec, "end"))
+	}
+	if seen[0] == seen[1] || seen[1] == seen[2] {
+		t.Errorf("the label did not move between frames:\n%v", seen)
+	}
+}

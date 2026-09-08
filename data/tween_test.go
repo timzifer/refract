@@ -354,3 +354,128 @@ func TestAtDoesNotAllocate(t *testing.T) {
 		t.Errorf("At allocates %.0f times per call, want 0", got)
 	}
 }
+
+// The three words are D3's, and the three lists partition the keys: every key
+// is exactly one of entering, updating or exiting.
+func TestEnterUpdateExitPartitionTheKeys(t *testing.T) {
+	al, err := data.Align(stateA(), stateB(), "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, k := range al.Entered() {
+		got[k]++
+	}
+	for _, k := range al.Updated() {
+		got[k]++
+	}
+	for _, k := range al.Exited() {
+		got[k]++
+	}
+	if len(got) != al.Len() {
+		t.Errorf("the three lists name %d keys, want all %d", len(got), al.Len())
+	}
+	for k, n := range got {
+		if n != 1 {
+			t.Errorf("key %q is in %d of the three lists, want exactly 1", k, n)
+		}
+	}
+	// a and c are in both states; b left; d arrived.
+	want := []string{"a", "c"}
+	upd := al.Updated()
+	if len(upd) != len(want) {
+		t.Fatalf("updated = %v, want %v", upd, want)
+	}
+	for i := range want {
+		if upd[i] != want[i] {
+			t.Errorf("updated = %v, want %v", upd, want)
+		}
+	}
+}
+
+// Round is what makes a counting label a number rather than arithmetic.
+func TestRoundQuantisesTheBlend(t *testing.T) {
+	a := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{0})
+	b := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{100})
+
+	raw, err := data.NewTween(a, b, "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw.At(1.0 / 3)
+	if got := valueOf(t, raw.Source(), "n", 0); got == 33 {
+		t.Fatal("the unrounded blend is already whole, so this test proves nothing")
+	}
+
+	tw, err := data.NewTween(a, b, "id", data.Round("n", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ f, want float64 }{
+		{0, 0}, {1.0 / 3, 33}, {0.5, 50}, {1, 100},
+	} {
+		tw.At(c.f)
+		if got := valueOf(t, tw.Source(), "n", 0); got != c.want {
+			t.Errorf("at f=%v the value is %v, want %v", c.f, got, c.want)
+		}
+	}
+}
+
+func TestRoundTakesDecimalsAndPowersOfTen(t *testing.T) {
+	a := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{0})
+	b := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{10_000})
+
+	for _, c := range []struct {
+		digits int
+		f      float64
+		want   float64
+	}{
+		{1, 1.0 / 3, 3333.3},
+		{-3, 1.0 / 3, 3000},
+		{-2, 1.0 / 3, 3300},
+	} {
+		tw, err := data.NewTween(a, b, "id", data.Round("n", c.digits))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tw.At(c.f)
+		if got := valueOf(t, tw.Source(), "n", 0); got != c.want {
+			t.Errorf("Round(%d) at f=%v gives %v, want %v", c.digits, c.f, got, c.want)
+		}
+	}
+}
+
+// A rounded column is rounded however the row arrived, so a counting label
+// does not count in whole numbers and then land on a fraction.
+func TestRoundAppliesToEnteringAndExitingRows(t *testing.T) {
+	tw, err := data.NewTween(stateA(), stateB(), "id",
+		data.EnterFrom("v", 0), data.ExitTo("v", 0), data.Round("v", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Row 3 is "d", entering from 0 towards 999; row 1 is "b", exiting to 0.
+	tw.At(1.0 / 3)
+	for _, row := range []int{1, 3} {
+		got := valueOf(t, tw.Source(), "v", row)
+		if got != math.Trunc(got) {
+			t.Errorf("row %d is %v partway through, want a whole number", row, got)
+		}
+	}
+}
+
+// Rounding must not reintroduce an allocation on the frame path.
+func TestRoundDoesNotAllocate(t *testing.T) {
+	a := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{0})
+	b := data.NewTable().String("id", []string{"x"}).Float64("n", []float64{100})
+	tw, err := data.NewTween(a, b, "id", data.Round("n", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := 0.0
+	if got := testing.AllocsPerRun(200, func() {
+		f += 0.001
+		tw.At(f)
+	}); got != 0 {
+		t.Errorf("At with rounding allocates %.0f times, want 0", got)
+	}
+}
