@@ -49,8 +49,8 @@ depends on.
 | [0037](0037-secondary-axis.md) | A second axis is a scale on the chart and a binding on the layer | Accepted, amended | — |
 | [0038](0038-embedded-fonts.md) | A PDF carries the font its labels need, subset to the glyphs it drew | Accepted | — |
 | [0039](0039-relational-layouts.md) | A relational layout is a stat in the unit square, and the coord decides what it looks like | Accepted | — |
-| [0040](0040-label-collision-avoidance.md) | Participating text layers share a deterministic panel-local label layout | Accepted, unreleased | — |
-| [0041](0041-qq-plots.md) | QQ plots rank the sample before it is drawn | Accepted, unreleased | — |
+| [0040](0040-label-collision-avoidance.md) | Participating text layers share a deterministic panel-local label layout | Accepted | — |
+| [0041](0041-qq-plots.md) | QQ plots rank the sample before it is drawn | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

@@ -1,6 +1,6 @@
 # 0041 — QQ plots rank the sample before it is drawn
 
-Status: accepted; unreleased implementation.
+Status: accepted; implemented in v1.5.0.
 
 `geom.QQ` compares the column named by X with the standard normal distribution.
 The display axes are theoretical quantiles on X and observed values on Y;

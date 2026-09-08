@@ -399,11 +399,11 @@ The **Release dependencies** workflow can run the same check manually on a
 candidate branch; tag pushes also check the module that tag releases. That
 post-tag check is a backstop, not a substitute for the pre-tag command.
 
-The current Arrow development code needs the new core null APIs, while its
-manifest still names v1.2.0. Its isolated check therefore correctly fails until
-the next core is published and the nested manifests are updated in the order
-below. Do not silence this with a workspace, a local replacement or a tag that
-does not exist. `-module all` is useful after every prerequisite is published;
+A nested module whose development code needs an API the published core does not
+have yet — as the Arrow adapter's did between v1.2.0 and v1.5.0 — correctly
+fails its isolated check until the new core is published and the nested
+manifests are updated in the order below. Do not silence that with a workspace,
+a local replacement or a tag that does not exist. `-module all` is useful after every prerequisite is published;
 checking only the core first allows a staged release to get started.
 
 The modules are tagged in dependency order, because each nested module

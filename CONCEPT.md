@@ -2,11 +2,11 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **v1.2.0 released; stable v1 API.** The API froze at v1.0.0 and
-> follows semantic versioning. The v1.3 and v1.4 milestones below are implemented
-> on `main` but have not been tagged. See [§14](#14-roadmap--milestones) and the
-> [README](README.md) for released versus development work. Label collision
-> avoidance and normal QQ plots are the next, unreleased additions.
+> Status: **v1.5.0 released; stable v1 API.** The API froze at v1.0.0 and
+> follows semantic versioning. The v1.3, v1.4 and v1.5 milestones below are all
+> tagged. See [§14](#14-roadmap--milestones) and the [README](README.md) for
+> what each one added. This document remains the working concept for everything
+> past them.
 
 > **Implementation note.** Where this document and the code disagree, the code
 > wins and this document is wrong — please fix it. Decisions that were open in
@@ -979,19 +979,25 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- Tagged. The core was `v1.0.0` and is `v1.2.0`; `backend/gg` and
-  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.1.4`
+- Tagged. The core was `v1.0.0` and is `v1.5.0`; `backend/gg` and
+  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.2.0`
   — it stays at `v0` for as long as it is opt-in beta, whatever the core does
-  — and the Arrow adapter is `arrow/v18.0.2`, whose major is Arrow's. The
+  — and the Arrow adapter is `arrow/v18.0.3`, whose major is Arrow's. The
   milestones before `v1.0.0` were tagged at the same time as it, so every one
   of them names a commit. The order — the core first, then the nested modules'
   `require` lines, then their own tags — is in
   [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
   The post-freeze milestones below shipped in `v1.1.0` — tracks and the text
-  mark — and in `v1.2.0`, the Smith chart. All three are additive: no interface
-  gained a method, no struct lost a field, and every option they add is one an
-  existing mark accepts and ignores.
+  mark — in `v1.2.0`, the Smith chart, in `v1.3.0`, the six gaps that were not
+  chart types, in `v1.4.0`, the relational and hierarchical layouts, and in
+  `v1.5.0`, label placement and QQ plots. `v1.3.0` and `v1.4.0` tag the core
+  alone: no nested module had a release of its own between `v1.2.0` and
+  `v1.5.0`, and a nested tag whose `require` line named an older core than the
+  one it was tested against is the failure the release order exists to prevent.
+  All of them are additive: no interface gained a method, no struct lost a
+  field, and every option they add is one an existing mark accepts and
+  ignores.
 
 ### v0.10 — Tracks: a band at a panel's edge — **shipped**
 
@@ -1079,7 +1085,7 @@ scale emits — the same constraint that made the columns an impedance rather
 than the reflection coefficient an instrument reports.
 See [ADR 0033](docs/adr/0033-smith-charts.md).
 
-### v1.3 — What is not a chart type — **on `main`**
+### v1.3 — What is not a chart type — **shipped**
 
 Six gaps that [docs/chart-types.md](docs/chart-types.md) could not hold,
 because a catalogue sorted by machinery has no line for a mark that needs
@@ -1141,7 +1147,7 @@ Every one of them is additive: no interface gained a method, no struct lost a
 field, and a chart that mentions none of them draws exactly what it drew —
 which is what every golden file in the repository asserts.
 
-### v1.4 — Bucket E, the last one — **on `main`**
+### v1.4 — Bucket E, the last one — **shipped**
 
 The relational and hierarchical layouts: treemap, icicle, sunburst, sankey, arc
 diagram, chord diagram. It is the bucket this document called the only family
@@ -1185,6 +1191,29 @@ after the hexagonal lattice and the beeswarm's offsets.
 Still not drawn: node-link and Venn/UpSet. See
 [ADR 0039](docs/adr/0039-relational-layouts.md).
 
+### v1.5 — Two diagnostics — **shipped**
+
+Bucket H's de-overlap pass and the QQ plot the ECDF made obvious, both of which
+this document had listed as beyond v1.0 and neither of which needed a new
+stage. `geom.AvoidOverlap(true)` opts a text layer into panel-local placement:
+`render` lends participating layers a placer, measures through the active
+backend and solves in `internal/layout`, trying the original anchor and eight
+nearby candidates against the panel rectangle and the labels already placed.
+It is bounded and deterministic rather than a relaxation, so a parallel or
+watched render draws the same chart as a serial one, and a label in a box is
+dropped rather than moved into its neighbour's row.
+See [ADR 0040](docs/adr/0040-label-collision-avoidance.md).
+
+`geom.QQ` ranks a sample against the standard normal at plotting positions
+(i+0.5)/n, with observations in their own units and no fit or reference line
+implied. It shares the ECDF's sorting and grouping buffers — both summarise one
+sorted series per group — and `stat.QQ` takes any quantile function, so another
+distribution is a `Scatter` over its pairs.
+See [ADR 0041](docs/adr/0041-qq-plots.md).
+
+Both are additive, both round-trip through the spec, and the allocation gate
+covers a full frame of each over a thousand rows and a hundred thousand. ✔
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1197,20 +1226,21 @@ Still not drawn: node-link and Venn/UpSet. See
   underneath it, and its graticule has no tick behind it — and is argued on its
   own evidence rather than smuggled in as a fourth.
 - Node-link diagrams and Venn/UpSet, which are what is left of the relational
-  family after the v1.4 implementation added the rest of it
+  family after v1.4 shipped the rest of it
   ([ADR 0039](docs/adr/0039-relational-layouts.md)). A force layout's whole
   method is to run until it settles, so it cannot be a pure function of its
   input at a bounded sweep count that also looks good, and
   [ADR 0012](docs/adr/0012-parallel-panels.md) has to be answered on its own
   terms before it lands. Venn is a circle-packing optimiser and UpSet is a
   matrix chart rather than a relational layout at all.
-- More stats: contour. Normal QQ plots are implemented for the next release,
-  with a general quantile-function API in `stat` (ADR 0041).
+- More stats: contour. Normal QQ plots shipped in v1.5, with a general
+  quantile-function API in `stat` ([ADR 0041](docs/adr/0041-qq-plots.md)).
 - The rest of bucket H in [docs/chart-types.md](docs/chart-types.md): an
   overlay layer the chart itself owns — a tooltip, a crosshair, a brush
   rectangle — which is what linked brushing across panels needs before
-  anything else. Opt-in text collision avoidance is implemented for the next
-  release (ADR 0040); automatic avoidance of every kind of mark remains open.
+  anything else. Opt-in text collision avoidance shipped in v1.5
+  ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)); automatic avoidance
+  of every kind of mark remains open.
 - Animations / transitions (gg retained-scene + damage tracking make this cheap).
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.

@@ -12,28 +12,27 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: v1.2.0, released.** Every milestone through **v1.0** has shipped,
+> **Status: v1.5.0, released.** Every milestone through **v1.0** has shipped,
 > and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
 > before the freeze has changed. The API was frozen at the `v1.0.0` tag and
 > follows semver from here, so a breaking change means a major version and a
-> deprecation cycle precedes it — `v1.2.0` adds a third coordinate system and
-> takes nothing away: `coord.Smith`, which maps a normalised impedance onto the
-> unit disc and draws its grid out of the two axes' own ticks, with
-> `scale.TickValues` to pin them where a paper chart prints them. The nested
-> modules are tagged alongside: `backend/gg` and `backend/window` at `v1.2.0`,
-> the opt-in GPU tier at `v0.1.4`, and the Arrow adapter at `arrow/v18.0.2`,
+> deprecation cycle precedes it. Three milestones landed after `v1.2.0` and its
+> `coord.Smith`, and each is additive: `v1.3.0`, the six gaps that were not
+> chart types — a null that is a missing value in a text or temporal column, a
+> tick format and a language a *document* can choose, an interval mark, a
+> second axis in either direction, and a PDF that carries the font its labels
+> need; `v1.4.0`, **bucket E, the last one in the catalogue**: `geom.Treemap`,
+> `geom.Icicle`, `geom.Sankey` and `geom.Arc`, which are also a sunburst and a
+> chord diagram once the coordinate stage has had them
+> ([ADR 0039](docs/adr/0039-relational-layouts.md)); and `v1.5.0`, two
+> diagnostics — `geom.AvoidOverlap` for panel-local label placement
+> ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)) and `geom.QQ` for
+> normal quantile-quantile plots ([ADR 0041](docs/adr/0041-qq-plots.md)).
+> `v1.3.0` and `v1.4.0` tag the core alone; the nested modules are tagged at
+> `v1.5.0` with it: `backend/gg` and `backend/window` share the core's version,
+> the opt-in GPU tier is at `v0.2.0`, and the Arrow adapter at `arrow/v18.0.3`,
 > whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
 > road ahead.
->
-> **On `main` since:** the six gaps that were not chart types — a null that is
-> a missing value in a text or temporal column, a tick format and a language a
-> *document* can choose, an interval mark, a second axis in either direction,
-> and a PDF that carries the font its labels need — and **bucket E, the last
-> one in the catalogue**: `geom.Treemap`, `geom.Icicle`, `geom.Sankey` and
-> `geom.Arc`, which are also a sunburst and a chord diagram once the
-> coordinate stage has had them
-> ([ADR 0039](docs/adr/0039-relational-layouts.md)). All additive; see
-> [CONCEPT §14](CONCEPT.md#14-roadmap--milestones).
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart
 specification enters refract, a spectrum of output formats comes out.
@@ -67,12 +66,9 @@ library, and a desktop program that opens a window links a window layer.
 
 ## Install
 
-**Next release, implemented but not tagged:** `geom.AvoidOverlap(true)` lets
-text layers avoid participating labels in the same panel; `geom.QQ` draws a
-normal quantile-quantile plot. These APIs need the development version until
-the next release is tagged. The release check in
-[CONTRIBUTING.md](CONTRIBUTING.md#releasing) verifies each module outside the
-development workspace before it is tagged.
+The release check in [CONTRIBUTING.md](CONTRIBUTING.md#releasing) verifies each
+module outside the development workspace before it is tagged, so a published
+`require` line names a core that exists.
 
 ```sh
 go get github.com/timzifer/refract                  # core: SVG and PDF, stdlib only
@@ -1058,7 +1054,7 @@ benchmark gate keeps it that way.
 
 See [`examples/stream`](examples/stream).
 
-## Label placement and QQ plots (unreleased)
+## Label placement and QQ plots
 
 ```go
 // The renderer places participating point labels, dropping those that still

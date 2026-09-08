@@ -1,6 +1,6 @@
 # 0040 — Label placement belongs to the panel layout
 
-Status: accepted; unreleased implementation.
+Status: accepted; implemented in v1.5.0.
 
 ADR 0032 deferred neighbouring labels because a text geom owns rows, not the
 positions of other layers. `geom.AvoidOverlap(true)` now requests placement
