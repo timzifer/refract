@@ -443,6 +443,10 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 	switch s.Type {
 	case string(scale.KindDiverging):
 		d.Kind = scale.KindDiverging
+	case string(scale.KindThreshold):
+		d.Kind = scale.KindThreshold
+	case string(scale.KindQuantize):
+		d.Kind = scale.KindQuantize
 	case string(scale.KindQualitative), "ordinal", "nominal":
 		// "ordinal" is what Vega-Lite calls a scale from categories to a
 		// discrete range, so a hand-written document that says it means this.
@@ -462,6 +466,7 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		d.Transform = scale.ColorTransform(s.Transform)
 	}
 	d.Base, d.Constant = s.Base, s.Constant
+	d.Breaks, d.Classes = s.Breaks, s.Classes
 	if s.Center != nil {
 		d.Center = *s.Center
 	}

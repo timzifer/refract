@@ -206,6 +206,7 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 			out.Constant = d.Constant
 		}
 	}
+	out.Breaks, out.Classes = d.Breaks, d.Classes
 	for _, c := range d.Colors {
 		out.Range = append(out.Range, colorHex(c))
 	}

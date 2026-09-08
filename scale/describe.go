@@ -303,6 +303,11 @@ const (
 	// KindQualitative is a discrete scale: one colour per category, from a
 	// qualitative palette rather than from a ramp. See [Qualitative].
 	KindQualitative ColorKind = "qualitative"
+	// KindThreshold cuts the domain at boundaries given explicitly. See
+	// [Threshold].
+	KindThreshold ColorKind = "threshold"
+	// KindQuantize cuts it into equal classes. See [Quantize].
+	KindQuantize ColorKind = "quantize"
 )
 
 // ColorDesc is a colour scale reduced to what configures it.
@@ -339,6 +344,14 @@ type ColorDesc struct {
 	Transform ColorTransform
 	Base      float64
 	Constant  float64
+
+	// Breaks are a [KindThreshold] scale's class boundaries, and Classes the
+	// class count of a [KindQuantize] or [KindQuantile] one. Each kind carries
+	// only its own: boundaries a scale derives from the data are not
+	// configuration, and a document that pinned them would stop them being
+	// derived the next time it is drawn over different rows.
+	Breaks  []float64
+	Classes int
 }
 
 // ColorDescriber is implemented by a colour scale that can say what it is.
@@ -405,6 +418,10 @@ func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 		return Diverging(ramp, append(opts, ColorCenter(d.Center))...), nil
 	case KindSequential, "":
 		return Sequential(ramp, opts...), nil
+	case KindThreshold:
+		return Threshold(ramp, d.Breaks, opts...), nil
+	case KindQuantize:
+		return Quantize(ramp, d.Classes, opts...), nil
 	}
 	if build, ok := registeredColor(d.Kind); ok {
 		return build(d)

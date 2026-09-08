@@ -42,6 +42,13 @@ func (g ColorGuide) Key() string {
 		t := float64(i) / colorKeySamples
 		fmt.Fprintf(&b, "|%v", g.Scale.Color(scale.ColorValueOf(g.Scale, t)))
 	}
+	if c, ok := scale.Classed(g.Scale); ok {
+		// Two classed bars differ in where their boundaries are, and a
+		// boundary is exactly what sampling can step over: a class narrower
+		// than the gap between samples is a band the reader sees and the key
+		// does not.
+		fmt.Fprintf(&b, "|%v", c.Breaks())
+	}
 	return b.String()
 }
 

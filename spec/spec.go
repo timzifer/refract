@@ -455,6 +455,16 @@ type Scale struct {
 	// single one.
 	Transform string `json:"transform,omitempty"`
 
+	// Breaks are a threshold colour scale's class boundaries, and Classes the
+	// class count of a quantize or quantile one.
+	//
+	// Vega-Lite writes a threshold scale's boundaries in `domain`, which
+	// refract cannot: `domain` on a colour scale already carries the two ends
+	// of the interval the ramp runs over, and a threshold scale has both — the
+	// boundaries it cuts at and the ends its outermost classes reach to.
+	Breaks  []float64 `json:"breaks,omitempty"`
+	Classes int       `json:"classes,omitempty"`
+
 	// SizeRange is the diameters a size scale's domain maps onto, in device
 	// units, when the chart pinned them rather than leaving them to the theme.
 	// Vega-Lite writes a size scale's range as a plain `range` of two numbers;

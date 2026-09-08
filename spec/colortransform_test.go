@@ -99,3 +99,43 @@ func colorScaleOf(t *testing.T, c spec.Chart) (scale.ColorScale, bool) {
 	}
 	return d.ColorScale, true
 }
+
+func TestAClassedColourScaleSurvivesTheRoundTrip(t *testing.T) {
+	for name, cs := range map[string]scale.ColorScale{
+		"threshold":    scale.Threshold(palette.Viridis, []float64{20, 30}),
+		"quantize":     scale.Quantize(palette.Viridis, 4),
+		"quantize log": scale.Quantize(palette.Viridis, 4, scale.ColorLog(0)),
+	} {
+		c := colorChart(cs)
+		want, got := draw(t, c), draw(t, roundTrip(t, c))
+		if strings.Join(want, "\n") != strings.Join(got, "\n") {
+			t.Errorf("%s: the classed scale did not survive the round trip", name)
+		}
+	}
+}
+
+func TestBreaksAndClassesAreWrittenSeparately(t *testing.T) {
+	s, err := spec.Of(colorChart(scale.Threshold(palette.Viridis, []float64{20, 30})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := s.Layer[0].Encoding.Color.Scale
+	if cs.Type != "threshold" {
+		t.Errorf("type = %q, want threshold", cs.Type)
+	}
+	if len(cs.Breaks) != 2 || cs.Breaks[0] != 20 || cs.Breaks[1] != 30 {
+		t.Errorf("breaks = %v, want [20 30]", cs.Breaks)
+	}
+	if cs.Classes != 0 {
+		t.Errorf("classes = %d on a threshold scale, want none: its count follows from its breaks", cs.Classes)
+	}
+
+	q, err := spec.Of(colorChart(scale.Quantize(palette.Viridis, 4)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	qs := q.Layer[0].Encoding.Color.Scale
+	if qs.Classes != 4 || len(qs.Breaks) != 0 {
+		t.Errorf("classes/breaks = %d/%v, want 4 and no pinned boundaries", qs.Classes, qs.Breaks)
+	}
+}

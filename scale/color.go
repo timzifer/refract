@@ -148,7 +148,7 @@ func Diverging(ramp palette.Ramp, opts ...ColorOption) ColorScale {
 	return newColorScale(ramp, true, opts)
 }
 
-func newColorScale(ramp palette.Ramp, diverging bool, opts []ColorOption) ColorScale {
+func newColorScale(ramp palette.Ramp, diverging bool, opts []ColorOption) *colorScale {
 	if ramp == nil {
 		ramp = palette.DefaultRamp
 	}
@@ -259,6 +259,13 @@ func (c *colorScale) ColorPosition(v float64) float64 { return c.position(v) }
 // position maps a value into [0, 1] along the ramp.
 func (c *colorScale) position(v float64) float64 {
 	lo, hi := c.Domain()
+	return c.positionIn(lo, hi, v)
+}
+
+// positionIn is position over a domain given rather than the scale's own. A
+// classed scale reuses the arithmetic over a domain it has widened to cover
+// its outermost breaks; see [Threshold].
+func (c *colorScale) positionIn(lo, hi, v float64) float64 {
 	if c.diverging {
 		// Both halves share the larger deviation, so the centre stays at the
 		// middle of the ramp. Scaling each half to its own extreme instead
@@ -305,6 +312,11 @@ func (c *colorScale) position(v float64) float64 {
 // ColorValueAt implements [ColorTransformer]: the inverse of position.
 func (c *colorScale) ColorValueAt(t float64) float64 {
 	lo, hi := c.Domain()
+	return c.valueIn(lo, hi, t)
+}
+
+// valueIn is ColorValueAt over a domain given rather than the scale's own.
+func (c *colorScale) valueIn(lo, hi, t float64) float64 {
 	if c.diverging {
 		reach := math.Max(math.Abs(hi-c.center), math.Abs(lo-c.center))
 		if c.xf.kind == TransformLinear {
@@ -336,6 +348,11 @@ func (c *colorScale) ColorValueAt(t float64) float64 {
 // the bar is not the axis's business — see [ColorPositionOf].
 func (c *colorScale) ColorAxis() Scale {
 	lo, hi := c.Domain()
+	return c.axisOver(lo, hi)
+}
+
+// axisOver is ColorAxis over a domain given rather than the scale's own.
+func (c *colorScale) axisOver(lo, hi float64) Scale {
 	var s Scale
 	switch {
 	case c.diverging:
