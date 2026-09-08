@@ -170,6 +170,18 @@ END {
 	atMost("BenchmarkHover", 0)
 	flat("BenchmarkHover", "BenchmarkHoverKeyed", 0)
 
+	# Transitions, added after v1.6. A frame of an animation is a blend written
+	# into columns that already exist, over a chart that is not resolved again
+	# between frames — so it costs a frame and nothing per row.
+	#
+	# The two ways to break it are both easy to write and both invisible in the
+	# picture: a Tween that rebuilt its columns in At rather than rewriting
+	# them, and a driver that called Rebuild between frames instead of letting
+	# the layer read a Source whose contents changed. Either shows up here as a
+	# hundred thousand allocations and as an animation that is merely slow.
+	flat("BenchmarkTransitionFrame1k", "BenchmarkTransitionFrame100k", 8)
+	atMost("BenchmarkTransitionFrame100k", 128)
+
 	# The streaming path, added in v0.5. A live chart appends a row and freezes
 	# a view once per frame, for as long as the process runs; either of those
 	# allocating is a leak with a plot attached. Both measure the steady state,
