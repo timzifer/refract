@@ -303,6 +303,9 @@ const (
 	// KindQualitative is a discrete scale: one colour per category, from a
 	// qualitative palette rather than from a ramp. See [Qualitative].
 	KindQualitative ColorKind = "qualitative"
+	// KindNamed is a discrete scale whose categories are coloured by name
+	// rather than by the order they appear in. See [Named].
+	KindNamed ColorKind = "named"
 	// KindThreshold cuts the domain at boundaries given explicitly. See
 	// [Threshold].
 	KindThreshold ColorKind = "threshold"
@@ -348,6 +351,16 @@ type ColorDesc struct {
 	Base      float64
 	Constant  float64
 
+	// Labels are a [KindNamed] scale's enumerated categories, sorted, with
+	// Colors holding the colour of each index for index. Only the categories
+	// the caller named are written: one the data happened to contain is data
+	// rather than configuration, the same line this struct draws for a
+	// classed scale's derived breaks. Fallback is the palette that scale
+	// colours an unnamed category from, spelled out where it has no
+	// registered name — Ramp carries the name where it has one.
+	Labels   []string
+	Fallback palette.Ramp
+
 	// Breaks are a [KindThreshold] scale's class boundaries, and Classes the
 	// class count of a [KindQuantize] or [KindQuantile] one. Each kind carries
 	// only its own: boundaries a scale derives from the data are not
@@ -376,6 +389,28 @@ func DescribeColor(s ColorScale) (ColorDesc, bool) {
 // ColorFromDesc builds the colour scale d describes. A kind this package does
 // not define is built by whoever registered it — see [RegisterColor].
 func ColorFromDesc(d ColorDesc) (ColorScale, error) {
+	if d.Kind == KindNamed {
+		if len(d.Labels) != len(d.Colors) {
+			return nil, fmt.Errorf("refract/scale: a named colour scale has %d labels and %d colours", len(d.Labels), len(d.Colors))
+		}
+		colors := make(map[string]ir.Color, len(d.Labels))
+		for i, label := range d.Labels {
+			colors[label] = d.Colors[i]
+		}
+		fallback := palette.Qualitative(d.Fallback)
+		if d.Ramp != "" {
+			p, ok := palette.QualitativeByName(d.Ramp)
+			if !ok {
+				return nil, fmt.Errorf("refract/scale: unknown qualitative palette %q", d.Ramp)
+			}
+			fallback = p
+		}
+		opts := []ColorOption{ColorUndefined(d.Undefined), ColorFallback(fallback)}
+		if d.Reverse {
+			opts = append(opts, ColorReverse())
+		}
+		return Named(colors, opts...), nil
+	}
 	if d.Kind == KindQualitative {
 		q := palette.Qualitative(d.Colors)
 		if d.Ramp != "" {

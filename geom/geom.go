@@ -785,6 +785,16 @@ var ErrNoColumn = errors.New("refract/geom: column not found")
 // position for a name.
 var ErrCategorical = errors.New("refract/geom: categorical column on a continuous scale")
 
+// ErrRampOnPath reports a continuous colour ramp bound to a layer that draws a
+// path rather than a mark.
+//
+// A stroke carries one colour and no stops, so a path colours in stretches: it
+// can say "this part is over the limit" and it cannot say "this part is
+// slightly further over it than that part". The scales that cut a continuum
+// into stretches are [scale.Threshold], [scale.Quantize] and [scale.Quantile];
+// the mark that can paint a continuum is a point.
+var ErrRampOnPath = errors.New("refract/geom: continuous colour ramp on a path")
+
 // resolve reads the configured columns out of src.
 //
 // The scales are passed in because reading a column is not independent of the
@@ -860,6 +870,21 @@ func resolveOne(src data.Source, c config, x scale.Scale) (series, error) {
 	s := series{x: xs, y: xs, origin: data.Origins(src)}
 	dropNulls(src, &s, c.groupCol)
 	return s, nil
+}
+
+// checkPathColor rejects a colour scale a path cannot draw. See [ErrRampOnPath].
+func (c config) checkPathColor(s series) error {
+	if !c.varying(s) {
+		return nil
+	}
+	if _, classed := scale.Classed(c.colorScale); classed {
+		return nil
+	}
+	if _, discrete := scale.Discrete(c.colorScale); discrete {
+		return nil
+	}
+	return fmt.Errorf("%w: column %q; cut it into classes with scale.Threshold, scale.Quantize or scale.Quantile, or draw it with geom.Scatter",
+		ErrRampOnPath, c.colorCol)
 }
 
 // colorColumn reads the column a colour scale paints from.

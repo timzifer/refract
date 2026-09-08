@@ -465,6 +465,13 @@ type Scale struct {
 	// single one.
 	Transform string `json:"transform,omitempty"`
 
+	// Fallback is the palette a named colour scale colours a category it was
+	// not given a colour for from, spelled out because it has no registered
+	// name — a named one is written to `scheme` instead. Vega-Lite has no
+	// such field: there a `domain`/`range` pair is exhaustive and a value
+	// outside it is unmapped, where refract still draws the category.
+	Fallback []string `json:"fallback,omitempty"`
+
 	// Breaks are a threshold colour scale's class boundaries, and Classes the
 	// class count of a quantize or quantile one.
 	//

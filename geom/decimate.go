@@ -218,10 +218,12 @@ type scratch struct {
 	fx    []float64 // interpolated data-space columns
 	fy    []float64
 	fz    []float64
+	fc    []float64
 	gx    []float64 // one group's columns, gathered out of the table
 	gy    []float64
 	gz    []float64
 	gsz   []float64
+	gc    []float64
 	grows []int
 	dx    []float32 // mapped columns, which are device columns under Cartesian
 	dy    []float32
@@ -230,6 +232,11 @@ type scratch struct {
 	ky    []float32
 	sx    []float32 // a staircase, in the space the scales map into
 	sy    []float32
+	cx    []float32 // a path split into runs of one colour
+	cy    []float32
+	cvals []float64  // the colour value behind each of its vertices
+	cuts  []crossing // the class boundaries one edge of it meets
+	cpts  []ir.Point
 	keep  []int
 	rows  []int
 	order []int
@@ -242,6 +249,7 @@ type scratch struct {
 	cols  []ir.Color
 	sizes []float32
 	runs  []colorRun
+	pruns []pathRun
 	iruns []indexRun
 	rruns []rectRun
 	gruns []groupRun
@@ -262,6 +270,18 @@ type scratch struct {
 	// needed several calls deep — segmenting an interpolated series has to
 	// know — and it is false for every ordinary render.
 	wantRows bool
+
+	// wantColors is whether this Build's caller paints each mark from a
+	// colour scale and needs the colour column to survive being segmented,
+	// interpolated and gathered per group. It is a field for the same reason
+	// wantRows is — the answer is needed several calls deep — and it is
+	// false for every layer that colours itself one colour.
+	//
+	// It is asked for rather than always done because carrying a column
+	// nobody reads is a per-row copy per frame, and because a layer that
+	// already draws its groups in group colours would start drawing them in
+	// mark colours the moment the column appeared beside them.
+	wantColors bool
 }
 
 var scratchPool = sync.Pool{New: func() any { return new(scratch) }}
@@ -274,10 +294,18 @@ func acquire(f Frame) *scratch {
 	return sc
 }
 
+// colored tells the scratch that this Build paints per mark, so that the
+// colour column survives segmenting, interpolation and grouping.
+func (sc *scratch) colored(on bool) *scratch {
+	sc.wantColors = on
+	return sc
+}
+
 func (sc *scratch) release() {
 	sc.fill.Reset()
 	sc.line.Reset()
 	sc.wantRows = false
+	sc.wantColors = false
 	scratchPool.Put(sc)
 }
 
@@ -394,6 +422,13 @@ func (sc *scratch) gather(s series, rows []int) series {
 		}
 		sc.gsz = out.sz
 	}
+	if s.c != nil && sc.wantColors {
+		out.c = grow(sc.gc, n)
+		for i, r := range rows {
+			out.c[i] = s.c[r]
+		}
+		sc.gc = out.c
+	}
 	if sc.wantRows {
 		out.rows = grow(sc.grows, n)
 		for i, r := range rows {
@@ -413,15 +448,37 @@ func (sc *scratch) gather(s series, rows []int) series {
 // allocations on a million-row column once already, and this is exactly the
 // path it would reappear on.
 func (sc *scratch) marks(cd coord.Coord, x, y []float32, keep []int) []ir.Point {
-	if keep != nil {
-		sc.kx, sc.ky = grow(sc.kx, len(keep)), grow(sc.ky, len(keep))
-		for i, row := range keep {
-			sc.kx[i], sc.ky[i] = x[row], y[row]
-		}
-		x, y = sc.kx, sc.ky
-	}
+	x, y = sc.kept(x, y, keep)
 	sc.pts = cd.Points(grow(sc.pts, len(x))[:0], x, y)
 	return sc.pts
+}
+
+// kept gathers the surviving rows of a projected segment into a contiguous
+// pair of columns, or hands back the columns as they lie when every row is
+// kept. It is the half of [scratch.marks] that stops before the coord, for a
+// caller that has something to do to the mapped columns first — see
+// [scratch.colorRuns].
+func (sc *scratch) kept(x, y []float32, keep []int) ([]float32, []float32) {
+	if keep == nil {
+		return x, y
+	}
+	sc.kx, sc.ky = grow(sc.kx, len(keep)), grow(sc.ky, len(keep))
+	for i, row := range keep {
+		sc.kx[i], sc.ky[i] = x[row], y[row]
+	}
+	return sc.kx, sc.ky
+}
+
+// keptValues gathers the colour values of the surviving rows.
+func (sc *scratch) keptValues(vals []float64, keep []int) []float64 {
+	if keep == nil {
+		return vals
+	}
+	sc.cvals = grow(sc.cvals, len(keep))
+	for i, row := range keep {
+		sc.cvals[i] = vals[row]
+	}
+	return sc.cvals
 }
 
 // lowerEdge gathers a band's second edge in reverse order, so that appending it

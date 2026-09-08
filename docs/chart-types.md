@@ -40,6 +40,8 @@ and it turns eight charts into recipes.
 | Chart | Recipe |
 |---|---|
 | Heatmap | `Rect` + `ColorBy` over two band scales — see `examples/groups` |
+| Threshold line | `Line` + `ColorBy` over `scale.Threshold`, plus an `HBand` for the limit — see `examples/status` |
+| Status timeline | `Step` + `ColorBy` over `scale.Named` — see `examples/status` |
 | Calendar heatmap | `Rect` + a date→(week, weekday) helper |
 | Gantt / timeline | `Rect` on a time X against an ordinal Y |
 | Candlestick / OHLC | `Rect` for open..close, a rule for low..high, colour by sign |

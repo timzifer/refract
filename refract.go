@@ -782,6 +782,16 @@ func (p *Plot) showLegend() bool {
 		if d.Group != "" || d.From != "" || d.ID != "" {
 			return true
 		}
+		// And so is a layer painted per mark from a *discrete* colour scale.
+		// Its categories are series in everything but name — the colours are
+		// the only thing that says which mark is which state — and nothing
+		// but the legend names them. A continuous or classed scale is not
+		// this case: it contributes a colourbar, which names itself.
+		if d.ColorCol != "" && d.ColorScale != nil {
+			if _, discrete := scale.Discrete(d.ColorScale); discrete {
+				return true
+			}
+		}
 	}
 	return false
 }

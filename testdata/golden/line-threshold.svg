@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Latency against its budget</title>
+<defs>
+<clipPath id="c1"><path d="M56.448,32.8 L578.652,32.8 L578.652,351.725 L56.448,351.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,400 L0,400 Z" fill="#ffffff"/>
+<polyline fill="none" points="56.448,32.8 56.448,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="165.24,32.8 165.24,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="274.033,32.8 274.033,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="382.826,32.8 382.826,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="491.618,32.8 491.618,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,351.725 578.652,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,271.994 578.652,271.994" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,192.262 578.652,192.262" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,112.531 578.652,112.531" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,32.8 578.652,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="56.448,351.725 578.652,351.725" stroke="#333333"/>
+<polyline fill="none" points="56.448,32.8 56.448,351.725" stroke="#333333"/>
+<polyline fill="none" points="56.448,351.725 56.448,356.725" stroke="#333333"/>
+<text x="56.448" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0.0</text>
+<polyline fill="none" points="165.24,351.725 165.24,356.725" stroke="#333333"/>
+<text x="165.24" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2.5</text>
+<polyline fill="none" points="274.033,351.725 274.033,356.725" stroke="#333333"/>
+<text x="274.033" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">5.0</text>
+<polyline fill="none" points="382.826,351.725 382.826,356.725" stroke="#333333"/>
+<text x="382.826" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">7.5</text>
+<polyline fill="none" points="491.618,351.725 491.618,356.725" stroke="#333333"/>
+<text x="491.618" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">10.0</text>
+<polyline fill="none" points="51.448,351.725 56.448,351.725" stroke="#333333"/>
+<text x="47.448" y="351.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">60</text>
+<polyline fill="none" points="51.448,271.994 56.448,271.994" stroke="#333333"/>
+<text x="47.448" y="271.994" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">80</text>
+<polyline fill="none" points="51.448,192.262 56.448,192.262" stroke="#333333"/>
+<text x="47.448" y="192.262" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">100</text>
+<polyline fill="none" points="51.448,112.531 56.448,112.531" stroke="#333333"/>
+<text x="47.448" y="112.531" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">120</text>
+<polyline fill="none" points="51.448,32.8 56.448,32.8" stroke="#333333"/>
+<text x="47.448" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">140</text>
+<text x="317.55" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Latency against its budget</text>
+<text x="317.55" y="385.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">minute</text>
+<text x="20.616" y="192.262" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 192.262)">ms</text>
+<g clip-path="url(#c1)">
+<path d="M56.448,32.8 L578.652,32.8 L578.652,112.531 L56.448,112.531 Z" fill="#555555" fill-opacity="0.15"/>
+<polyline fill="none" points="56.448,192.262 65.299,160.053 67.493,152.397" stroke="#8c8394" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="67.493,152.397 74.15,129.171 79.357,112.531" stroke="#e69f00" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="79.357,112.531 83.001,100.889 91.852,76.375 100.703,56.638 109.553,42.493 118.404,34.521 127.255,33.053 136.106,38.148 144.957,49.596 153.808,66.926 162.659,89.422 170.309,112.531" stroke="#db7900" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="170.309,112.531 171.51,116.159 180.361,146.032 182.133,152.397" stroke="#e69f00" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="182.133,152.397 189.212,177.812 198.063,210.187 206.914,241.823 215.764,271.417 224.615,297.747 233.466,319.728 242.317,336.455 251.168,347.237 260.019,351.631 268.87,349.454 277.721,340.797 286.572,326.017 295.423,305.723 304.274,280.752 313.125,252.132 321.975,221.045 330.826,188.771 339.677,156.64 340.902,152.397" stroke="#8c8394" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="340.902,152.397 348.528,125.979 352.79,112.531" stroke="#e69f00" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="352.79,112.531 357.379,98.05 366.23,74.004 375.081,54.834 383.932,41.33 392.783,34.048 401.634,33.288 410.485,39.081 419.336,51.19 428.186,69.115 437.037,92.116 443.698,112.531" stroke="#db7900" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="443.698,112.531 445.888,119.245 454.739,149.385 455.575,152.397" stroke="#e69f00" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline fill="none" points="455.575,152.397 463.59,181.293 472.441,213.653 481.292,245.13 490.143,274.429 498.994,300.34 507.845,321.796 516.696,337.911 525.547,348.022 534.397,351.712 543.248,348.829 552.099,339.491 560.95,324.084 569.801,303.243 578.652,277.826" stroke="#8c8394" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<polyline fill="none" points="592.652,83.035 604.652,83.035" stroke="#d55e00" stroke-width="1.75" stroke-linecap="round"/>
+<text x="610.652" y="83.035" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">y</text>
+<text x="586.652" y="106.585" font-family="sans-serif" font-size="12" dominant-baseline="hanging" fill="#333333">y</text>
+<path d="M586.652,193.351 L600.652,193.351 L600.652,313.04 L586.652,313.04 Z" fill="#8c8394"/>
+<path d="M586.652,169.412 L600.652,169.412 L600.652,193.351 L586.652,193.351 Z" fill="#e69f00"/>
+<path d="M586.652,121.685 L600.652,121.685 L600.652,169.412 L586.652,169.412 Z" fill="#db7900"/>
+<path fill="none" d="M586.652,121.685 L600.652,121.685 L600.652,313.04 L586.652,313.04 Z" stroke="#333333"/>
+<polyline fill="none" points="600.652,193.351 605.652,193.351" stroke="#333333"/>
+<text x="609.652" y="193.351" font-family="sans-serif" font-size="11" dominant-baseline="central" fill="#555555">110</text>
+<polyline fill="none" points="600.652,169.412 605.652,169.412" stroke="#333333"/>
+<text x="609.652" y="169.412" font-family="sans-serif" font-size="11" dominant-baseline="central" fill="#555555">120</text>
+</svg>

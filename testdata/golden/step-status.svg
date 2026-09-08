@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Line 3, by machine state</title>
+<defs>
+<clipPath id="c1"><path d="M50.332,32.8 L528.008,32.8 L528.008,351.725 L50.332,351.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,400 L0,400 Z" fill="#ffffff"/>
+<polyline fill="none" points="50.332,32.8 50.332,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="169.751,32.8 169.751,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="289.17,32.8 289.17,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="408.589,32.8 408.589,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="528.008,32.8 528.008,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,351.725 528.008,351.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,271.994 528.008,271.994" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,192.262 528.008,192.262" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,112.531 528.008,112.531" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,32.8 528.008,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,351.725 528.008,351.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,32.8 50.332,351.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,351.725 50.332,356.725" stroke="#333333"/>
+<text x="50.332" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="169.751,351.725 169.751,356.725" stroke="#333333"/>
+<text x="169.751" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">5</text>
+<polyline fill="none" points="289.17,351.725 289.17,356.725" stroke="#333333"/>
+<text x="289.17" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">10</text>
+<polyline fill="none" points="408.589,351.725 408.589,356.725" stroke="#333333"/>
+<text x="408.589" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">15</text>
+<polyline fill="none" points="528.008,351.725 528.008,356.725" stroke="#333333"/>
+<text x="528.008" y="360.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">20</text>
+<polyline fill="none" points="45.332,351.725 50.332,351.725" stroke="#333333"/>
+<text x="41.332" y="351.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="45.332,271.994 50.332,271.994" stroke="#333333"/>
+<text x="41.332" y="271.994" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">20</text>
+<polyline fill="none" points="45.332,192.262 50.332,192.262" stroke="#333333"/>
+<text x="41.332" y="192.262" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">40</text>
+<polyline fill="none" points="45.332,112.531 50.332,112.531" stroke="#333333"/>
+<text x="41.332" y="112.531" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">60</text>
+<polyline fill="none" points="45.332,32.8 50.332,32.8" stroke="#333333"/>
+<text x="41.332" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">80</text>
+<text x="289.17" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Line 3, by machine state</text>
+<text x="289.17" y="385.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">minute</text>
+<text x="20.616" y="192.262" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 192.262)">parts/min</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="50.332,32.8 121.983,32.8 121.983,32.8 169.751,32.8" stroke="#009e73" stroke-width="1.75"/>
+<polyline fill="none" points="169.751,32.8 169.751,351.725 265.286,351.725 265.286,351.725 336.938,351.725" stroke="#d55e00" stroke-width="1.75"/>
+<polyline fill="none" points="336.938,351.725 336.938,132.464 432.473,132.464 432.473,132.464 528.008,132.464" stroke="#e69f00" stroke-width="1.75"/>
+<polyline fill="none" points="528.008,132.464 528.008,32.8" stroke="#009e73" stroke-width="1.75"/>
+</g>
+<polyline fill="none" points="542.008,175.162 554.008,175.162" stroke="#d55e00" stroke-width="1.75" stroke-linecap="round"/>
+<text x="560.008" y="175.162" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">FAULT</text>
+<polyline fill="none" points="542.008,192.262 554.008,192.262" stroke="#009e73" stroke-width="1.75" stroke-linecap="round"/>
+<text x="560.008" y="192.262" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">RUN</text>
+<polyline fill="none" points="542.008,209.363 554.008,209.363" stroke="#e69f00" stroke-width="1.75" stroke-linecap="round"/>
+<text x="560.008" y="209.363" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">WARTUNG</text>
+</svg>
