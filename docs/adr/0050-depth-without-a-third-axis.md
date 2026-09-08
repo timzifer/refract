@@ -32,7 +32,7 @@ So they are three records, and this is the first:
 | # | What | Blast radius |
 |---|---|---|
 | 0050 (this) | Depth as decoration: an oblique coord and extruded marks | one coord, two geoms, the IR untouched |
-| [0051](0051-three-dimensional-charts.md) | A third scale, projected: surface, scatter3d, line3d, bar3d | a new module, the IR still untouched |
+| [0051](0051-three-dimensional-charts.md) | A third scale, projected: surface, scatter3d, line3d, bar3d | three widened seams and a `v2` tag, the IR still untouched |
 | [0052](0052-orbiting-a-chart.md) | Turning it with the mouse | that module's live loop; no core change |
 
 Each is worth having on its own, and each is the honest prerequisite for the

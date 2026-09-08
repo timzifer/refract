@@ -1,4 +1,4 @@
-# 0051 — A third axis is a module above the IR, and the IR stays two-dimensional
+# 0051 — A third axis widens the seams that count scales, and the IR stays two-dimensional
 
 **Status:** Planned · **Date:** 2026-09-08 · **Implementation:** not started
 
@@ -24,9 +24,9 @@ every chart drawn today keeps drawing.
 **The obstacle is that the field is one line and four parallel paths.**
 
 **Nothing trains it.** `Geom.Train(x, y scale.Scale) error` is an interface
-implemented outside this module, so it never gains a parameter — and a z
-domain has to exist before layout, because layout needs tick labels and tick
-labels need a domain. Training z is therefore a second training path beside
+implemented outside this module, so under v1's growth rule it never gains a
+parameter — and a z domain has to exist before layout, because layout needs
+tick labels and tick labels need a domain. Training z is therefore a second training path beside
 the frozen one, reached through an optional interface and called from a
 `render` that knows when to look for it.
 
@@ -58,64 +58,117 @@ heard of.
 So the question was never whether a struct can grow. It is where four parallel
 paths live, and three answers were available.
 
-**Widen the core.** `Frame.Z`, an optional `Train3`, an optional `Panel3`, a
-depth-merge stage in `render`. It breaks the freeze the v1 positioning rests on
-— not through the struct, through the drawing order — for a feature
-CONCEPT §5 says arrives well after v1.0.
+**Bolt it on additively.** `Frame.Z`, an optional `Trainer3`, an optional
+`Panel3`, a depth-merge stage in `render`. Nothing breaks, and every one of
+those seams carries two paths forever — one of which exists only because of the
+order features arrived in.
 
-**A parallel stack inside the core.** `frame3`, `geom3`, `coord3`, `draw3`
-beside the existing ones. Nothing breaks, and the core acquires a second
-drawing order and a second set of interfaces inside the perimeter it has just
-frozen — 0010's objection, one layer up, and now permanent.
+**Put it in a nested module at `v0.x`.** Which is what
+[the v1 audit](../v1-api-audit.md) wrote in the one cell it gave the subject,
+and what the first draft of this record decided. It keeps the v1 promise intact
+by keeping 3D outside the thing the promise covers.
 
-**Its own module.** Which is what [the v1 audit](../v1-api-audit.md) wrote in
-the one cell it gave the subject. The parallel stack is unavoidable; what is
-still open is whether it sits inside the stability perimeter or beside it.
+**Take the break.** Widen the seams that are the wrong shape, tag `v2.0.0`, and
+say so in the release notes.
+
+The third is chosen, and the reason it can be chosen is a fact about this
+library rather than about the design: it has few enough users that a migration
+is a compiler pass. That fact has an expiry date, which is why the record is
+written now.
 
 ## Decision
 
-**3D is `github.com/timzifer/refract/three`, a nested module that projects a
-scene into the two-dimensional IR the core already has. Nothing in the core
-changes.**
+**3D is `refract/three`, a package of the core module, and the three seams that
+take positional scale arguments are widened to carry a third. That is a
+breaking change, it is spent deliberately, and it is the last one those seams
+need.**
 
-### Why a module, when it needs no dependency
+### Why the core, and what the break costs
 
-This is the weakest part of the record and it is written as such, because the
-objection is good: every nested module here exists to keep a dependency out of
-the core. `backend/gg` and `backend/window` hold `gogpu`, `backend/gg/gpu`
-holds `wgpu`, `arrow/v18` holds Arrow — [ADR 0001](0001-module-layout.md)'s one
-rule, four times. `three` is arithmetic and `ir`; it has nothing to quarantine.
-It would be the first nested module here whose reason is not a dependency, and
-"the audit wrote it in a table cell" is not a reason.
+The first draft of this record put `three` in a nested module at `v0.x`, so
+that a first 3D API could be wrong without breaking the library's v1 promise.
+That was architecture chosen to avoid a version number, and it was the wrong
+trade for a library at this age.
 
-The reason is that **a module has its own version**, and the repository already
-uses that: the audit's own line for the GPU tier is "`backend/gg/gpu` stays
-`v0.x`", which is a stability decision made by packaging rather than by a
-dependency. The core is v1 and its API is frozen. A first 3D API will be wrong
-in the way first APIs are wrong — the camera constructor, where the z scale is
-bound, whether a surface takes a grid or three columns — and the two ways to
-be wrong inside a v1 module are to freeze it before anyone has used it, or to
-break the promise the library's positioning rests on. `three` at `v0.x` breaks
-its own users instead, which is the deal every v0 makes, and `go.work` already
-builds it with the core so a contributor sees a break the moment they cause one.
+**A v2 with no subscribers is a v1.** refract tagged `v1.0.0` and is at
+`v1.7.0`; the freeze was the right discipline for getting the model right and
+it has done its work. What it is not is a reason to bolt four optional
+interfaces onto three frozen signatures and call the result a design. The break
+is cheap exactly once — now, while the cost is a line in a changelog rather
+than a migration for other people's code — and a library that spends it on the
+thing that shapes its next decade is spending it well.
 
-**And the choice is reversible, which is why it is the right one to make
-first.** A nested module and a package of the parent module have the *same
-import path*: `github.com/timzifer/refract/three` either way. Deleting its
-`go.mod` folds it into the core, and no caller's import changes — what changes
-is which version governs it, and therefore which promise it is under. So the
-sequence is: land it as a module while it is still moving, fold it into the
-core when its API has stopped, and let the users who were there for v0 keep
-the line they already wrote.
+So the decision is the honest one: **take the break, write it down, and fix all
+three seams in the same release**, because a major version is paid once whether
+it carries one change or three.
 
-The zero-dependency property is what keeps that door open rather than what
-argues against the module. A nested module is excluded from its parent's module
-graph, so ADR 0001's CI gate never sees it; the day `three` acquires a
-dependency is the day it can never be folded in. It therefore has the same
-rule as the core — **stdlib only** — and the fold-in is checked by the gate
-that already exists.
+#### What actually breaks
 
-The opt-in is the import, and the cost of not importing it is exactly zero.
+Nothing in 3D *requires* a break. `Frame.Z` is additive, and z could reach a
+geom through an optional `Trainer3`, an optional `Panel3` on the observer and
+an optional `Frame3` on the coord — the pattern this repository already uses
+eight times. That would work, and it would leave every one of those seams with
+two paths through it forever, one of which exists only because of when a
+feature arrived. The break does not buy 3D. **It buys 3D having one path.**
+
+The three seams are the ones that take scales *positionally*, which is why they
+are the three that a third dimension breaks:
+
+| Seam | v1 | v2 |
+|---|---|---|
+| `geom.Geom` | `Train(x, y scale.Scale) error` | `Train(t geom.Training) error` |
+| `render.Observer` | `Panel(i int, area ir.Rect, x, y scale.Scale, cd coord.Coord)` | `Panel(p render.PanelInfo)` |
+| `coord.Coord` | `Frame(area ir.Rect, x, y scale.Scale) Coord` | `Frame(f coord.Framing) Coord` |
+
+Each becomes one growable struct, which puts them under the half of the growth
+rule that has never been the problem: *"a struct with exported fields gains
+fields and never loses one, and its zero value keeps its meaning."* A fourth
+dimension, a second radial scale, a time axis — none of them breaks these
+seams again. **The migration is mechanical**: a method's two parameters become
+two field reads, and the compiler finds every site.
+
+The rest of the cost is Go's, and it is the part worth stating plainly:
+
+- the import path becomes `github.com/timzifer/refract/v2`, in every file of
+  every caller and in each nested module's `require`;
+- `$schema` moves with the major version, which CONCEPT §15 already says it
+  does;
+- `backend/gg`, `backend/window` and `arrow/v18` re-require the core and tag
+  again. Their own APIs do not change: `ir.Backend` is untouched by this
+  record, so a third-party backend recompiles and is done.
+
+#### What is written down, and where
+
+CONCEPT §15 currently reads as though the v1 surface is permanent. When this
+record is implemented it gains the clause that makes the actual policy legible,
+and the wording is decided here rather than left to the commit that does it:
+
+> **A major version is a tool, not a failure.** Within a major version the
+> growth rule holds absolutely. Between them, a seam whose *shape* is wrong is
+> corrected rather than papered over with a parallel path — and while refract
+> has few enough users that a migration is a compiler pass, that correction is
+> preferred to carrying the mistake. `v2.0.0` widens `Geom.Train`,
+> `Observer.Panel` and `Coord.Frame` from positional scale arguments to
+> growable parameter structs, so that adding a dimension is additive from then
+> on ([ADR 0051](docs/adr/0051-three-dimensional-charts.md)).
+
+The deprecation cycle CONCEPT promises for the removals is not skipped so much
+as unnecessary — it exists for callers, and the release notes say precisely who
+had to change what. If that stops being true before this lands, this paragraph
+is what has to be revisited first.
+
+### The package still has to be its own package
+
+Dropping the module boundary does not dissolve the parallel stack the Context
+argued for; it moves it inside the perimeter, where it is `refract/three`
+beside `refract/render` rather than a second path *through* `render`. `three`
+owns the 3D draw loop, the depth ordering, the cube's furniture and the camera.
+`render` keeps its one drawing order for 2D panels and gains nothing.
+
+The import path is `github.com/timzifer/refract/v2/three` either way — a nested
+module and a package of its parent are indistinguishable to a caller — so this
+decision was never visible from outside, which is the last argument against
+having contorted the design for it.
 
 ### The IR does not gain a dimension
 
@@ -126,7 +179,7 @@ everything above the seam, and calls `Polyline`, `FillPath`, `Markers` and
 
 This is the same trade `coord` made — "the IR is untouched, because an arc is
 cubics and `ir.Path` has always had those" — and it buys the same thing,
-larger. **Every backend renders 3D on the day the module compiles**: SVG, PDF,
+larger. **Every backend renders 3D on the day `three` compiles**: SVG, PDF,
 canvas, `backend/gg`, the native window, the GPU tier. No capability
 negotiation, no optional interface, no backend that draws a chart the others
 cannot. A third-party backend written against v0.1 draws a surface without its
@@ -233,7 +286,9 @@ means something.
   restated.
 - **No facets of 3D panels in the first cut.** Layout is `internal/layout`'s
   and lives in the core; a 3D panel inside a facet grid is a second
-  conversation, and the module can draw one chart before it draws nine.
-- **The core gains nothing.** No new field, no new interface, no new package.
-  If this record cannot be implemented without one, the design is wrong and the
-  record comes back here first.
+  conversation, and `three` can draw one chart before it draws nine.
+- **The IR gains nothing**, and that is the invariant this record actually
+  defends. The three seams that widen are all above it. If an implementation
+  finds itself adding a depth to a drawing call, an `ir.Point3` or a
+  `Backend3`, the design is wrong and it comes back here before it goes
+  further.

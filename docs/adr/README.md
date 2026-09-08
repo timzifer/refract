@@ -60,8 +60,9 @@ depends on.
 | [0048](0048-clickable-colourbar-and-size-key.md) | A colourbar and a size key report a quantity, because neither is a series | Accepted | — |
 | [0049](0049-paths-colour-in-classes.md) | A path colours in classes, and the scale decides where the colour changes | Accepted | — |
 | [0050](0050-depth-without-a-third-axis.md) | A mark gains volume before a chart gains a dimension | Planned | — |
-| [0051](0051-three-dimensional-charts.md) | A third axis is a module above the IR, and the IR stays two-dimensional | Planned | — |
+| [0051](0051-three-dimensional-charts.md) | A third axis widens the seams that count scales, and the IR stays two-dimensional | Planned | — |
 | [0052](0052-orbiting-a-chart.md) | The camera is a value, and turning it is the host's loop | Planned | — |
+| [0053](0053-what-3d-is-for.md) | What the third dimension is for, and where it stops paying | Planned | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the
@@ -72,7 +73,7 @@ the freeze, the second declines to widen `Geom` because an optional interface
 does the same work without spending it — and 0029 is the answer. A decision
 that opens after v1.0 gets a record here before it gets code.
 
-**0050, 0051 and 0052 are that sentence being kept.** They are the first
+**0050 to 0053 are that sentence being kept.** They are the first
 records here with a status other than Accepted, and the status is doing work:
 nothing in them is implemented, and each is written so that it can be argued
 with before any of it is. They exist because 3D had been deferred as one
@@ -81,7 +82,11 @@ indivisible thing — `CONCEPT.md` §5 and §14 and
 saying what "it" is — and that deferral stayed cheap only for as long as nobody
 priced the parts. Split, the three have different costs, different blast radii
 and different answers: volume is a coord and two geoms, a third axis is a
-module that leaves the IR alone, and turning the scene is a pure function over
-a camera. Each earns its keep alone, and each is the honest prerequisite for
-the next. Implementation is a separate step; a Planned record becomes Accepted
-when the code that proves it lands.
+major version spent on three seams that leaves the IR alone, and turning the
+scene is a pure function over a camera. Each earns its keep alone, and each is
+the honest prerequisite for the next. 0053 is the fourth and says what the
+other three are for: the charts 3D enables, ranked by what the third dimension
+gives a reader that the flat chart of the same data does not — the only
+ranking under which a 3D bar chart loses to a heatmap and a Smith sphere loses
+to nothing. Implementation is a separate step; a Planned record becomes
+Accepted when the code that proves it lands.
