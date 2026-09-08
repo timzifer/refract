@@ -2,6 +2,7 @@ package geom
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/scale"
@@ -31,10 +32,31 @@ type ColorGuide struct {
 // == panics on.
 func (g ColorGuide) Key() string {
 	lo, hi := g.Scale.Domain()
-	mid := lo + (hi-lo)/2
-	return fmt.Sprintf("%s|%v|%v|%v|%v|%v",
-		g.Label, lo, hi, g.Scale.Color(lo), g.Scale.Color(mid), g.Scale.Color(hi))
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s|%v|%v|%v", g.Label, lo, hi, scale.ColorTransformOf(g.Scale))
+	// Sampled along the ramp rather than across the domain, and at more than
+	// its two ends and its middle: two scales that agree at three points and
+	// nowhere else are two different bars, and a ramp that is stepped rather
+	// than continuous differs from a smooth one only in between.
+	for i := 0; i <= colorKeySamples; i++ {
+		t := float64(i) / colorKeySamples
+		fmt.Fprintf(&b, "|%v", g.Scale.Color(scale.ColorValueOf(g.Scale, t)))
+	}
+	if c, ok := scale.Classed(g.Scale); ok {
+		// Two classed bars differ in where their boundaries are, and a
+		// boundary is exactly what sampling can step over: a class narrower
+		// than the gap between samples is a band the reader sees and the key
+		// does not.
+		fmt.Fprintf(&b, "|%v", c.Breaks())
+	}
+	return b.String()
 }
+
+// colorKeySamples is how finely [ColorGuide.Key] reads a ramp. It is one
+// sample per class of a colourbar with more classes than anyone can tell
+// apart, which is the resolution at which two bars that differ are two bars a
+// reader can see differ.
+const colorKeySamples = 16
 
 // Guided is implemented by a layer that paints from a continuous colour scale.
 //

@@ -303,6 +303,14 @@ const (
 	// KindQualitative is a discrete scale: one colour per category, from a
 	// qualitative palette rather than from a ramp. See [Qualitative].
 	KindQualitative ColorKind = "qualitative"
+	// KindThreshold cuts the domain at boundaries given explicitly. See
+	// [Threshold].
+	KindThreshold ColorKind = "threshold"
+	// KindQuantize cuts it into equal classes. See [Quantize].
+	KindQuantize ColorKind = "quantize"
+	// KindQuantile cuts it so that each class holds equally many
+	// observations. See [Quantile].
+	KindQuantile ColorKind = "quantile"
 )
 
 // ColorDesc is a colour scale reduced to what configures it.
@@ -327,6 +335,26 @@ type ColorDesc struct {
 	Center    float64
 	Reverse   bool
 	Undefined ir.Color
+
+	// Transform is the shape of the ramp's traversal of the domain, empty for
+	// the linear default. Base and Constant configure it: the logarithm's
+	// base, and a symmetric logarithm's linear threshold. Zero means the
+	// default for both, which is what an omitted field in a document reads as.
+	//
+	// They are separate from Kind because they are a separate choice: a
+	// diverging ramp over a log-fold change is diverging *and* logarithmic,
+	// and folding the two into one word would make one of them unsayable.
+	Transform ColorTransform
+	Base      float64
+	Constant  float64
+
+	// Breaks are a [KindThreshold] scale's class boundaries, and Classes the
+	// class count of a [KindQuantize] or [KindQuantile] one. Each kind carries
+	// only its own: boundaries a scale derives from the data are not
+	// configuration, and a document that pinned them would stop them being
+	// derived the next time it is drawn over different rows.
+	Breaks  []float64
+	Classes int
 }
 
 // ColorDescriber is implemented by a colour scale that can say what it is.
@@ -379,11 +407,26 @@ func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 	if d.Reverse {
 		opts = append(opts, ColorReverse())
 	}
+	switch d.Transform {
+	case TransformLog:
+		opts = append(opts, ColorLog(d.Base))
+	case TransformSymLog:
+		opts = append(opts, ColorSymLog(d.Base, d.Constant))
+	case TransformLinear:
+	default:
+		return nil, fmt.Errorf("refract/scale: unknown colour transform %q", d.Transform)
+	}
 	switch d.Kind {
 	case KindDiverging:
 		return Diverging(ramp, append(opts, ColorCenter(d.Center))...), nil
 	case KindSequential, "":
 		return Sequential(ramp, opts...), nil
+	case KindThreshold:
+		return Threshold(ramp, d.Breaks, opts...), nil
+	case KindQuantize:
+		return Quantize(ramp, d.Classes, opts...), nil
+	case KindQuantile:
+		return Quantile(ramp, d.Classes, opts...), nil
 	}
 	if build, ok := registeredColor(d.Kind); ok {
 		return build(d)
@@ -397,7 +440,13 @@ func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 func (c *colorScale) DescribeColor() ColorDesc {
 	d := ColorDesc{
 		Kind: KindSequential, Center: c.center, Reverse: c.reverse,
-		Fixed: c.fixed, Undefined: c.undef,
+		Fixed: c.fixed, Undefined: c.undef, Transform: c.xf.kind,
+	}
+	if c.xf.kind != TransformLinear {
+		d.Base = c.xf.base
+		if c.xf.kind == TransformSymLog {
+			d.Constant = c.xf.thr
+		}
 	}
 	if c.diverging {
 		d.Kind = KindDiverging

@@ -201,12 +201,10 @@ func layoutGuides(gs []guide, th theme.Theme) []layout.Guide {
 	for _, g := range gs {
 		switch g.kind {
 		case layout.GuideColorbar:
-			s := colorbarScale(g.color.Scale)
-			s.SetRange(0, 1)
 			out = append(out, layout.Guide{
 				Kind:   layout.GuideColorbar,
 				Title:  g.color.Label,
-				Labels: labelsOf(s.Ticks(th.ColorbarTickCount)),
+				Labels: labelsOf(colorbarTicks(g.color.Scale, th.ColorbarTickCount)),
 			})
 		case layout.GuideSize:
 			lg := layout.Guide{Kind: layout.GuideSize, Title: g.size.Label}
@@ -244,14 +242,25 @@ func drawGuide(b ir.Backend, box ir.Rect, th theme.Theme, g guide) {
 // colorbarScale returns a positional scale over a colour scale's domain.
 //
 // A colourbar is an axis: it needs round numbers at readable intervals, which
-// is exactly what a linear scale's tick generation already decides. Nicing is
-// deliberately off — the bar shows the domain the data actually covers, and
-// rounding it outwards would paint colours no mark has.
-func colorbarScale(cs scale.ColorScale) scale.Scale {
-	lo, hi := cs.Domain()
-	s := scale.Linear()
-	s.Train(lo, hi)
-	return s
+// is exactly what a scale's tick generation already decides. Which scale that
+// is comes from the colour scale itself, because a ramp that runs
+// logarithmically wants decades and a linear one wants round numbers — see
+// [scale.ColorAxisOf]. Nicing is deliberately off — the bar shows the domain
+// the data actually covers, and rounding it outwards would paint colours no
+// mark has.
+//
+// The scale chooses which values to label. Where they *sit* on the bar is
+// [colorbarPos]'s answer, not this one: an axis and a ramp can disagree about
+// the mapping — a diverging ramp centred off zero does — and the ramp is the
+// thing the reader is looking at.
+func colorbarScale(cs scale.ColorScale) scale.Scale { return scale.ColorAxisOf(cs) }
+
+// colorbarPos is where a value sits on the bar, in device space.
+//
+// The bar runs bottom to top, so position 0 on the ramp is bar.Max.Y.
+func colorbarPos(cs scale.ColorScale, bar ir.Rect, v float64) float32 {
+	t := scale.ColorPositionOf(cs, v)
+	return bar.Max.Y - float32(t)*(bar.Max.Y-bar.Min.Y)
 }
 
 // colorbarStops is how finely a ramp is sampled into gradient stops.
@@ -281,15 +290,113 @@ func drawColorbar(b ir.Backend, box ir.Rect, th theme.Theme, g geom.ColorGuide) 
 		return
 	}
 
-	lo, hi := g.Scale.Domain()
+	if c, classed := scale.Classed(g.Scale); classed {
+		drawClassedBar(b, bar, c)
+	} else {
+		drawGradientBar(b, bar, g.Scale)
+	}
+
+	var p ir.Path
+	p.Rect(bar)
+	if th.ColorbarBorder.A != 0 {
+		b.StrokePath(&p, ir.Stroke{Color: th.ColorbarBorder, Width: th.AxisWidth})
+	}
+
+	// Ticks. A value sits on the bar where the ramp puts it, which for a
+	// compressed ramp is not where a linear reading of the domain would.
+	axis := ir.Stroke{Color: th.ColorbarBorder, Width: th.AxisWidth, Cap: ir.CapButt}
+	for _, t := range colorbarTicks(g.Scale, th.ColorbarTickCount) {
+		pos := colorbarPos(g.Scale, bar, t.Value)
+		if !inRange(pos, bar.Min.Y, bar.Max.Y) {
+			continue
+		}
+		if axis.Visible() {
+			b.Polyline([]ir.Point{
+				{X: bar.Max.X, Y: pos},
+				{X: bar.Max.X + th.TickLength, Y: pos},
+			}, axis)
+		}
+		b.Text(ir.TextRun{
+			Text:  t.Label,
+			Font:  tickFont,
+			At:    ir.Point{X: bar.Max.X + th.TickLength + th.TickLabelPad, Y: pos},
+			V:     ir.AlignMiddle,
+			Color: th.TickColor,
+		})
+	}
+}
+
+// colorbarTicks returns the values a colourbar is labelled at.
+//
+// A classed scale is labelled at its class boundaries and nowhere else: the
+// boundaries are what the bar says, and a round number between two of them
+// would invite a reader to interpolate across a step that has no inside. A
+// continuous one is labelled the way its axis labels itself, which under a
+// log ramp is the decades.
+func colorbarTicks(cs scale.ColorScale, want int) []scale.Tick {
+	axis := colorbarScale(cs)
+	axis.SetRange(0, 1)
+	if c, ok := scale.Classed(cs); ok {
+		breaks := c.Breaks()
+		out := make([]scale.Tick, 0, len(breaks))
+		for _, v := range breaks {
+			out = append(out, scale.Tick{Value: v, Label: scale.LabelOf(axis, v)})
+		}
+		return out
+	}
+	ticks := axis.Ticks(want)
+	out := make([]scale.Tick, 0, len(ticks))
+	for _, t := range ticks {
+		if !t.Minor && t.Label != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// drawClassedBar paints a classed scale's bar: one solid band per class,
+// as tall on the bar as the class is wide in the data.
+//
+// Bands of equal height would be easier to label and would put the boundaries
+// somewhere they are not. For a quantile scale that is the whole point of the
+// bar — classes of very different widths are what equally many observations in
+// each looks like — and a legend that hid it would be hiding the distribution
+// the scale was chosen to show.
+func drawClassedBar(b ir.Backend, bar ir.Rect, c scale.ClassedColorScale) {
+	lo, hi := c.Domain()
+	edges := append(append(make([]float64, 0, c.Classes()+1), lo), c.Breaks()...)
+	edges = append(edges, hi)
+	var p ir.Path
+	for i := 0; i+1 < len(edges); i++ {
+		band := ir.Rect{
+			Min: ir.Point{X: bar.Min.X, Y: colorbarPos(c, bar, edges[i+1])},
+			Max: ir.Point{X: bar.Max.X, Y: colorbarPos(c, bar, edges[i])},
+		}
+		if band.Empty() {
+			continue
+		}
+		p.Reset()
+		p.Rect(band)
+		b.FillPath(&p, ir.Solid(c.Color(edges[i]+(edges[i+1]-edges[i])/2)), ir.NonZero)
+	}
+}
+
+// drawGradientBar paints a continuous scale's bar as one gradient.
+func drawGradientBar(b ir.Backend, bar ir.Rect, cs scale.ColorScale) {
 	stops := make([]ir.GradientStop, 0, colorbarStops+1)
 	for i := 0; i <= colorbarStops; i++ {
 		t := float64(i) / colorbarStops
 		stops = append(stops, ir.GradientStop{
 			// Offset zero is the gradient's start, which is the bottom of the
 			// bar, which is the low end of the domain.
+			//
+			// The value is read back from the offset rather than interpolated
+			// across the domain, so the stops are evenly spaced along the
+			// *bar*. Under a compressed ramp those are not the same thing:
+			// sampling five decades linearly puts thirty of the thirty-two
+			// stops in the top decade and smears the rest into one band.
 			Offset: float32(t),
-			Color:  g.Scale.Color(lo + t*(hi-lo)),
+			Color:  cs.Color(scale.ColorValueOf(cs, t)),
 		})
 	}
 	var p ir.Path
@@ -299,34 +406,6 @@ func drawColorbar(b ir.Backend, box ir.Rect, th theme.Theme, g geom.ColorGuide) 
 		End:   ir.Point{X: bar.Min.X, Y: bar.Min.Y},
 		Stops: stops,
 	}, ir.NonZero)
-
-	if th.ColorbarBorder.A != 0 {
-		b.StrokePath(&p, ir.Stroke{Color: th.ColorbarBorder, Width: th.AxisWidth})
-	}
-
-	// Ticks. The scale maps the domain onto the bar, inverted the way a Y axis
-	// is, so that the low value sits at the bottom.
-	s := colorbarScale(g.Scale)
-	s.SetRange(bar.Max.Y, bar.Min.Y)
-	axis := ir.Stroke{Color: th.ColorbarBorder, Width: th.AxisWidth, Cap: ir.CapButt}
-	for _, t := range s.Ticks(th.ColorbarTickCount) {
-		if t.Minor || t.Label == "" || !inRange(t.Pos, bar.Min.Y, bar.Max.Y) {
-			continue
-		}
-		if axis.Visible() {
-			b.Polyline([]ir.Point{
-				{X: bar.Max.X, Y: t.Pos},
-				{X: bar.Max.X + th.TickLength, Y: t.Pos},
-			}, axis)
-		}
-		b.Text(ir.TextRun{
-			Text:  t.Label,
-			Font:  tickFont,
-			At:    ir.Point{X: bar.Max.X + th.TickLength + th.TickLabelPad, Y: t.Pos},
-			V:     ir.AlignMiddle,
-			Color: th.TickColor,
-		})
-	}
 }
 
 // drawSizeKey draws the ladder of sample marks a size channel is read off.

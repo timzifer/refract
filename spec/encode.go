@@ -191,7 +191,22 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 	if !ok {
 		return nil, fmt.Errorf("%T cannot describe itself: it does not implement scale.ColorDescriber", cs)
 	}
-	out := &Scale{Type: string(d.Kind), Scheme: d.Ramp, Reverse: d.Reverse}
+	out := &Scale{
+		Type: string(d.Kind), Scheme: d.Ramp, Reverse: d.Reverse,
+		Transform: string(d.Transform),
+	}
+	if d.Transform != scale.TransformLinear {
+		// The defaults are left out: a document that does not say which base
+		// gets the same scale back, and writing 10 into every log ramp would
+		// suggest the number was a choice.
+		if d.Base != 10 {
+			out.Base = d.Base
+		}
+		if d.Transform == scale.TransformSymLog && d.Constant != 1 {
+			out.Constant = d.Constant
+		}
+	}
+	out.Breaks, out.Classes = d.Breaks, d.Classes
 	for _, c := range d.Colors {
 		out.Range = append(out.Range, colorHex(c))
 	}

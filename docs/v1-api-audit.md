@@ -159,6 +159,8 @@ calls it".
 | `Tick` | FREEZE | Struct; fields addable. |
 | `ColorScale`, `DiscreteColorScale`, `Discrete`, `SizeScale` | FREEZE | Same shape, same rule. |
 | `Linear`, `Log`, `SymLog`, `Time`, `Ordinal`, `Size`, `Sequential`, `Diverging`, `Qualitative` | FREEZE | |
+| `Threshold`, `Quantize`, `Quantile`, `ClassedColorScale`, `Classed` | FREEZE | Classed colour: a number in, one of a finite set of colours out. |
+| `ColorLog`, `ColorSymLog`, `ColorTransform`, `ColorTransformer`, `ColorPositionOf`, `ColorValueOf`, `ColorAxisOf`, `ColorTransformOf` | FREEZE | A ramp that does not run linearly, and the three questions a colourbar asks it. |
 | `LinearOption`, `LogOption`, `SymLogOption`, `TimeOption`, `OrdinalOption`, `SizeOption`, `ColorOption` and their functions | **CHANGE BEFORE V1** — decide | Seven option types. Linear's options are bare (`Domain`, `Nice`, `Zero`, `Format`), Log's and SymLog's are prefixed (`LogDomain`, `LogNice`, …), Size's and Color's are prefixed, Time's are mixed (`In`, `Origin`, `TimeFormat`), Ordinal's are mixed (`Categories`, `OrdinalPadding`). A reader cannot predict a name. Two honest resolutions: (a) prefix Linear's too (`LinearDomain`, …), which breaks every quick start ever written; (b) keep it and write down that **the unprefixed set belongs to the default scale**. Recommend (b), recorded in the package doc — but decided, not inherited. |
 | `Kind`, `Desc`, `Describe`, `Describer`, `FromDesc`, `ErrUnknownKind` | **CHANGE BEFORE V1** | `FromDesc` is a closed switch over five kinds. See *The blocker* below. `Describer` and `Desc` themselves are right. |
 | `ColorKind`, `ColorDesc`, `ColorDescriber`, `DescribeColor`, `ColorFromDesc`, `SizeDesc`, `SizeDescriber`, `DescribeSize`, `SizeFromDesc` | **CHANGE BEFORE V1** | Same: closed switches. |
@@ -373,6 +375,7 @@ beside the frozen surface rather than through it.
 | Relational layouts (sankey, treemap, chord) | **shipped in v1.4** — four geoms; `data.Source` already returned an edge list, and it did not change ([ADR 0039](adr/0039-relational-layouts.md)) | — |
 | 3D | Its own module | later |
 | Contour, QQ, more stats | New pure functions in `stat`, new geoms that call them | v1.x |
+| A `pow` or `sqrt` colour transform | A third `ColorTransform` beside `log` and `symlog`. It waits on a positional `Pow` scale rather than on the colour channel: a compressed ramp's colourbar takes its tick values from a `Scale` over the same domain (`scale.ColorAxisOf`), and there is no positional scale to hand it — so the transform is a dozen lines and the axis behind it is a new `Kind`, with a registry entry, a `Desc`, and a tick search | v1.x |
 | Brush, linked views | `Select EventKind`, `Event.Rows []int` | v1.x |
 | Per-instance marker colour or size | An optional `ir.InstancedMarkers` a backend may implement | v1.x |
 | A fourth column type, a null mask | Optional interfaces beside `data.Source` | v1.x |

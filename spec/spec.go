@@ -442,6 +442,29 @@ type Scale struct {
 	Range    []string `json:"range,omitempty"`
 	Reverse  bool     `json:"reverse,omitempty"`
 
+	// Transform is how a colour scale's ramp runs across its domain: "log",
+	// "symlog", or absent for the linear default. Base and Constant configure
+	// it, the same two fields a positional log or symlog axis reads.
+	//
+	// Vega-Lite has no such field because it spells the transform as the
+	// scale's `type`, which refract cannot: `type` there already carries
+	// "sequential", "diverging" or "qualitative". A document that writes
+	// `"type": "log"` on a colour channel is read as a sequential scale with a
+	// log transform anyway, the same courtesy `"nominal"` gets — but a scale
+	// written back out says both words, because a diverging log ramp has no
+	// single one.
+	Transform string `json:"transform,omitempty"`
+
+	// Breaks are a threshold colour scale's class boundaries, and Classes the
+	// class count of a quantize or quantile one.
+	//
+	// Vega-Lite writes a threshold scale's boundaries in `domain`, which
+	// refract cannot: `domain` on a colour scale already carries the two ends
+	// of the interval the ramp runs over, and a threshold scale has both — the
+	// boundaries it cuts at and the ends its outermost classes reach to.
+	Breaks  []float64 `json:"breaks,omitempty"`
+	Classes int       `json:"classes,omitempty"`
+
 	// SizeRange is the diameters a size scale's domain maps onto, in device
 	// units, when the chart pinned them rather than leaving them to the theme.
 	// Vega-Lite writes a size scale's range as a plain `range` of two numbers;
