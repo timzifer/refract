@@ -40,6 +40,13 @@ type Input struct {
 
 	slop float64
 	drag Drag
+
+	// bar is the colourbar a drag started on, and barTo the last point of it
+	// the pointer was over. A drag that begins on a colourbar is a range along
+	// it whatever [Input.Drag] says, because a bar cannot be panned and a
+	// rectangle dragged out over one means the values between its ends.
+	onBar      bool
+	bar, barTo Hit
 }
 
 // Drag is what dragging the pointer across the chart does.
@@ -83,6 +90,11 @@ func (d Drag) String() string {
 //
 // Changing it mid-drag takes effect on the next press, so a mode switched
 // under a held button does not turn half a pan into half a selection.
+//
+// A drag that *starts on a colourbar* ignores this and selects a range of
+// values along the bar, whatever the mode says. There is no view to pan on a
+// bar and no rectangle to zoom to, so a drag over one has exactly one sensible
+// reading — see [Live.Select] and [interact.Colorbar].
 func (i *Input) Drag(d Drag) *Input { i.drag = d; return i }
 
 // Dragged reports the rectangle a rubber-band drag currently covers, and
@@ -92,7 +104,19 @@ func (i *Input) Drag(d Drag) *Input { i.drag = d; return i }
 // It is empty in [DragPans], where a drag moves the chart rather than marking
 // out part of it.
 func (i *Input) Dragged() (ir.Rect, bool) {
-	if !i.dragging || i.drag == DragPans {
+	if !i.dragging {
+		return ir.Rect{}, false
+	}
+	if i.onBar {
+		// Along the bar, across all of it: a range on a colourbar is an
+		// interval of values, and how far sideways the pointer wandered while
+		// choosing it means nothing.
+		return ir.Rect{
+			Min: ir.Point{X: i.bar.Area.Min.X, Y: float32(min(i.downY, i.lastY))},
+			Max: ir.Point{X: i.bar.Area.Max.X, Y: float32(max(i.downY, i.lastY))},
+		}, true
+	}
+	if i.drag == DragPans {
 		return ir.Rect{}, false
 	}
 	return ir.Rect{
@@ -143,6 +167,15 @@ func (i *Input) Move(x, y float64) error {
 			// Still inside the slop: this is the wobble of a click, not a pan.
 			return nil
 		}
+		if i.onBar {
+			// A drag along a colourbar selects a range of values. It moves
+			// nothing: there is no view to pan on a bar, and the rectangle
+			// being dragged out is what it means.
+			if h, ok := i.l.Index().At(ir.Point{X: float32(x), Y: float32(y)}, 0); ok && h.Kind == Colorbar {
+				i.barTo = h
+			}
+			return nil
+		}
 		if i.drag != DragPans {
 			// A rubber band moves nothing while it is being dragged out. The
 			// rectangle is [Input.Dragged]; what to do with it before release
@@ -170,6 +203,10 @@ func (i *Input) Down(x, y float64) error {
 	i.down, i.dragging = true, false
 	i.downX, i.downY = x, y
 	i.lastX, i.lastY = x, y
+	i.onBar, i.bar, i.barTo = false, Hit{}, Hit{}
+	if h, ok := i.l.Index().At(ir.Point{X: float32(x), Y: float32(y)}, 0); ok && h.Kind == Colorbar {
+		i.onBar, i.bar, i.barTo = true, h, h
+	}
 	return nil
 }
 
@@ -197,9 +234,15 @@ func (i *Input) Up(x, y float64) error {
 	i.lastX, i.lastY = x, y
 	mode := i.drag
 	band, hasBand := i.Dragged()
+	onBar, from, to := i.onBar, i.bar, i.barTo
 	i.down, i.dragging = false, false
+	i.onBar, i.bar, i.barTo = false, Hit{}, Hit{}
 	if !dragged {
 		i.l.Click(x, y)
+		return nil
+	}
+	if onBar {
+		i.l.selectRange(from, to, band)
 		return nil
 	}
 	// A pan has already fired on every step of itself and has nothing left to

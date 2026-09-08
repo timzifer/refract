@@ -1393,9 +1393,11 @@ See [ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md).
 
 Not in v1.10. A band reports its **midpoint** rather than a position inside
 itself: one colour stands for one interval and there is no gradient in there to
-read, so `Lo` and `Hi` are the truth. There is **no drag for a range** on a
-continuous bar — the natural gesture, and a brush question rather than a
-vocabulary one. And an **axis is still not clickable**: it is drawn per panel
+read, so `Lo` and `Hi` are the truth. A **drag along a bar selects a range** —
+press at one value, release at another — and needs no mode: a bar cannot be
+panned and there is no view on it to zoom, so a drag over one has one sensible
+reading. Across bands the range is their union. And an **axis is still not
+clickable**: it is drawn per panel
 rather than once per chart, so a hit would have to carry which panel and which
 axis, which is a third vocabulary. ✔
 

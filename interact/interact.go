@@ -127,6 +127,14 @@ type Hit struct {
 	// reader is pointing at.
 	Value float64
 
+	// Area is the rectangle of the guide that was hit — a legend row, a
+	// colourbar band, a whole continuous bar, a size key row. It is the empty
+	// rectangle for a hit on a mark, which has no target to speak of.
+	//
+	// It is what a caller anchors to: a tooltip beside a legend row, or the
+	// band a drag along a colourbar is painted in.
+	Area ir.Rect
+
 	// Class is which band of a classed colourbar was hit, or -1 for a hit on a
 	// continuous ramp and for every kind that is not a colourbar.
 	//
@@ -488,6 +496,9 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 			Hidden: m.hidden, Class: m.class,
 			Lo: m.bandLo, Hi: m.bandHi, Value: m.value,
 		}, true
+		if m.kind.Guides() {
+			best.Area = m.bounds
+		}
 		bestMark = m
 		bestX, bestY = m.x, m.y
 	}

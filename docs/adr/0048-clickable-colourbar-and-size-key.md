@@ -113,13 +113,24 @@ from.
 
 ## Revisit if
 
-Someone wants to drag a *range* on a continuous bar — press at one value,
-release at another — which is the natural gesture and the one this does not
-give. It is a brush, and the brush machinery already exists
-([ADR 0045](0045-linked-views.md)); what is missing is `Input` knowing that a
-drag which starts on a colourbar is a different drag from one that starts on a
-panel. That is a mode question rather than a vocabulary one, and it should be
-answered when someone has written the awkward version by hand.
+~~Someone wants to drag a *range* on a continuous bar.~~ **Done in the same
+release**, and it needed no new vocabulary — which is what the guess above got
+right. `Input` remembers whether a press landed on a colourbar and, if it did,
+the drag is a range along the bar whatever `Input.Drag` says: a bar cannot be
+panned and there is no view on it to zoom, so a drag over one has exactly one
+sensible reading and a mode would only have let a caller ask for a wrong one.
+
+It fires the `Select` that already existed, with `Hit.Kind` of `Colorbar` and
+`Lo`/`Hi` carrying the interval. Across bands the range is their union, because
+a reader dragging over three of them means all three and not the two boundaries
+they crossed. `Hit.Area` was added so a caller can anchor to the target — it is
+also what confines the band to the bar, since how far sideways a pointer
+wandered while choosing an interval means nothing.
+
+`Event.Rows` stays empty. A range on a colourbar is a statement about *values*,
+and which rows fall in it is a question about the data that the caller answers
+with the column in hand — refract would have to guess which of several layers
+was meant.
 
 An axis wanting to be clickable is the other. A tick is furniture too, and
 "click a tick to filter to that category" is a real interaction — but an axis

@@ -650,6 +650,54 @@ func (l *Live) Select(r ir.Rect) []Event {
 	return out
 }
 
+// selectRange fires the [Select] for a drag along a colourbar: the interval
+// between the two ends of the drag.
+//
+// The two ends are colourbar hits rather than points, because what a position
+// on a bar *means* is the bar's answer and not arithmetic anyone else should
+// be doing. A drag within one band selects that band; a drag across several
+// selects from the bottom of the first to the top of the last, because a
+// reader dragging over three bands means all three and not the two boundaries
+// they happened to cross.
+//
+// It reports no rows. A range on a colourbar is a statement about values, and
+// which rows fall in it is a question about the data that the caller is better
+// placed to answer — with the column in hand, and without refract guessing
+// which of several layers was meant.
+func (l *Live) selectRange(from, to Hit, band ir.Rect) Event {
+	if from.Kind != interact.Colorbar {
+		return Event{}
+	}
+	if to.Kind != interact.Colorbar {
+		to = from
+	}
+	lo, hi := from.Value, to.Value
+	class := from.Class
+	if from.Class >= 0 && to.Class >= 0 {
+		// Classed: the union of the two bands, which is what dragging over
+		// them means. A drag that stayed in one keeps that band's identity.
+		lo, hi = min(from.Lo, to.Lo), max(from.Hi, to.Hi)
+		if from.Class != to.Class {
+			class = -1
+		}
+	} else if lo > hi {
+		lo, hi = hi, lo
+	}
+	return l.fire(Event{
+		Kind:  Select,
+		Point: ir.Point{X: (band.Min.X + band.Max.X) / 2, Y: (band.Min.Y + band.Max.Y) / 2},
+		Panel: -1,
+		Rect:  band,
+		Found: true,
+		Hit: Hit{
+			Kind: interact.Colorbar, Panel: -1, Layer: -1, Row: -1,
+			Area: from.Area, Class: class,
+			Lo: lo, Hi: hi, Value: lo + (hi-lo)/2,
+			At: ir.Point{X: (band.Min.X + band.Max.X) / 2, Y: (band.Min.Y + band.Max.Y) / 2},
+		},
+	})
+}
+
 func seenLayer(refs []RowRef, panel, layer int) bool {
 	for _, r := range refs {
 		if r.Panel == panel && r.Layer == layer {
