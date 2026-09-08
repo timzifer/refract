@@ -1245,7 +1245,17 @@ All of it is additive: `ColorScale` gained no method, and the three capabilities
 are optional interfaces beside it in the shape ADR 0020 established.
 See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
 
-### v1.7 — Identity, and what it unlocks — **shipped**
+### v1.7 — Identity, transitions, and guides that answer to a pointer — **shipped**
+
+One milestone with four parts, and they are one milestone because each is the
+answer to the question the last one ended on. Identity was the thing this
+document had said animation was blocked on for six releases; having it made
+transitions a join rather than an interpolator; having those made the overlay
+the only way left to draw what a reader was pointing at; and an overlay that
+could not be pointed at made the guides the last piece of furniture with
+nothing to say. Six records, 0043 to 0048.
+
+#### Identity
 
 The one thing this document had said was blocked, and the two things that
 turned out to be the same problem.
@@ -1298,9 +1308,9 @@ first. There was still **no overlay layer** at this point — bucket H's
 remainder — so `Input.Dragged` handed the host the rectangle and the host drew
 it; v1.8 closed that. And there is **no `Grid.Live`**: a grid composes plots
 into a document, and several interactive charts are several `Live`s on several
-surfaces. ✔
+surfaces.
 
-### v1.8 — The overlay, and the last of bucket H — **shipped**
+#### The overlay, and the last of bucket H
 
 The chart can now draw over itself. A crosshair, a ring round a mark, the
 rectangle a reader is dragging out, a tooltip sized to its own text: all of
@@ -1331,9 +1341,9 @@ rectangle, which is the case a crosshair following a pointer is in. An overlay
 is **not in the JSON spec**: where a pointer is is not a fact about a chart.
 An overlay is given scales and areas but **not the marks**:
 a tooltip that snaps to the nearest point gets that from `interact.Index` on the
-caller's side, where the hit test already lives. ✔
+caller's side, where the hit test already lives.
 
-### v1.9 — A legend you can click — **shipped**
+#### A legend you can click
 
 The one piece of furniture a reader expects to act on. v1.8 said a legend was
 not clickable because that would mean announcing the guides as hittable, and
@@ -1365,9 +1375,9 @@ may be shown at a time.
 Not in v1.9. A layer contributing several legend rows **toggles as one**: the
 rows are one drawing and there is no way to draw a third of it. And a hidden
 layer **still costs its Train**, which is what keeps the axes still: hiding a
-series does not make a slow chart fast, removing it does. ✔
+series does not make a slow chart fast, removing it does.
 
-### v1.10 — The other two guides — **shipped**
+#### The other two guides
 
 A colourbar and a size key answer to a pointer too, and the reason they needed
 a record of their own is that neither is a series. A legend row stands for a
