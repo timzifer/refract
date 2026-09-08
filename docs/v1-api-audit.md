@@ -375,6 +375,7 @@ beside the frozen surface rather than through it.
 | Relational layouts (sankey, treemap, chord) | **shipped in v1.4** — four geoms; `data.Source` already returned an edge list, and it did not change ([ADR 0039](adr/0039-relational-layouts.md)) | — |
 | 3D | Its own module | later |
 | Contour, QQ, more stats | New pure functions in `stat`, new geoms that call them | v1.x |
+| A `pow` or `sqrt` colour transform | A third `ColorTransform` beside `log` and `symlog`. It waits on a positional `Pow` scale rather than on the colour channel: a compressed ramp's colourbar takes its tick values from a `Scale` over the same domain (`scale.ColorAxisOf`), and there is no positional scale to hand it — so the transform is a dozen lines and the axis behind it is a new `Kind`, with a registry entry, a `Desc`, and a tick search | v1.x |
 | Brush, linked views | `Select EventKind`, `Event.Rows []int` | v1.x |
 | Per-instance marker colour or size | An optional `ir.InstancedMarkers` a backend may implement | v1.x |
 | A fourth column type, a null mask | Optional interfaces beside `data.Source` | v1.x |
