@@ -53,6 +53,23 @@ type Frame struct {
 	// geom draws. It is nil for an ordinary render and a geom must check it
 	// before doing the bookkeeping — see [Rows] and [Frame.Marks].
 	Rows Rows
+
+	// Labels places opt-in text labels against earlier participating labels in
+	// this panel. A nil placer preserves their original positions.
+	Labels LabelPlacer
+}
+
+// LabelPlacer is supplied by the renderer. A geom requests a position but
+// neither solves layout nor changes drawing order. move is false for a label
+// inside a box: moving that label could attribute it to a neighbouring row.
+type LabelPlacer interface {
+	PlaceLabel(run ir.TextRun, move bool) (at ir.Point, ok bool)
+}
+
+// LabelAvoider optionally requests panel-local label placement. Geom's stable
+// interface is unchanged; render allocates layout state only when requested.
+type LabelAvoider interface {
+	AvoidsLabels() bool
 }
 
 // Coords is the frame's coordinate system, which is [coord.Cartesian] framed
@@ -183,18 +200,19 @@ type config struct {
 	smooth    Smoothing
 	overlap   float64
 
-	closed    bool
-	onY2      bool
-	onX2      bool
-	elide     bool
-	dashSet   bool
-	markerSet bool
-	extend    bool
-	fontSize  float64
-	halign    ir.HAlign
-	valign    ir.VAlign
-	alignSet  bool
-	rotation  float64
+	closed      bool
+	onY2        bool
+	onX2        bool
+	elide       bool
+	avoidLabels bool
+	dashSet     bool
+	markerSet   bool
+	extend      bool
+	fontSize    float64
+	halign      ir.HAlign
+	valign      ir.VAlign
+	alignSet    bool
+	rotation    float64
 
 	// extra holds what a third-party option set — see [Extra]. It is nil for
 	// every layer built from this package's own options.
@@ -429,6 +447,13 @@ func TextBy(col string) Option { return func(c *config) { c.textCol = col } }
 //
 // It does nothing in point mode, where there is no box to overrun.
 func Elide(on bool) Option { return func(c *config) { c.elide = on } }
+
+// AvoidOverlap places Text labels in source order, trying the original anchor
+// and eight nearby positions before dropping a label that still collides.
+// Labels stay inside the panel rectangle. Box labels are never moved, only
+// omitted. Only participating text layers avoid each other; marks and axis
+// furniture are not obstacles. The default is false.
+func AvoidOverlap(on bool) Option { return func(c *config) { c.avoidLabels = on } }
 
 // SizeBy maps a column through a size scale, giving every mark its own size.
 // It applies to [Scatter]; geoms whose mark has a width the axes decide ignore

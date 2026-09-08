@@ -883,9 +883,17 @@ func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observe
 	b.Push(&clip, ir.Identity)
 	defer b.Pop()
 
+	var labels *labelPlacer
 	for i, g := range p.Layers {
 		x, y := p.axesOf(g)
 		f := geom.Frame{Area: plot, X: x, Y: y, Coord: cd, Theme: th, Index: i, Rows: rows}
+		if request, ok := g.(geom.LabelAvoider); ok && request.AvoidsLabels() {
+			if labels == nil {
+				labels = acquireLabels(plot, b)
+				defer releaseLabels(labels)
+			}
+			f.Labels = labels
+		}
 		if obs != nil {
 			// Which scales this layer reads are told before the layer is
 			// opened, so an observer that indexes the marks that follow knows

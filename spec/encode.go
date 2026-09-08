@@ -487,6 +487,14 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 	case geom.MarkECDF:
 		stroke()
 		group()
+	case geom.MarkQQ:
+		stroke()
+		fill()
+		group()
+		m.Size = d.Size
+		if d.MarkerSet {
+			m.Shape = shapeName(d.Marker)
+		}
 	case geom.MarkTrend:
 		stroke()
 		group()
@@ -516,6 +524,7 @@ func writeMarkProps(m *Mark, d geom.Desc) {
 			m.Align, m.Baseline = hAlignName(d.HAlign), vAlignName(d.VAlign)
 		}
 		m.Elide = d.Elide
+		m.AvoidOverlap = d.AvoidOverlap
 	default:
 		// A mark this package did not define. Nobody here knows which of the
 		// shared options it reads, so the ones a mark most plausibly honours

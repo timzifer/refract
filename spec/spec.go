@@ -196,6 +196,8 @@ type Mark struct {
 	// row spans rather than dropping it. It is refract's own: Vega-Lite has no
 	// equivalent, so no name is borrowed for it.
 	Elide bool `json:"elide,omitempty"`
+	// AvoidOverlap enables deterministic collision avoidance for text labels.
+	AvoidOverlap bool `json:"avoidOverlap,omitempty"`
 
 	// Origin is the value bars and areas grow from — Vega-Lite reaches the
 	// same place through a scale's `zero`, which is a different thing.

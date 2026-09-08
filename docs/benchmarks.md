@@ -1,5 +1,14 @@
 # The benchmark suite
 
+`BenchmarkQQ` measures standard-normal quantiles for 1,000 sorted observations
+through `stat.AppendQQ`, with a reusable output buffer. It reports allocations
+and timing; it is not currently read by the allocation gate.
+
+`TestDiagnosticsDoNotAllocatePerRow` separately checks full QQ and label-layout
+frames over 1,000 and 100,000 rows. On Windows/amd64 with Go 1.25.3 these cost
+76/76 and 77/77 allocations respectively. This is a count comparison, not a
+timing gate; it is excluded under the race detector like the other gates.
+
 Every benchmark in this repository, what each one measures, which of its
 numbers CI gates, and the latest results. The suite is public in the sense
 that matters: it runs on every commit, its raw output is attached to the

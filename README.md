@@ -67,6 +67,13 @@ library, and a desktop program that opens a window links a window layer.
 
 ## Install
 
+**Next release, implemented but not tagged:** `geom.AvoidOverlap(true)` lets
+text layers avoid participating labels in the same panel; `geom.QQ` draws a
+normal quantile-quantile plot. These APIs need the development version until
+the next release is tagged. The release check in
+[CONTRIBUTING.md](CONTRIBUTING.md#releasing) verifies each module outside the
+development workspace before it is tagged.
+
 ```sh
 go get github.com/timzifer/refract                  # core: SVG and PDF, stdlib only
 go get github.com/timzifer/refract/backend/gg       # raster: PNG and JPEG
@@ -1050,6 +1057,31 @@ row and freezing a view both allocate nothing in the steady state, and the
 benchmark gate keeps it that way.
 
 See [`examples/stream`](examples/stream).
+
+## Label placement and QQ plots (unreleased)
+
+```go
+// The renderer places participating point labels, dropping those that still
+// collide after trying nearby positions. Labels in boxes are never moved.
+p.Add(geom.Text(src, geom.X("x"), geom.Y("y"), geom.TextBy("name"),
+    geom.AvoidOverlap(true)))
+
+// X names the sample column. Display axes are theoretical normal quantiles
+// horizontally and ordered observations vertically, without standardisation.
+q := refract.New(refract.XTitle("Standard normal quantile"),
+    refract.YTitle("Observed value"))
+q.Add(geom.QQ(src, geom.X("value")))
+```
+
+`GroupBy` compares several samples; facets split them as usual. Other
+theoretical distributions use `stat.QQ(sorted, quantile)` and `geom.Scatter`.
+See the runnable [diagnostics example](examples/diagnostics),
+[label placement decision](docs/adr/0040-label-collision-avoidance.md) and
+[QQ decision](docs/adr/0041-qq-plots.md).
+
+| Normal QQ plot | Label placement |
+|---|---|
+| ![Ordered observations against normal quantiles](docs/images/qq.png) | ![Nearby labels placed without overlapping one another](docs/images/label-placement.png) |
 
 ## A chart as JSON
 

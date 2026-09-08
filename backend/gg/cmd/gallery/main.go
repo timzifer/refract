@@ -200,6 +200,8 @@ func (f figure) render() (svg, png []byte, err error) {
 
 func figures() []figure {
 	return []figure{
+		qqFigure(),
+		labelsFigure(),
 		{
 			name: "signal", width: 800, high: 400, theme: theme.Dark, title: "Signal",
 			build: func(p *refract.Plot) {

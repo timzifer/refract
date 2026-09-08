@@ -262,6 +262,8 @@ func decodeLayer(l Layer, shared data.Source) (geom.Geom, error) {
 		Padding:   l.Mark.Padding,
 		Thickness: l.Mark.Thickness,
 		Extra:     l.Mark.Extra,
+
+		AvoidOverlap: l.Mark.AvoidOverlap,
 	}
 	if l.Mark.BinStart != nil && l.Mark.BinEnd != nil {
 		d.BinLo, d.BinHi = *l.Mark.BinStart, *l.Mark.BinEnd

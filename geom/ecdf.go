@@ -54,7 +54,7 @@ func (g *ecdfGeom) Train(x, y scale.Scale) error {
 	if g.err = g.gs.train(g.src, g.s, g.cfg, x, x, NoStack); g.err != nil {
 		return g.err
 	}
-	g.accumulate(x)
+	g.accumulate(x, stat.AppendECDF)
 
 	trainColumn(x, g.s.x)
 	// The axis runs the whole way, whatever the sample: an ECDF that stopped at
@@ -64,7 +64,7 @@ func (g *ecdfGeom) Train(x, y scale.Scale) error {
 	return nil
 }
 
-func (g *ecdfGeom) accumulate(x scale.Scale) {
+func (g *ecdfGeom) accumulate(x scale.Scale, appendCurve func([]stat.Point, []float64) []stat.Point) {
 	n := max(len(g.gs.keys), 1)
 	g.curves = growCurves(g.curves, n)[:0]
 	g.groups = grow(g.groups, n)[:0]
@@ -85,7 +85,7 @@ func (g *ecdfGeom) accumulate(x scale.Scale) {
 		if i := len(g.curves); i < cap(g.curves) {
 			curve = g.curves[:i+1][i]
 		}
-		g.curves = append(g.curves, stat.AppendECDF(curve, g.vals))
+		g.curves = append(g.curves, appendCurve(curve, g.vals))
 		g.groups = append(g.groups, grp)
 	}
 }

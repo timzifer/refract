@@ -47,6 +47,8 @@ func markType(m geom.Mark) (typ, orient string, err error) {
 		return "beeswarm", "", nil
 	case geom.MarkECDF:
 		return "ecdf", "", nil
+	case geom.MarkQQ:
+		return "qq", "", nil
 	case geom.MarkTrend:
 		return "trend", "", nil
 	// The relational layouts. Vega-Lite has none of them, so these are
@@ -127,6 +129,8 @@ func geomMark(m Mark, enc *Encoding) (geom.Mark, error) {
 		return geom.MarkBeeswarm, nil
 	case "ecdf":
 		return geom.MarkECDF, nil
+	case "qq":
+		return geom.MarkQQ, nil
 	case "trend":
 		return geom.MarkTrend, nil
 	case "errorbar":

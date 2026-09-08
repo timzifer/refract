@@ -57,9 +57,9 @@ import (
 // gives the row, dark on light and light on dark, so that a qualitative
 // palette does not leave half its categories unreadable. [Color] overrides it.
 //
-// Neighbouring labels are not moved apart. A box too narrow for its label
-// drops it already, which is the case this mark exists for; a general
-// de-overlap pass is a layout question rather than a mark's.
+// AvoidOverlap opts into the renderer's panel-local label layout. Point labels
+// may move; box labels remain anchored to their own box and are dropped if they
+// collide. Without that option, neighbouring labels are not moved apart.
 func Text(src data.Source, opts ...Option) Geom {
 	return &textGeom{src: src, cfg: newConfig(opts)}
 }
@@ -252,6 +252,13 @@ func (g *textGeom) Build(b ir.Backend, f Frame) error {
 			continue
 		}
 		run.Text, run.At = text, pts[i]
+		if g.cfg.avoidLabels && f.Labels != nil {
+			at, keep := f.Labels.PlaceLabel(run, !boxed)
+			if !keep {
+				continue
+			}
+			run.At, pts[i] = at, at
+		}
 		b.Text(run)
 		drawn = append(drawn, i)
 	}
@@ -415,6 +422,9 @@ func (g *textGeom) Describe() Desc {
 }
 
 func (g *textGeom) Source() data.Source { return g.src }
+
+// AvoidsLabels reports whether this layer requests panel-local label layout.
+func (g *textGeom) AvoidsLabels() bool { return g.cfg.avoidLabels }
 
 func (g *textGeom) Subset(rows []int) Geom {
 	return &textGeom{src: data.Rows(g.src, rows), cfg: g.cfg}

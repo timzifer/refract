@@ -2,13 +2,11 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **pre-alpha.** Milestones **v0.1 through v0.5 are implemented** — see
-> [§14](#14-roadmap--milestones) for what that covers and the
-> [README](README.md) to use it. This document remains the working concept for
-> everything past v0.5. The API is **not** stable: every release below `v1.0.0`
-> may contain breaking changes without deprecation cycles (see
-> [Versioning](#15-versioning--stability)) — v0.2 added a method to
-> `data.Source`, which is exactly the kind of break that policy exists for.
+> Status: **v1.2.0 released; stable v1 API.** The API froze at v1.0.0 and
+> follows semantic versioning. The v1.3 and v1.4 milestones below are implemented
+> on `main` but have not been tagged. See [§14](#14-roadmap--milestones) and the
+> [README](README.md) for released versus development work. Label collision
+> avoidance and normal QQ plots are the next, unreleased additions.
 
 > **Implementation note.** Where this document and the code disagree, the code
 > wins and this document is wrong — please fix it. Decisions that were open in
@@ -1199,18 +1197,20 @@ Still not drawn: node-link and Venn/UpSet. See
   underneath it, and its graticule has no tick behind it — and is argued on its
   own evidence rather than smuggled in as a fourth.
 - Node-link diagrams and Venn/UpSet, which are what is left of the relational
-  family after v1.3 shipped the rest of it
+  family after the v1.4 implementation added the rest of it
   ([ADR 0039](docs/adr/0039-relational-layouts.md)). A force layout's whole
   method is to run until it settles, so it cannot be a pure function of its
   input at a bounded sweep count that also looks good, and
   [ADR 0012](docs/adr/0012-parallel-panels.md) has to be answered on its own
   terms before it lands. Venn is a circle-packing optimiser and UpSet is a
   matrix chart rather than a relational layout at all.
-- More stats: contour, and a QQ plot over the ECDF v0.9 shipped.
+- More stats: contour. Normal QQ plots are implemented for the next release,
+  with a general quantile-function API in `stat` (ADR 0041).
 - The rest of bucket H in [docs/chart-types.md](docs/chart-types.md): an
   overlay layer the chart itself owns — a tooltip, a crosshair, a brush
   rectangle — which is what linked brushing across panels needs before
-  anything else, and a de-overlap pass for labels.
+  anything else. Opt-in text collision avoidance is implemented for the next
+  release (ADR 0040); automatic avoidance of every kind of mark remains open.
 - Animations / transitions (gg retained-scene + damage tracking make this cheap).
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.

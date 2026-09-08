@@ -36,6 +36,7 @@ const (
 	MarkHexbin    Mark = "hexbin"
 	MarkBeeswarm  Mark = "beeswarm"
 	MarkECDF      Mark = "ecdf"
+	MarkQQ        Mark = "qq"
 	MarkTrend     Mark = "trend"
 
 	// The relational and hierarchical marks. Each reads an edge table rather
@@ -167,6 +168,8 @@ type Desc struct {
 	// Both are unused by a layer that draws no text.
 	TextCol string
 	Elide   bool
+	// AvoidOverlap opts a text layer into panel-local collision avoidance.
+	AvoidOverlap bool
 
 	// The styling options, one field per [Option]. A nil Color or Fill means
 	// the layer takes its colour from the palette.
@@ -318,6 +321,8 @@ func FromDesc(d Desc) (Geom, error) {
 		return Beeswarm(d.Source, opts...), nil
 	case MarkECDF:
 		return ECDF(d.Source, opts...), nil
+	case MarkQQ:
+		return QQ(d.Source, opts...), nil
 	case MarkTrend:
 		return Trend(d.Source, opts...), nil
 	case MarkErrorBar:
@@ -370,6 +375,7 @@ func (d Desc) options() []Option {
 		Smooth(d.Smooth),
 		Overlap(d.Overlap),
 		Elide(d.Elide),
+		AvoidOverlap(d.AvoidOverlap),
 	}
 	if d.StackSet {
 		opts = append(opts, Stack(d.Stack))
@@ -539,6 +545,8 @@ func (c config) describeStacking(mark Mark, def Stacking) Desc {
 		Rotation:   c.rotation,
 		Extend:     c.extend,
 		Extra:      c.extra,
+
+		AvoidOverlap: c.avoidLabels,
 	}
 }
 

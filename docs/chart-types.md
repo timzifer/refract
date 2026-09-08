@@ -213,7 +213,7 @@ form and a determinism test, per CONTRIBUTING's rule for reductions.
 | Beeswarm | a deterministic 1-D dodge in the geom, and **no `math/rand`** | `geom.Beeswarm` |
 | ECDF | `stat.ECDF` | `geom.ECDF` |
 | Trend line | `stat.Loess` | `geom.Trend` |
-| QQ | `stat.ECDF` against a theoretical quantile function | missing |
+| QQ | `stat.QQ` with a theoretical quantile function | `geom.QQ` for normal quantiles; unreleased |
 | Contour | `stat.Contour` | missing |
 
 **`stat.Bin` changed meaning.** It is the 1-D histogram now, because that is what
@@ -326,9 +326,9 @@ The dependency order is not a preference:
    rather than from being drawn. What is left of the bucket is an **overlay
    layer the chart itself owns** — a tooltip, a crosshair, a brush rectangle —
    which `interact` cannot draw because it only reads, and which linked
-   brushing across panels needs before anything else; and a **de-overlap pass
-   for labels**, which [ADR 0032](adr/0032-text-as-a-mark.md) deferred as a
-   layout question rather than a mark's.
+   brushing across panels needs before anything else. **Label collision
+   avoidance** is implemented for the next release through
+   `geom.AvoidOverlap(true)` ([ADR 0040](adr/0040-label-collision-avoidance.md)).
 10. ~~**Relational layouts**~~ — E, shipped in v1.4
    ([ADR 0039](adr/0039-relational-layouts.md)): the only bucket that shared
    nothing with the others, and therefore the only one that could be moved
