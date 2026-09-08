@@ -2,9 +2,9 @@
 
 **A grammar-driven plotting library for Go: one model, many backends, runs everywhere — built on the GoGPU stack.**
 
-> Status: **v1.5.0 released; stable v1 API.** The API froze at v1.0.0 and
-> follows semantic versioning. The v1.3, v1.4 and v1.5 milestones below are all
-> tagged. See [§14](#14-roadmap--milestones) and the [README](README.md) for
+> Status: **v1.6.0 released; stable v1 API.** The API froze at v1.0.0 and
+> follows semantic versioning. The v1.3, v1.4, v1.5 and v1.6 milestones below
+> are all tagged. See [§14](#14-roadmap--milestones) and the [README](README.md) for
 > what each one added. This document remains the working concept for everything
 > past them.
 
@@ -979,10 +979,10 @@ buffer and the geom already keeps one.
   table CI publishes on every run.
 - CPU rendering is the supported baseline; **GPU tier remains opt-in beta** until
   the GoGPU native backends prove out across hardware.
-- Tagged. The core was `v1.0.0` and is `v1.5.0`; `backend/gg` and
-  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.2.0`
+- Tagged. The core was `v1.0.0` and is `v1.6.0`; `backend/gg` and
+  `backend/window` share it, the opt-in GPU tier is `backend/gg/gpu/v0.3.0`
   — it stays at `v0` for as long as it is opt-in beta, whatever the core does
-  — and the Arrow adapter is `arrow/v18.0.3`, whose major is Arrow's. The
+  — and the Arrow adapter is `arrow/v18.0.4`, whose major is Arrow's. The
   milestones before `v1.0.0` were tagged at the same time as it, so every one
   of them names a commit. The order — the core first, then the nested modules'
   `require` lines, then their own tags — is in
@@ -990,8 +990,9 @@ buffer and the geom already keeps one.
 
   The post-freeze milestones below shipped in `v1.1.0` — tracks and the text
   mark — in `v1.2.0`, the Smith chart, in `v1.3.0`, the six gaps that were not
-  chart types, in `v1.4.0`, the relational and hierarchical layouts, and in
-  `v1.5.0`, label placement and QQ plots. `v1.3.0` and `v1.4.0` tag the core
+  chart types, in `v1.4.0`, the relational and hierarchical layouts, in
+  `v1.5.0`, label placement and QQ plots, and in `v1.6.0`, colour ramps that
+  compress or class their domain. `v1.3.0` and `v1.4.0` tag the core
   alone: no nested module had a release of its own between `v1.2.0` and
   `v1.5.0`, and a nested tag whose `require` line named an older core than the
   one it was tested against is the failure the release order exists to prevent.
@@ -1214,6 +1215,36 @@ See [ADR 0041](docs/adr/0041-qq-plots.md).
 Both are additive, both round-trip through the spec, and the allocation gate
 covers a full frame of each over a thousand rows and a hundred thousand. ✔
 
+### v1.6 — Colour ramps that compress and class — **shipped**
+
+The colour channel had one shape: a ramp interpolated linearly from one end of
+the domain to the other. The positional channel has had `Log` and `SymLog`
+since v0.3, and the quantity the colour channel is most often bound to — a bin
+count, a hexbin density — is exactly the one a linear reading destroys.
+
+`scale.ColorLog` and `scale.ColorSymLog` give each decade an equal share of the
+ramp. The transform is a field beside the kind rather than a value of it,
+because a diverging ramp over a log-fold change is both; on a diverging scale
+it runs on the signed deviation from the centre, so a logarithm there is a
+symmetric one. A log domain is strictly positive as `Log`'s is: an empty bin
+gets the undefined colour rather than the colour of the rarest observation.
+
+`scale.Threshold`, `scale.Quantize` and `scale.Quantile` cut the domain into
+classes, so a colour names an interval instead of a shade to estimate.
+`Quantile` is the one colour scale that keeps its sample: a digest or a
+reservoir would make the boundaries depend on row order, which
+[ADR 0012](docs/adr/0012-parallel-panels.md) forbids.
+
+The colourbar stopped assuming a linear reading. It asks the scale which values
+are worth labelling, where a value sits on the bar, and which value the ramp
+reaches at a point of it — so a log bar is ticked at decades and its gradient is
+sampled evenly along itself rather than across the domain, and a classed bar is
+drawn in bands and labelled at the boundaries.
+
+All of it is additive: `ColorScale` gained no method, and the three capabilities
+are optional interfaces beside it in the shape ADR 0020 established.
+See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1241,7 +1272,11 @@ covers a full frame of each over a thousand rows and a hundred thousand. ✔
   anything else. Opt-in text collision avoidance shipped in v1.5
   ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)); automatic avoidance
   of every kind of mark remains open.
-- Animations / transitions (gg retained-scene + damage tracking make this cheap).
+- Animations / transitions. `ir.Damage` diffs two recordings at the level of
+  drawing calls: it says that something changed, not which path corresponds to
+  which. Tweening needs mark identity across frames — a join key — and the
+  nearest thing that exists is `geom.Rows`, which holds only within one frame.
+  The step is a key concept, not an interpolation layer.
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.
 
