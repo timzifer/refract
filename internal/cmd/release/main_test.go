@@ -7,6 +7,15 @@ import (
 	"github.com/timzifer/refract/internal/release"
 )
 
+// v is a version written the way a tag writes it.
+func v(s string) release.Version {
+	version, err := release.ParseVersion(s)
+	if err != nil {
+		panic(err)
+	}
+	return version
+}
+
 // tags is a repository history: the v1.5.0 release, tagged across all five
 // modules the way this command tags them.
 var tags = []string{
@@ -18,7 +27,7 @@ var tags = []string{
 }
 
 func TestPlanDerivesEveryTagFromTheCoreVersion(t *testing.T) {
-	got, err := plan(release.Version{1, 6, 0}, "colour transforms", nil, nil, tags)
+	got, err := plan(v("v1.6.0"), "colour transforms", nil, nil, tags)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +49,7 @@ func TestPlanDerivesEveryTagFromTheCoreVersion(t *testing.T) {
 }
 
 func TestPlanTakesOverridesAndSkips(t *testing.T) {
-	got, err := plan(release.Version{1, 6, 0}, "x",
+	got, err := plan(v("v1.6.0"), "x",
 		map[string]string{"backend/gg/gpu": "v0.3.0"},
 		[]string{"backend/window", " arrow/v18 "}, tags)
 	if err != nil {
@@ -58,27 +67,27 @@ func TestPlanTakesOverridesAndSkips(t *testing.T) {
 func TestPlanRefusesWhatCannotBePublished(t *testing.T) {
 	for name, run := range map[string]func() error{
 		"a core release with no summary": func() error {
-			_, err := plan(release.Version{1, 6, 0}, "", nil, nil, tags)
+			_, err := plan(v("v1.6.0"), "", nil, nil, tags)
 			return err
 		},
 		"a major the module cannot publish": func() error {
-			_, err := plan(release.Version{2, 0, 0}, "x", nil, nil, tags)
+			_, err := plan(v("v2.0.0"), "x", nil, nil, tags)
 			return err
 		},
 		"an override that is not a version": func() error {
-			_, err := plan(release.Version{1, 6, 0}, "x", map[string]string{"arrow/v18": "18.0.4"}, nil, tags)
+			_, err := plan(v("v1.6.0"), "x", map[string]string{"arrow/v18": "18.0.4"}, nil, tags)
 			return err
 		},
 		"a module that does not exist": func() error {
-			_, err := plan(release.Version{1, 6, 0}, "x", nil, []string{"backend/pdf"}, tags)
+			_, err := plan(v("v1.6.0"), "x", nil, []string{"backend/pdf"}, tags)
 			return err
 		},
 		"a first release with nothing to move on from": func() error {
-			_, err := plan(release.Version{1, 6, 0}, "x", nil, nil, []string{"v1.5.0"})
+			_, err := plan(v("v1.6.0"), "x", nil, nil, []string{"v1.5.0"})
 			return err
 		},
 		"skipping everything": func() error {
-			_, err := plan(release.Version{1, 6, 0}, "x", nil,
+			_, err := plan(v("v1.6.0"), "x", nil,
 				[]string{".", "backend/gg", "backend/window", "backend/gg/gpu", "arrow/v18"}, tags)
 			return err
 		},
@@ -90,7 +99,7 @@ func TestPlanRefusesWhatCannotBePublished(t *testing.T) {
 }
 
 func TestPreconditionRefusesATagThatExists(t *testing.T) {
-	got, err := plan(release.Version{1, 5, 0}, "already out", nil, nil, tags)
+	got, err := plan(v("v1.5.0"), "already out", nil, nil, tags)
 	if err != nil {
 		t.Fatal(err)
 	}
