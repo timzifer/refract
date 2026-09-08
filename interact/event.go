@@ -19,6 +19,13 @@ const (
 	Zoom
 	// Pan is a translation of the view.
 	Pan
+	// Select is a region of the chart the reader dragged out. It carries the
+	// rectangle in [Event.Rect] and the rows under it in [Event.Rows], one
+	// event per layer the region touched.
+	//
+	// It is last because the kinds before it are the ones a chart has always
+	// had, and a constant that already means something must go on meaning it.
+	Select
 )
 
 // String names the kind, for tests and error messages.
@@ -34,6 +41,8 @@ func (k EventKind) String() string {
 		return "zoom"
 	case Pan:
 		return "pan"
+	case Select:
+		return "select"
 	}
 	return "unknown"
 }
@@ -92,6 +101,23 @@ type Event struct {
 
 	// Delta is how far a Pan moved the view, in device units.
 	Delta ir.Point
+
+	// Rows are the source rows a Select covered, in the layer named by
+	// [Hit.Layer] of the panel named by Panel.
+	//
+	// A selection is reported one layer at a time, so a list of rows never has
+	// to say which layer's rows they are: a rectangle over two crossing series
+	// fires twice, and a handler that cares about one of them ignores the
+	// other by its layer rather than by unpicking a mixed list.
+	//
+	// The rows are the positions the *layer reported*, not the ink it drew,
+	// so a half-covered bar is a question about where its value is rather than
+	// about where its corner is. They need row tracking — see
+	// [Index.TrackRows] — and are empty without it.
+	//
+	// The slice is the event's own and is not reused between events, so a
+	// handler may keep it.
+	Rows []int
 }
 
 // Series is the label of the layer under the pointer, empty when there is no

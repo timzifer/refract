@@ -32,6 +32,8 @@ const (
 	Click = interact.Click
 	Zoom  = interact.Zoom
 	Pan   = interact.Pan
+	// Select is a region the reader dragged out. See [Live.Select].
+	Select = interact.Select
 )
 
 // On registers a handler for an event kind.
@@ -91,8 +93,8 @@ func (p *Plot) emit(ev Event) {
 // Live resolves the plot into panels when it is created, so that a zoom lands
 // on scales that are still there next frame. Adding a layer, changing the
 // facet or replacing a scale afterwards needs [Live.Rebuild], which starts
-// again from the plot as it now stands — and, like any fresh start, forgets
-// where the view was zoomed to.
+// again from the plot as it now stands and puts the reader's view back onto
+// the axes that survive.
 //
 // # Two kinds of method
 //
@@ -281,8 +283,25 @@ func (l *Live) Rescale(dpr float64) error {
 func (l *Live) DPR() float64 { return l.dpr }
 
 // Rebuild resolves the plot again, picking up layers, scales or a facet added
-// since the Live was created. It forgets any zoom on a facet's free axes,
-// which belong to panels that no longer exist.
+// since the Live was created, and keeps the view the reader had established.
+//
+// Keeping the view is the whole point of the method rather than a courtesy.
+// The thing a caller rebuilds for is usually a reaction to something the
+// reader did — a hover in one chart that adds a highlight layer to this one —
+// and throwing away their zoom as a side effect of answering them is a chart
+// that fights back. [Live.View] and [Live.SetView] are the same capability
+// spelled out, for a caller who wants it across something wider than a
+// rebuild; a caller who genuinely wants a fresh start has [Live.Autoscale].
+//
+// A view can only be put back onto axes that exist. A facet whose free axes
+// belonged to panels the new plot does not have loses those, because a domain
+// from a panel that is gone describes nothing — and a rebuild that changes the
+// panel count keeps nothing at all, for the same reason.
+//
+// It does not paint. Restoring the view needs the new panels, and the panels
+// are what a render announces, so this renders once into its own recording to
+// find them — which draws nothing, and is why a rebuild costs a frame that
+// nobody sees. The frame the reader sees is the caller's next [Live.Draw].
 func (l *Live) Rebuild() error {
 	c, err := l.p.chart()
 	if err != nil {
@@ -296,9 +315,47 @@ func (l *Live) Rebuild() error {
 	// still says what it was built with, and the surface is the size it is.
 	c.Width, c.Height = l.width, l.height
 	c.Theme = l.p.themeFor(l.width, l.height)
+
+	view := l.View()
 	l.chart = c
 	l.drawn = false
+	if view.Empty() {
+		return nil
+	}
+	// The panels are the render's to announce. On a chart with one panel, or
+	// with shared axes, the scales the new chart holds are the same objects
+	// the old one did and already carry the zoom — but a facet with free axes
+	// builds fresh clones per panel, and those have never heard of it. So find
+	// them the only way there is, and pin them before anything is painted.
+	if err := l.probe(); err != nil {
+		return err
+	}
+	l.restore(view)
 	return nil
+}
+
+// probe renders a frame nobody sees, to populate the index with the panels the
+// current chart has. It records rather than paints: l.next is reset at the top
+// of every Draw, so borrowing it here costs no buffer and leaves nothing
+// behind.
+func (l *Live) probe() error {
+	l.idx.Reset()
+	l.next.Reset()
+	return render.Draw(l.idx.Watch(l.next), l.chart)
+}
+
+// restore puts a view back onto the panels the index currently holds, without
+// drawing. [Live.SetView] is this plus the frame.
+func (l *Live) restore(v View) {
+	panels := l.idx.Panels()
+	if len(v.panels) != len(panels) {
+		return
+	}
+	for i, p := range panels {
+		for j, s := range axesOf(p) {
+			writeAxis(s, v.panels[i].axes[j])
+		}
+	}
 }
 
 // Draw renders the current state of the plot.
@@ -497,6 +554,72 @@ func (l *Live) Autoscale() error {
 		autoscale(p.X2)
 	}
 	return l.Draw()
+}
+
+// Select reports the rows under a device-space rectangle, firing one [Select]
+// event per layer the rectangle touched.
+//
+// It is the read half of a brush: the rectangle comes from wherever the caller
+// got one — a drag through [Input] with [Input.Drag] set to [DragSelects], a
+// region computed from a value, a test — and what comes back is the rows, not
+// a decision about them. What a selection *means* is the caller's: highlight
+// them here, filter another chart by them, put them in a table beside the
+// plot. refract does not remember which rows are selected, because a library
+// that did would have to answer whose selection it was when two charts
+// disagreed.
+//
+// The events are returned as well as fired, so a caller driving this directly
+// need not register a handler to see the answer. They come in layer order
+// within a panel, and panel order across the chart.
+//
+// It reports nothing without row tracking — see [Live.TrackRows]. A rectangle
+// over marks whose rows are unknown is a rectangle over an unanswered
+// question, and reporting the marks instead would be answering a different
+// one. It does not draw: like [Live.Move] and [Live.Click], asking the chart
+// something does not change it.
+func (l *Live) Select(r ir.Rect) []Event {
+	refs := l.idx.RowsIn(r, nil)
+	if len(refs) == 0 {
+		return nil
+	}
+	// One event per layer, in the order the layers were drawn — which is the
+	// order the index reports them in, so first appearance is paint order and
+	// no sort is needed. A layer's refs need not be contiguous, so each pass
+	// gathers the whole layer rather than a run of it.
+	var out []Event
+	for i, ref := range refs {
+		if seenLayer(refs[:i], ref.Panel, ref.Layer) {
+			continue
+		}
+		rows := make([]int, 0, len(refs)-i)
+		for _, r2 := range refs[i:] {
+			if r2.Panel == ref.Panel && r2.Layer == ref.Layer {
+				rows = append(rows, r2.Row)
+			}
+		}
+		out = append(out, Event{
+			Kind:  Select,
+			Rect:  r,
+			Panel: ref.Panel,
+			// Row is -1: a selection is a set of rows, and naming one of them
+			// as the hit would be naming whichever the scan reached first.
+			Hit:  Hit{Panel: ref.Panel, Layer: ref.Layer, Series: ref.Series, Row: -1},
+			Rows: rows,
+		})
+	}
+	for i := range out {
+		l.p.emit(out[i])
+	}
+	return out
+}
+
+func seenLayer(refs []RowRef, panel, layer int) bool {
+	for _, r := range refs {
+		if r.Panel == panel && r.Layer == layer {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *Live) fire(ev Event) Event {

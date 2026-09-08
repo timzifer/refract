@@ -459,6 +459,33 @@ func (p *Plot) X2(s scale.Scale) *Plot { p.x2 = s; return p }
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
+// SetLayers replaces the plot's layers with the ones given, drawn in the order
+// given. Passing none leaves a plot with no layers, which [Plot.Render]
+// refuses with [ErrNoLayers].
+//
+// It is [Plot.Add]'s counterpart and exists for the same caller: one reacting
+// to something the reader did. A chart that gains a highlight layer on every
+// hover and can never lose one accumulates a layer per pointer move, so a plot
+// that can be added to has to be a plot that can be set. Building a fresh Plot
+// each time is the alternative and a worse one — it discards the scales, and
+// with them the zoom the reader established.
+//
+// Layers already drawn are unaffected until the chart is resolved again:
+// [Live.Rebuild] is what picks this up, and it keeps the view.
+//
+// The slice is copied, so the caller may reuse it.
+func (p *Plot) SetLayers(gs ...geom.Geom) *Plot {
+	p.layers = append(p.layers[:0:0], gs...)
+	return p
+}
+
+// Layers reports the plot's layers, in drawing order. The slice is a copy; the
+// layers in it are not.
+//
+// It is what a caller reaching for [Plot.SetLayers] needs first: keeping the
+// ones that were there and replacing the rest means being able to see them.
+func (p *Plot) Layers() []geom.Geom { return append([]geom.Geom(nil), p.layers...) }
+
 // Facet splits the plot into small multiples, one panel per value of a
 // column. See [facet.Wrap] and [facet.Grid].
 //
