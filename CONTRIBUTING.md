@@ -383,54 +383,70 @@ ruleset's bypass at the new key's id.
 
 ## Releasing
 
-Before tagging anything, run the release check from the repository root:
+One command releases all five modules. From the repository root:
 
 ```sh
-go run ./internal/cmd/releasecheck -module all
+go run ./internal/cmd/release -core vX.Y.Z -summary "what the release is called"
 ```
 
-The tool builds, tests and vets each module with `GOWORK=off`,
-`CGO_ENABLED=0`, `-mod=readonly` and `GOPRIVATE=github.com/timzifer/refract`,
-and refuses `replace` directives. A green workspace test is not evidence that a
-nested module can use the version in its `require` line; this is. Single
-modules can be checked with `-module .`, `-module backend/gg`, `-module
-arrow/v18`, `-module backend/gg/gpu` or `-module backend/window`.
+That reports the tags it would write, runs each module's release check, and
+stops. Re-run it with `-push` to write the tags on `HEAD` and push them.
 
-Green means each nested module builds, tests and vets against **exactly the
-core it names in its `require` line**, with the workspace out of the way. That
-is the whole contract a release has to keep, so a green check is the licence to
-tag — the `require` lines do not have to name the version being tagged.
-
-The **Release dependencies** workflow can run the same check manually on a
-candidate branch; tag pushes also check the module that tag releases. That
-post-tag check is a backstop, not a substitute for the pre-tag command.
-
-### Tagging
-
-With the check green, tag all five modules on the same commit. Order does not
-matter, because no `require` line names a tag that does not exist yet. Each
-nested module's tag prefix is its directory:
-
-```sh
-git tag vX.Y.Z
-git tag backend/gg/vX.Y.Z
-git tag backend/window/vX.Y.Z
-git tag backend/gg/gpu/v0.N.0
-git tag arrow/v18.N.M
-git push origin --tags
+```
+Would tag HEAD:
+  v1.6.0                 v1.6.0 — colour transforms and classed ramps
+  backend/gg/v1.6.0      backend/gg v1.6.0 — the raster path at core v1.6.0
+  arrow/v18.0.4          arrow/v18.0.4 — the adapter at core v1.6.0
+  backend/gg/gpu/v0.3.0  backend/gg/gpu v0.3.0 — the tier at core v1.6.0
+  backend/window/v1.6.0  backend/window v1.6.0 — the native path at core v1.6.0
 ```
 
-`backend/gg` and `backend/window` share the core's version — they are the
-supported raster and native paths, and their own APIs are small. The GPU tier
-stays at `v0` for as long as it is opt-in beta, so its tag says what the README
-says. The Arrow adapter's major is Arrow's, and its tag prefix is `arrow/`
-rather than `arrow/v18/`: a module's tag prefix is its subdirectory without the
-major-version suffix, even when the module lives in a major-version
-subdirectory ([ADR 0030](docs/adr/0030-arrow-major-version.md)).
+The versions are derived. `backend/gg` and `backend/window` share the core's —
+they are the supported raster and native paths, and their own APIs are small.
+The GPU tier and the Arrow adapter carry majors of their own, so they move a
+patch above their latest tag; `-gpu` and `-arrow` say otherwise when a release
+changes their API. `-skip` leaves a module unreleased. Tag prefixes are the
+module's directory without any major-version suffix, which is why the adapter
+tags as `arrow/` rather than `arrow/v18/`
+([ADR 0030](docs/adr/0030-arrow-major-version.md)).
+
+Order does not matter: all five tags go on one commit, because no `require`
+line names a tag that does not exist yet.
+
+The command refuses to release a tag that already exists, a working tree with
+uncommitted changes in it, or a `HEAD` that is not on its upstream branch —
+pushing a tag does not push the commit under it, so a tag on a local-only
+commit publishes a version the proxy cannot fetch, and then caches the failure.
+It never edits a manifest; see below for when one has to move.
 
 Then the docs: the README's status line and `CONCEPT.md` §14 name the
 milestone, and the results table in `docs/benchmarks.md` is regenerated when a
 release changes what a benchmark measures.
+
+### The release check
+
+The check the release command runs is also a command of its own, for a
+candidate branch or a single module:
+
+```sh
+go run ./internal/cmd/releasecheck -module all
+go run ./internal/cmd/releasecheck -module arrow/v18
+```
+
+It builds, tests and vets each module with `GOWORK=off`, `CGO_ENABLED=0`,
+`-mod=readonly` and `GOPRIVATE=github.com/timzifer/refract`, and refuses
+`replace` directives.
+
+Green means each nested module builds, tests and vets against **exactly the
+core it names in its `require` line**, with the workspace out of the way. A
+green workspace test is not evidence of that, because `go.work` overrides the
+`require` lines locally. That isolated build is the whole contract a release
+has to keep, so a green check is the licence to tag — the `require` lines do
+not have to name the version being tagged.
+
+The **Release dependencies** workflow can run the same check manually on a
+candidate branch; tag pushes also check the module that tag releases. That
+post-tag check is a backstop, not a substitute for the pre-tag command.
 
 ### When a require line does have to move
 
@@ -443,8 +459,14 @@ build or test fails, with the workspace off, against the core it names.
 Do not silence that with a workspace, a local replacement or a tag that does
 not exist. Publish the prerequisite first, then bump:
 
-1. **The core.** Tag `vX.Y.Z` and push it. `go.mod` at the root has no
-   `require` block, so nothing precedes it.
+1. **What can go out.** Release everything that is green, leaving the failing
+   module behind — `-skip` takes module directories:
+
+   ```sh
+   go run ./internal/cmd/release -core vX.Y.Z -summary "..." -skip arrow/v18 -push
+   ```
+
+   `go.mod` at the root has no `require` block, so nothing precedes the core.
 2. **The require lines.** Bump `github.com/timzifer/refract` in the failing
    module's `go.mod` — and, in `backend/gg/gpu` and `backend/window`,
    `github.com/timzifer/refract/backend/gg` if that is what is short — then
@@ -460,7 +482,17 @@ not exist. Publish the prerequisite first, then bump:
 
    `backend/gg/gpu` and `backend/window` require `backend/gg` as well, so if
    that tag is also being bumped it has to be pushed before they can be tidied.
-3. **Re-check and tag.** `releasecheck -module all` again, then tag as above.
+3. **The module on its own.** With the bump committed and pushed, release just
+   it — skip the rest, and name its version if a patch above its latest tag is
+   not what it should get:
+
+   ```sh
+   go run ./internal/cmd/release -core vX.Y.Z -arrow v18.N.M \
+       -skip .,backend/gg,backend/window,backend/gg/gpu -push
+   ```
+
+   `-core` is still the core's version here: it is what the tag message says
+   the module was tested against.
 
 The order exists to prevent one failure: publishing a nested module that
 resolves to a core it was never tested against. The check is what proves it
