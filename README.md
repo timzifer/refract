@@ -305,8 +305,17 @@ picture here cannot drift away from the code that produced it.
 - **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
   gg raster adapter, a native window, and an opt-in GPU tier.
 
+- **Identity and transitions** — `geom.KeyBy` names the column that says which
+  row is which, so a hover in one chart can be acted on in another, and two
+  states of a table can be blended into a movement between them. The blend is
+  in data space, before the scales, and refract owns no clock: `At(f)` is the
+  whole primitive ([ADR 0043](docs/adr/0043-mark-identity.md),
+  [ADR 0044](docs/adr/0044-transitions.md)).
+
 Deliberately **not** here: geographic projections, node-link and Venn diagrams,
-contour and QQ plots, animation, and 3D. They are past v1.0 in
+contour plots, 3D, and any engine that links two charts together — a link is a
+statement about two charts and this model is about one, so the host is the link
+([ADR 0045](docs/adr/0045-linked-views.md)). The rest are past v1.0 in
 [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), and
 [docs/chart-types.md](docs/chart-types.md) says what each one would need.
 

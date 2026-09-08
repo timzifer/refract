@@ -1245,6 +1245,57 @@ All of it is additive: `ColorScale` gained no method, and the three capabilities
 are optional interfaces beside it in the shape ADR 0020 established.
 See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
 
+### v1.7 — Identity, and what it unlocks — **shipped**
+
+The one thing this document had said was blocked, and the two things that
+turned out to be the same problem.
+
+A row number is not an identity. `geom.Rows` reports the row behind a mark, and
+that row is an index into a table as it stands for one frame — append to it,
+filter it, or window a stream and the numbers renumber. So `geom.KeyBy` names a
+column instead, and the key is read from the layer's own source at the row that
+was already being reported. Nothing in `geom` reads it, `Geom` gained no
+method, and the IR gained no identity channel: `geom.Faceter` already exposed
+both halves of what this needed, so twenty geoms became identifiable without
+one of them changing. See [ADR 0043](docs/adr/0043-mark-identity.md).
+
+With a key, tweening is a join. `data.Tween` blends two states of a table in
+**data space, before the scales** — one `Source` whose contents change rather
+than a source per frame, the way `data.Stream` already worked — so every geom,
+coord and backend animates without knowing it can. The row set is the union and
+is fixed for the whole transition, which is what keeps two frames comparable to
+`ir.Damage` and an animation off the full-repaint path. `refract.Transition`
+drives it, and refract owns no clock: `At(f)` is the whole primitive, which is
+also what makes a golden file of a half-finished movement a real frame rather
+than an approximation of one. See
+[ADR 0044](docs/adr/0044-transitions.md).
+
+The same key is what makes one chart able to say something another understands.
+`interact.Index.Locate` is the inverse of a hit test, `Select` and `Event.Rows`
+are the brush the audit had committed to, and `Live.Rebuild` now keeps the
+reader's zoom — because the caller rebuilding is usually answering something
+the reader did, and discarding their view as a side effect is a chart that
+fights back. What is deliberately *not* here is a linking engine: a link is a
+statement about two charts and this model is about one, so the host is the
+link and `examples/linked` is what that looks like. See
+[ADR 0045](docs/adr/0045-linked-views.md).
+
+Not in v1.7, in case they look like oversights. A **string does not
+interpolate** — half of "ingest" is not a node — so anything a geom decides
+from one decides it abruptly: a categorical slot, a discrete colour class, a
+group membership. **Enter and exit do not fade**, because opacity is a property
+of a layer rather than of a row and a per-row opacity channel is the IR change
+[ADR 0007](docs/adr/0007-per-mark-colour.md) refuses; `EnterFrom` puts the
+answer in data space instead, so a bar grows out of its baseline. A
+**`data.Stream` has no identities to join on** and animates by being redrawn,
+which already worked. There is **no keyframe timeline**: a sequence is a list of
+two-state transitions and building one is a host-side loop, so the pair shipped
+first. There is still **no overlay layer** — bucket H's remainder — and
+therefore no tooltip, crosshair or brush rectangle refract itself draws;
+`Input.Dragged` hands the host the rectangle meanwhile. And there is **no
+`Grid.Live`**: a grid composes plots into a document, and several interactive
+charts are several `Live`s on several surfaces. ✔
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1272,11 +1323,21 @@ See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
   anything else. Opt-in text collision avoidance shipped in v1.5
   ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)); automatic avoidance
   of every kind of mark remains open.
-- Animations / transitions. `ir.Damage` diffs two recordings at the level of
-  drawing calls: it says that something changed, not which path corresponds to
-  which. Tweening needs mark identity across frames — a join key — and the
-  nearest thing that exists is `geom.Rows`, which holds only within one frame.
-  The step is a key concept, not an interpolation layer.
+- ~~Animations / transitions.~~ **Shipped in v1.7.** The blocker was stated
+  here for six milestones: `ir.Damage` diffs two recordings at the level of
+  drawing calls, so it says that something changed and not which path
+  corresponds to which, and tweening needs mark identity across frames — a join
+  key — where the nearest thing that existed was `geom.Rows`, which holds only
+  within one frame. The sentence that resolved it was the last one: *the step
+  is a key concept, not an interpolation layer*. So the key is a column the
+  caller names ([ADR 0043](docs/adr/0043-mark-identity.md)) and the blend
+  happens in data space, before the scales, where identity is the only thing
+  that means anything ([ADR 0044](docs/adr/0044-transitions.md)). Nothing under
+  the IR was touched.
+- A keyframe timeline, over more than two states. A sequence is a list of
+  two-state transitions and building one is a host-side loop, so the pair
+  shipped first; an API that owned the sequence would be a real addition rather
+  than sugar, and would be argued on the evidence of people writing that loop.
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.
 

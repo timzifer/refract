@@ -904,6 +904,39 @@ a corner. That is why the separation between cells is `geom.Padding` — room �
 and not ink, and why these marks stroke only when the caller named both a
 `Fill` and a `Color`. `geom.Rect` has the same rule for the same reason.
 
+**A key is read from the *plot's* layer, never the panel's.** On a faceted
+chart those are different objects: a panel holds a `geom.Faceter` `Subset` copy
+whose `Source` is the cut, one panel's worth of rows, while a `Hit.Row` has
+already been resolved back through `data.Subset` to the table the caller handed
+in. Reading the cut with a handed-in row number indexes the wrong table — and
+does it silently, with a plausible answer, which is the worst kind. The layer
+index is the same in both because a facet preserves layer order.
+`TestKeyIsReadFromTheHandedInTable` is the bug written down.
+
+**A transition's row set is the union of its two states, and it is fixed.** An
+entering row exists at `f == 0` and an exiting one at `f == 1`. That is not
+tidiness: it keeps the frame's *structure* identical between frames, which is
+the condition `ir.Damage` needs to report the two comparable. A blend whose row
+count changed partway through would make every frame a full repaint while the
+picture stayed perfectly correct — so the test asserts on what the backend was
+told to repaint (`irtest.Recorder.Whole`) rather than on anything visible. The
+same trap is why `Transition.Rescale` pins the domains: a `Nice` axis
+re-rounds, a changed tick *count* is a structural change, and that is the full
+repaint again.
+
+**Only numbers and times tween.** A string is a name rather than a quantity —
+half of "ingest" is not a node — so a string column takes the end state's value
+and anything a geom decides from one decides it abruptly: a categorical slot, a
+discrete colour class, a `GroupBy` membership. `data.Hold` is how a *number*
+that is really a name gets the same treatment. And a `data.Stream` cannot be
+tweened at all: under a `Window` ring the row numbers slide, which is the whole
+reason a key exists.
+
+**Watching a render is serial, and animating a watched one is too.** An
+`Observer` or a `RowSink` takes the serial path in `render/parallel.go`, so a
+chart that is being hovered does not build its panels concurrently. That is a
+property of watching, not of animating, but it is where someone will notice it.
+
 ## Open questions
 
 [CONCEPT.md §17](CONCEPT.md#17-open-decisions) lists the design decisions that

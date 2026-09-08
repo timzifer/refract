@@ -52,6 +52,9 @@ depends on.
 | [0040](0040-label-collision-avoidance.md) | Participating text layers share a deterministic panel-local label layout | Accepted | — |
 | [0041](0041-qq-plots.md) | QQ plots rank the sample before it is drawn | Accepted | — |
 | [0042](0042-colour-transforms-and-classes.md) | A colour ramp may compress its domain or cut it into classes | Accepted | — |
+| [0043](0043-mark-identity.md) | Mark identity is a column the caller names, resolved outside the geom | Accepted | — |
+| [0044](0044-transitions.md) | A transition is a keyed join blended in data space, driven by the host's clock | Accepted | — |
+| [0045](0045-linked-views.md) | Linked views are the host's; refract supplies the two ends of the wire | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

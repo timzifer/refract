@@ -325,8 +325,12 @@ The dependency order is not a preference:
    independent, and was blocking a whole class of charts from being *usable*
    rather than from being drawn. What is left of the bucket is an **overlay
    layer the chart itself owns** — a tooltip, a crosshair, a brush rectangle —
-   which `interact` cannot draw because it only reads, and which linked
-   brushing across panels needs before anything else. **Label collision
+   which `interact` cannot draw because it only reads. Linked brushing no
+   longer waits on it: v1.7 shipped the identification and the selection, and
+   the host draws the feedback from `Input.Dragged`
+   ([ADR 0045](adr/0045-linked-views.md)). What the overlay would add is
+   refract drawing it, which needs a seam in `render` — the only package that
+   knows drawing order — and is a record of its own. **Label collision
    avoidance** is implemented for the next release through
    `geom.AvoidOverlap(true)` ([ADR 0040](adr/0040-label-collision-avoidance.md)).
 10. ~~**Relational layouts**~~ — E, shipped in v1.4
