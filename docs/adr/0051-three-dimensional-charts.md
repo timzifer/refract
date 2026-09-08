@@ -12,30 +12,65 @@ bars.
 The obstacle is not the arithmetic. Projecting a point with a 4×4 matrix is
 twenty lines, and `scale.Scale` already maps a value into an interval without
 caring what the interval means — the property [ADR 0018](0018-coordinate-systems.md)
-was built on. The obstacle is **where the third scale is allowed to live**.
+was built on.
 
-`geom.Frame` carries `Area`, `X`, `Y`, `Coord`, `Theme`, `Index`, `Rows`,
-`Labels` and nothing else, and `Coord.Frame(area, x, y)` takes two scales by
-signature. Both are v1 stability surfaces: [ADR 0029](0029-extension-model.md)
-froze what a third party implements, and the growth rule in `AGENTS.md` says an
-interface implemented outside this module never gains a method. A `Z` field on
-`Frame` is not a method, but it is worse: every existing geom would have to
-decide what to do when it is set, and the ones that ignore it would silently
-draw a chart of the wrong thing.
+**Nor is the obstacle the struct.** `geom.Frame` can take a `Z scale.Scale`,
+and saying otherwise would be inventing a constraint this repository does not
+have: `render`'s own package doc says "[Chart] and [Panel] grow by gaining
+fields, and a zero field always means what it meant", ADR 0018 widened `Frame`
+itself, and a keyed field is additive under Go semver. `Frame.Z` compiles, and
+every chart drawn today keeps drawing.
 
-Three shapes were available.
+**The obstacle is that the field is one line and four parallel paths.**
 
-**Widen the core.** `Frame.Z`, `Coord3`, `geom.Surface`. It breaks the freeze
-the whole v1 positioning rests on, for a feature CONCEPT §5 says arrives well
-after v1.0.
+**Nothing trains it.** `Geom.Train(x, y scale.Scale) error` is an interface
+implemented outside this module, so it never gains a parameter — and a z
+domain has to exist before layout, because layout needs tick labels and tick
+labels need a domain. Training z is therefore a second training path beside
+the frozen one, reached through an optional interface and called from a
+`render` that knows when to look for it.
 
-**A parallel stack inside the core.** `frame3`, `geom3`, `coord3` beside the
-existing ones. Nothing breaks, and the core acquires a second drawing order and
-a second set of interfaces inside the perimeter it has just frozen — the thing
-[ADR 0010](0010-panel-layout.md) exists to prevent, one layer up.
+**Nothing indexes it.** `render.Observer.Panel(i, area, x, y, cd)` is the same
+kind of interface for the same reason. `LayerAxes` shows how a scale is added
+beside it without touching it — and shows the cost: another optional
+interface, another branch in the draw path, another thing an index has to
+implement to be correct.
+
+**Nothing orders it, and this one is not a signature.** `drawPanel` walks
+`p.Layers` and each layer's `Build` streams straight into the backend
+([render/render.go:1060](../../render/render.go)), so **a layer is a paint
+unit**. A projected scene has no paint unit smaller than the panel: a point of
+a scatter can be in front of one part of a surface and behind another, so
+correct occlusion is a single depth order over the primitives of *every* layer
+at once. Producing that inside `render` needs one of two things, and both are
+already refused — a depth key on every drawing call, which is the identity
+channel [ADR 0007](0007-per-mark-colour.md) and [ADR 0015](0015-hit-testing.md)
+exist to keep out of the IR; or recording each layer and merging the recordings
+by depth, which leaves `render` holding two drawing orders and is precisely
+what [ADR 0010](0010-panel-layout.md) exists to prevent.
+
+**Nothing warns about it.** A `geom.Line` handed a `Frame` with a `Z` ignores
+it and draws a flat line inside a projected box — correct by its own lights,
+wrong by the chart's, and silent either way. Every one of the twenty
+data-bearing marks would have to be taught to refuse a dimension it has never
+heard of.
+
+So the question was never whether a struct can grow. It is where four parallel
+paths live, and three answers were available.
+
+**Widen the core.** `Frame.Z`, an optional `Train3`, an optional `Panel3`, a
+depth-merge stage in `render`. It breaks the freeze the v1 positioning rests on
+— not through the struct, through the drawing order — for a feature
+CONCEPT §5 says arrives well after v1.0.
+
+**A parallel stack inside the core.** `frame3`, `geom3`, `coord3`, `draw3`
+beside the existing ones. Nothing breaks, and the core acquires a second
+drawing order and a second set of interfaces inside the perimeter it has just
+frozen — 0010's objection, one layer up, and now permanent.
 
 **Its own module.** Which is what [the v1 audit](../v1-api-audit.md) wrote in
-the one cell it gave the subject, and it was right.
+the one cell it gave the subject. The parallel stack is unavoidable; what is
+still open is whether it sits inside the stability perimeter or beside it.
 
 ## Decision
 
@@ -45,19 +80,40 @@ changes.**
 
 ### Why a module, when it needs no dependency
 
-[ADR 0001](0001-module-layout.md)'s nested modules exist to keep dependencies
-out of the core, and `three` has none to keep out: it is arithmetic and
-`ir`. The reason is the other one, and `backend/gg/gpu` is the precedent
-([ADR 0022](0022-gpu-tier.md)) as much as `arrow/v18` is
-([ADR 0030](0030-arrow-major-version.md)):
+This is the weakest part of the record and it is written as such, because the
+objection is good: every nested module here exists to keep a dependency out of
+the core. `backend/gg` and `backend/window` hold `gogpu`, `backend/gg/gpu`
+holds `wgpu`, `arrow/v18` holds Arrow — [ADR 0001](0001-module-layout.md)'s one
+rule, four times. `three` is arithmetic and `ir`; it has nothing to quarantine.
+It would be the first nested module here whose reason is not a dependency, and
+"the audit wrote it in a table cell" is not a reason.
 
-**a module has its own version.** The core is v1 and its API is frozen; a first
-3D API will be wrong in ways only its second user finds. `three` starts at
-`v0.x`, moves at v0.x's speed, and breaks its own users rather than the
-library's — and `go.work` already builds all of them together, so a contributor
-sees a break the moment they make one. Putting it in the core would mean either
-freezing a 3D API nobody has used yet or breaking v1's promise the first time
-it needed a change.
+The reason is that **a module has its own version**, and the repository already
+uses that: the audit's own line for the GPU tier is "`backend/gg/gpu` stays
+`v0.x`", which is a stability decision made by packaging rather than by a
+dependency. The core is v1 and its API is frozen. A first 3D API will be wrong
+in the way first APIs are wrong — the camera constructor, where the z scale is
+bound, whether a surface takes a grid or three columns — and the two ways to
+be wrong inside a v1 module are to freeze it before anyone has used it, or to
+break the promise the library's positioning rests on. `three` at `v0.x` breaks
+its own users instead, which is the deal every v0 makes, and `go.work` already
+builds it with the core so a contributor sees a break the moment they cause one.
+
+**And the choice is reversible, which is why it is the right one to make
+first.** A nested module and a package of the parent module have the *same
+import path*: `github.com/timzifer/refract/three` either way. Deleting its
+`go.mod` folds it into the core, and no caller's import changes — what changes
+is which version governs it, and therefore which promise it is under. So the
+sequence is: land it as a module while it is still moving, fold it into the
+core when its API has stopped, and let the users who were there for v0 keep
+the line they already wrote.
+
+The zero-dependency property is what keeps that door open rather than what
+argues against the module. A nested module is excluded from its parent's module
+graph, so ADR 0001's CI gate never sees it; the day `three` acquires a
+dependency is the day it can never be folded in. It therefore has the same
+rule as the core — **stdlib only** — and the fold-in is checked by the gate
+that already exists.
 
 The opt-in is the import, and the cost of not importing it is exactly zero.
 
