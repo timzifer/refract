@@ -120,6 +120,32 @@ type Chart struct {
 	//
 	// It is not called Rows because that name is already the facet grid's.
 	RowSink geom.Rows
+
+	// Hidden turns individual layers off by index, without removing them: a
+	// hidden layer is not drawn, still trains its scales, and still appears in
+	// the legend — dimmed, so that a reader can see what they have put away
+	// and bring it back.
+	//
+	// It is indexed by the layer's position among the chart's layers, which is
+	// the index an [Observer] is told and the one [interact.Hit] reports. A
+	// shorter slice than there are layers hides none of the rest, and nil
+	// hides nothing at all.
+	//
+	// The scales are trained from hidden layers on purpose. A legend toggle is
+	// a reading aid — let me see this one without that one on top — and an
+	// axis that moved every time one was clicked would make the two readings
+	// incomparable, which is the thing the toggle was for. A caller who wants
+	// the axes to follow what is left removes the layer instead, with
+	// [Plot.SetLayers], which is a different statement about the chart.
+	Hidden []bool
+
+	// Overlay paints over the finished chart — a crosshair, a tooltip, a brush
+	// rectangle. It is nil for an ordinary chart and costs nothing then.
+	//
+	// It is drawn last, after the guides, and is not announced to Observer:
+	// what an overlay draws is not a mark and must not be hit-testable. See
+	// [Overlay].
+	Overlay Overlay
 }
 
 // Observer is told the structure a render is drawing, as it draws it.
@@ -168,6 +194,87 @@ type LayerAxes interface {
 	// drawn against. It is called immediately before it, and both are ranged
 	// for the panel already announced.
 	LayerAxes(x, y scale.Scale)
+}
+
+// EndData is an optional interface beside [Observer]: an observer that
+// implements it is told when the last layer has been drawn.
+//
+// It exists because [Observer] has no way to close a layer. Layer opens one and
+// the next Panel opens another, so after the final layer of the final panel the
+// most recent Layer call is still the most recent thing an observer was told —
+// and everything drawn afterwards is attributed to it. What is drawn afterwards
+// is the guides and the chart's [Overlay], neither of which is a mark: a
+// pointer landing on a legend swatch has not landed on a row of the layer that
+// happened to be drawn last, and one landing on a crosshair has not landed on
+// anything at all.
+//
+// It is optional rather than a third method on Observer for the reason
+// [LayerAxes] is: Observer is implemented outside this package and never gains
+// one ([CONCEPT §15](../CONCEPT.md#15-versioning--stability)).
+type EndData interface {
+	// EndData reports that the data pass is over and everything after it is
+	// furniture. It is called once per render, after the last layer of the
+	// last panel, and is not called at all by a render with no layers.
+	EndData()
+}
+
+// LegendEntry is an optional interface beside [Observer]: an observer that
+// implements it is told where each row of the legend was drawn.
+//
+// It is what makes a legend answer to a pointer. A legend is furniture — it is
+// drawn after the data and is not a mark — but it is the one piece of
+// furniture a reader expects to be able to *act on*, by clicking a series to
+// put it away. So it is announced separately from the marks and with its own
+// vocabulary, rather than being indexed as though it were data: a hit on a
+// swatch has to be distinguishable from a hit on the thing the swatch stands
+// for, or a tooltip would describe a row that is not under the pointer.
+//
+// It is optional rather than a third method on Observer for the reason
+// [LayerAxes] and [EndData] are: Observer is implemented outside this package
+// and never gains one.
+type LegendEntry interface {
+	// LegendEntry reports one row of the legend: which layer it stands for,
+	// what it is labelled, the rectangle it occupies, and whether that layer
+	// is currently hidden.
+	//
+	// layer is -1 for a row no layer can be attributed to. The rectangle spans
+	// the legend's width, so the gap between a swatch and its label is part of
+	// the same target — a reader aiming at a word should not have to hit the
+	// word.
+	LegendEntry(layer int, label string, area ir.Rect, hidden bool)
+}
+
+// ColorbarEntry is an optional interface beside [Observer]: an observer that
+// implements it is told where a colourbar was drawn.
+//
+// A classed colourbar reports one call per band, because a band is a discrete
+// thing a reader can mean — the rows between these two numbers. A continuous
+// one reports a single call for the whole bar, because every point of it means
+// something different and there is nothing discrete to enumerate.
+//
+// It is optional rather than a method on Observer for the reason [LayerAxes],
+// [EndData] and [LegendEntry] are: Observer never gains one.
+type ColorbarEntry interface {
+	// ColorbarEntry reports a colourbar, or one band of a classed one.
+	//
+	// cs is the scale the bar was painted from, so that a caller can ask what
+	// value the ramp reaches at a point of it — which is the ramp's answer
+	// rather than the axis's, and the two disagree wherever the ramp is
+	// compressed.
+	//
+	// class is the band's index and lo and hi its interval; class is -1 for a
+	// continuous bar, and lo and hi are then the scale's whole domain.
+	ColorbarEntry(cs scale.ColorScale, class int, lo, hi float64, area ir.Rect)
+}
+
+// SizeKeyEntry is an optional interface beside [Observer]: an observer that
+// implements it is told where each row of a size key was drawn, and what value
+// the row's sample stands for.
+type SizeKeyEntry interface {
+	// SizeKeyEntry reports one row of a size key: the value its sample is
+	// drawn for, how that value is spelled, and the rectangle the row
+	// occupies.
+	SizeKeyEntry(value float64, label string, area ir.Rect)
 }
 
 // Panel is one Cartesian area of a multi-panel chart.
@@ -287,10 +394,22 @@ func Draw(b ir.Backend, c Chart) error {
 	}
 	drawBackground(b, canvas, th)
 
+	// An overlay is told the coords the panels were actually drawn in. They
+	// are collected here rather than recomputed afterwards: ranging a panel
+	// generates its ticks, and doing that twice would allocate a tick list per
+	// frame for nobody to read.
+	var coords []coord.Coord
+	if c.Overlay != nil {
+		coords = make([]coord.Coord, len(panels))
+	}
+
 	fur := acquireFurniture()
 	for i, p := range panels {
 		area := lay.Areas[i]
 		cd, xTicks, yTicks := p.rangeTo(c.coordOf(p), area, th)
+		if coords != nil {
+			coords[i] = cd
+		}
 		fur.Reset()
 		cd.Furniture(fur, area, metricsOf(th), xTicks, yTicks)
 		drawPanelFill(b, area, th)
@@ -307,6 +426,12 @@ func Draw(b ir.Backend, c Chart) error {
 	if err := drawData(b, c, panels, lay.Areas, th); err != nil {
 		return err
 	}
+	// Everything below this line is furniture. An observer that wants to know
+	// is told, so that a guide's swatch is not indexed as a mark of whichever
+	// layer was drawn last — see [EndData].
+	if e, ok := c.Observer.(EndData); ok {
+		e.EndData()
+	}
 
 	// The solver reserves one box per guide, in order, so these are parallel.
 	// The legend is rebuilt against the real plot rectangle: an entry can
@@ -318,12 +443,51 @@ func Draw(b ir.Backend, c Chart) error {
 		}
 		g := guides[i]
 		if g.kind == layout.GuideLegend {
-			g.entries = legendEntries(c, panels, lay.Areas[0])
+			g.entries, g.layers = legendEntries(c, panels, lay.Areas[0])
 		}
-		drawGuide(b, box, th, g)
+		drawGuide(b, box, th, g, c.Observer, c.Hidden)
+	}
+
+	// Last of all, over everything, clipped by nothing. See [Overlay].
+	if c.Overlay != nil {
+		c.Overlay.DrawOverlay(b, overlayFrame(panels, lay.Areas, coords, canvas, th))
 	}
 	return nil
 }
+
+// overlayFrame gathers what an overlay is told: the panels as they were
+// actually drawn, with the scales already ranged to them and the coords the
+// paint pass framed.
+//
+// The scales are the panels' own objects rather than copies. An overlay reads
+// them in the same frame that drew them, and a copy would be a copy per frame
+// of something nothing is going to change.
+func overlayFrame(panels []Panel, areas []ir.Rect, coords []coord.Coord, canvas ir.Rect, th theme.Theme) OverlayFrame {
+	f := OverlayFrame{Canvas: canvas, Theme: th}
+	if len(panels) == 0 {
+		return f
+	}
+	f.Panels = make([]OverlayPanel, 0, len(panels))
+	for i, p := range panels {
+		if i >= len(areas) {
+			break
+		}
+		op := OverlayPanel{
+			Index: i,
+			Area:  areas[i],
+			X:     p.X, Y: p.Y, Y2: p.Y2, X2: p.X2,
+		}
+		if i < len(coords) {
+			op.Coord = coords[i]
+		}
+		f.Panels = append(f.Panels, op)
+	}
+	return f
+}
+
+// isHidden reports whether the layer at i is turned off. A short or nil slice
+// hides nothing, so a caller may keep one sized to the layers it cares about.
+func isHidden(hidden []bool, i int) bool { return i < len(hidden) && hidden[i] }
 
 // coord is the chart's coordinate system, which is [coord.Cartesian] when it
 // names none.
@@ -485,25 +649,34 @@ func labelsOf(ticks []scale.Tick) []string {
 // A layer contributes as many entries as it has to say — a grouped layer names
 // its series, a layer painted from a qualitative palette names its categories —
 // through [geom.Legends], which prefers a layer's own list where it has one.
-func legendEntries(c Chart, panels []Panel, area ir.Rect) []geom.LegendEntry {
+func legendEntries(c Chart, panels []Panel, area ir.Rect) ([]geom.LegendEntry, []int) {
 	if !c.ShowLegend {
-		return nil
+		return nil, nil
 	}
 	var out []geom.LegendEntry
+	var from []int
 	seen := map[string]bool{}
 	for _, p := range panels {
 		for i, g := range p.Layers {
 			f := geom.Frame{Area: area, X: p.X, Y: p.Y, Theme: c.Theme, Index: i}
-			for _, e := range geom.Legends(g, f) {
+			es := geom.Legends(g, f)
+			for _, e := range es {
 				if e.Label == "" || seen[e.Label] {
 					continue
 				}
 				seen[e.Label] = true
 				out = append(out, e)
+				// Which layer a row toggles. A layer contributing several rows
+				// — a pie, a stack, a waffle — names itself for each of them,
+				// and turning any of them off turns the layer off: the rows
+				// are one drawing, and there is no way to draw a third of it.
+				// A caller who wants them independent splits the layer, which
+				// is what makes them independent in the data too.
+				from = append(from, i)
 			}
 		}
 	}
-	return out
+	return out, from
 }
 
 // Furniture is per panel and sized by the tick count rather than by the data,
@@ -872,7 +1045,7 @@ func drawTitles(b ir.Backend, lay layout.GridResult, th theme.Theme, c Chart) {
 // rotation of -90 degrees in screen coordinates.
 const halfPi = 1.5707963267948966
 
-func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer, rows geom.Rows, cd coord.Coord) error {
+func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observer, rows geom.Rows, cd coord.Coord, hidden []bool) error {
 	if plot.Empty() || len(p.Layers) == 0 {
 		return nil
 	}
@@ -885,6 +1058,12 @@ func drawLayers(b ir.Backend, p Panel, plot ir.Rect, th theme.Theme, obs Observe
 
 	var labels *labelPlacer
 	for i, g := range p.Layers {
+		if isHidden(hidden, i) {
+			// Not drawn and not announced: a hidden layer has no marks, so a
+			// pointer where it used to be must find whatever is behind it
+			// rather than a mark nobody can see.
+			continue
+		}
 		x, y := p.axesOf(g)
 		f := geom.Frame{Area: plot, X: x, Y: y, Coord: cd, Theme: th, Index: i, Rows: rows}
 		if request, ok := g.(geom.LabelAvoider); ok && request.AvoidsLabels() {
@@ -932,10 +1111,12 @@ func layerLabel(g geom.Geom, f geom.Frame) string {
 	return d.Y
 }
 
-func drawLegend(b ir.Backend, box ir.Rect, th theme.Theme, entries []geom.LegendEntry) {
+func drawLegend(b ir.Backend, box ir.Rect, th theme.Theme, g guide, obs Observer, hidden []bool) {
+	entries := g.entries
 	if len(entries) == 0 {
 		return
 	}
+	rows, _ := obs.(LegendEntry)
 	if th.LegendBG.A != 0 || th.LegendBorder.A != 0 {
 		var p ir.Path
 		p.Rect(box)
@@ -953,18 +1134,51 @@ func drawLegend(b ir.Backend, box ir.Rect, th theme.Theme, entries []geom.Legend
 
 	x := box.Min.X + th.LegendPadding
 	y := box.Min.Y + th.LegendPadding
-	for _, e := range entries {
+	for i, e := range entries {
 		cy := y + entryH/2
-		drawSwatch(b, e, th, x, cy)
+		layer := -1
+		if i < len(g.layers) {
+			layer = g.layers[i]
+		}
+		off := layer >= 0 && isHidden(hidden, layer)
+
+		// A hidden series is dimmed rather than dropped. A row that vanished
+		// would take with it the only way of getting the series back, and a
+		// legend whose length changed as it was clicked would move the rows
+		// under the pointer.
+		swatch, label := e, th.LegendColor
+		if off {
+			swatch.Color = dim(swatch.Color)
+			label = dim(label)
+		}
+		drawSwatch(b, swatch, th, x, cy)
 		b.Text(ir.TextRun{
 			Text:  e.Label,
 			Font:  labelFont,
 			At:    ir.Point{X: x + th.LegendSwatch + th.LegendGap, Y: cy},
 			V:     ir.AlignMiddle,
-			Color: th.LegendColor,
+			Color: label,
 		})
+
+		// The row's own rectangle, spanning the legend so that the gap
+		// between a swatch and its label is part of the same target. It is
+		// announced rather than drawn: a legend a pointer can act on has to be
+		// findable, and nothing here is a mark.
+		if rows != nil {
+			rows.LegendEntry(layer, e.Label, ir.R(
+				box.Min.X, y, box.Max.X, y+entryH,
+			), off)
+		}
 		y += entryH + th.LegendGap
 	}
+}
+
+// dim is how a legend says a series is turned off: the same colour at a third
+// of its opacity, so the row still reads as itself rather than as a different
+// entry.
+func dim(c ir.Color) ir.Color {
+	c.A = uint8(float64(c.A) / 3)
+	return c
 }
 
 func drawSwatch(b ir.Backend, e geom.LegendEntry, th theme.Theme, x, cy float32) {

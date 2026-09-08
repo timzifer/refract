@@ -47,7 +47,51 @@ const (
 	Area
 	// Label is text a layer drew.
 	Label
+	// LegendRow is a row of the legend: furniture a reader can act on rather than
+	// data. A hit on one says which series a swatch stands for, not what is
+	// under the pointer — see [Hit.Layer] and [Hit.Series].
+	//
+	// It is spelled apart from [Label], which is text a *layer* drew and is a
+	// mark like any other.
+	LegendRow
+	// Colorbar is a colourbar, or one band of a classed one. A hit on it says
+	// which value the ramp reaches there — see [Hit.Value] — and, for a band,
+	// which class and over what interval.
+	Colorbar
+	// SizeKey is a row of a size key. A hit on it says which value the sample
+	// stands for.
+	SizeKey
 )
+
+// Guides reports whether a kind is furniture a reader can act on rather than
+// something a layer drew. It is what a handler branches on before reading the
+// fields only a guide fills in.
+func (k Kind) Guides() bool {
+	switch k {
+	case LegendRow, Colorbar, SizeKey:
+		return true
+	}
+	return false
+}
+
+// String names the kind, for tests and error messages.
+func (k Kind) String() string {
+	switch k {
+	case Vertex:
+		return "vertex"
+	case Area:
+		return "area"
+	case Label:
+		return "label"
+	case LegendRow:
+		return "legend"
+	case Colorbar:
+		return "colorbar"
+	case SizeKey:
+		return "size key"
+	}
+	return "unknown"
+}
 
 // Hit is what the pointer found.
 type Hit struct {
@@ -66,6 +110,39 @@ type Hit struct {
 	// Distance is how far At is from the point that was asked about, in
 	// device units. It is zero for a point inside an area.
 	Distance float32
+
+	// Hidden reports whether the series this hit's layer is currently turned
+	// off, and is only meaningful when Kind is [LegendRow]. It is what lets a
+	// handler say "show" or "hide" rather than having to ask the chart.
+	Hidden bool
+
+	// Value is the quantity a guide hit stands for: the value a colourbar's
+	// ramp reaches under the pointer, or the value a size key's sample is
+	// drawn for. It is meaningless for every other kind, which report their
+	// position through X and Y instead.
+	//
+	// A colourbar reads its value through the *ramp* rather than through the
+	// axis beside it. The two disagree wherever the ramp is compressed — a log
+	// ramp, a diverging one centred off zero — and the ramp is the thing the
+	// reader is pointing at.
+	Value float64
+
+	// Area is the rectangle of the guide that was hit — a legend row, a
+	// colourbar band, a whole continuous bar, a size key row. It is the empty
+	// rectangle for a hit on a mark, which has no target to speak of.
+	//
+	// It is what a caller anchors to: a tooltip beside a legend row, or the
+	// band a drag along a colourbar is painted in.
+	Area ir.Rect
+
+	// Class is which band of a classed colourbar was hit, or -1 for a hit on a
+	// continuous ramp and for every kind that is not a colourbar.
+	//
+	// Lo and Hi are that band's interval. They are what a filter is written
+	// against: a reader clicking the third band of a quantile scale means the
+	// rows between those two numbers, not the single value under their finger.
+	Class  int
+	Lo, Hi float64
 
 	// Row is the source row behind the mark, or -1 when it is not known.
 	//
@@ -159,6 +236,19 @@ type mark struct {
 	label        string
 	lo, hi       int // into pts
 	bounds       ir.Rect
+	// hidden is whether the series a LegendRow mark stands for is currently
+	// turned off. It is meaningless on any other kind.
+	hidden bool
+
+	// cs is the colour scale a Colorbar mark reads its value through, and
+	// class, bandLo and bandHi describe the band when it is one. class is -1
+	// for a continuous ramp. They are named apart from lo and hi above, which
+	// are indices into pts and mean something else entirely.
+	cs             scale.ColorScale
+	class          int
+	bandLo, bandHi float64
+	// value is what a SizeKey mark's sample stands for.
+	value float64
 
 	// x and y are the scales this mark was drawn against, when they are not
 	// the panel's own — a layer bound to a secondary axis reads a different
@@ -235,6 +325,82 @@ func (ix *Index) Layer(i int, label string) {
 	ix.layer, ix.label, ix.open = i, label, true
 }
 
+// EndData implements the render package's optional EndData: it closes the layer
+// that was open, so that the guides drawn after the data — and the chart's
+// overlay after them — are not indexed as marks of whichever layer happened to
+// be drawn last.
+//
+// Without it the last Layer call stays the most recent thing this was told, and
+// a legend swatch is indexed as a shape belonging to that layer. That was
+// invisible for as long as the only way in was
+// [github.com/timzifer/refract.Live.Move], which does not hit-test a point
+// outside every panel — but [Index.At] is reachable on its own, and an overlay
+// draws *inside* a panel, where it would be hit.
+func (ix *Index) EndData() { ix.open = false }
+
+// LegendEntry implements the render package's optional LegendEntry: it records
+// where a row of the legend was drawn, so that a pointer over it can be told
+// which series it stands for.
+//
+// The row is indexed as a mark of kind [Guide] in panel -1, because a legend
+// belongs to the chart rather than to a panel and inverting its position
+// through a panel's scales would report a value from a place no value was
+// drawn. [Hit.X] and [Hit.Y] are therefore zero on a guide hit; [Hit.Layer]
+// and [Hit.Series] are what it is for.
+func (ix *Index) LegendEntry(layer int, label string, area ir.Rect, hidden bool) {
+	ix.addGuide(mark{
+		kind: LegendRow, layer: layer, label: label, hidden: hidden, class: -1,
+	}, area)
+}
+
+// ColorbarEntry implements the render package's optional ColorbarEntry: it
+// records a colourbar, or one band of a classed one.
+//
+// The colour scale is kept rather than the mapping, because where a value sits
+// on a bar is the *ramp's* answer and not the axis's — the two disagree
+// wherever the ramp is compressed. A hit inverts through it at the moment it is
+// asked, which is the same thing a hit in a panel does through the panel's
+// scales.
+func (ix *Index) ColorbarEntry(cs scale.ColorScale, class int, lo, hi float64, area ir.Rect) {
+	m := mark{
+		kind: Colorbar, layer: -1, cs: cs,
+		class: class, bandLo: lo, bandHi: hi,
+	}
+	if class >= 0 {
+		// A band is one colour standing for one interval, so there is no
+		// gradient inside it to read a position off. The value it reports is
+		// the middle of what it covers — a representative rather than a
+		// measurement — and Lo and Hi are the truth a filter is written
+		// against. Reading a position within the band would invent precision
+		// the scale threw away on purpose.
+		m.value = lo + (hi-lo)/2
+		m.cs = nil
+	}
+	ix.addGuide(m, area)
+}
+
+// SizeKeyEntry implements the render package's optional SizeKeyEntry: it
+// records one row of a size key and the value its sample stands for.
+func (ix *Index) SizeKeyEntry(value float64, label string, area ir.Rect) {
+	ix.addGuide(mark{
+		kind: SizeKey, layer: -1, label: label, value: value, class: -1,
+	}, area)
+}
+
+// addGuide records one piece of actionable furniture.
+//
+// It goes in at panel -1 with its rectangle as its two points: a guide belongs
+// to the chart rather than to a panel, and inverting its position through a
+// panel's scales would report a value from a place no value was drawn.
+func (ix *Index) addGuide(m mark, area ir.Rect) {
+	m.panel = -1
+	m.lo = len(ix.pts)
+	ix.pts = append(ix.pts, area.Min, area.Max)
+	m.hi = len(ix.pts)
+	m.bounds = area
+	ix.marks = append(ix.marks, m)
+}
+
 // LayerAxes implements the render package's LayerAxes: it records which scales
 // the layer about to be drawn reads.
 //
@@ -304,7 +470,8 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	if tol <= 0 {
 		tol = DefaultTolerance
 	}
-	best := Hit{Distance: float32(math.Inf(1)), Row: -1}
+	best := Hit{Distance: float32(math.Inf(1)), Row: -1, Class: -1}
+	var bestMark mark
 	bestRank := len(ranked)
 	var bestBounds ir.Rect
 	var bestX, bestY scale.Scale
@@ -326,13 +493,33 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 		best, found = Hit{
 			Panel: m.panel, Layer: m.layer, Series: m.label,
 			Kind: m.kind, At: at, Distance: d, Row: -1,
+			Hidden: m.hidden, Class: m.class,
+			Lo: m.bandLo, Hi: m.bandHi, Value: m.value,
 		}, true
+		if m.kind.Guides() {
+			best.Area = m.bounds
+		}
+		bestMark = m
 		bestX, bestY = m.x, m.y
 	}
 	if !found {
 		return Hit{}, false
 	}
-	if p := ix.panelOf(best.Panel); p != nil && p.X != nil && p.Y != nil {
+	// A continuous colourbar reads its value off the ramp rather than off the
+	// axis beside it: the two disagree wherever the ramp is compressed, and
+	// the ramp is what the reader is pointing at. The bar runs bottom to top,
+	// so the top of the rectangle is position 1.
+	//
+	// A classed band carries its value already and has no cs, because a band
+	// has no gradient to read.
+	if best.Kind == Colorbar && bestMark.cs != nil {
+		bounds := bestMark.bounds
+		if h := bounds.Max.Y - bounds.Min.Y; h > 0 {
+			t := float64((bounds.Max.Y - pt.Y) / h)
+			best.Value = scale.ColorValueOf(bestMark.cs, clamp01(t))
+		}
+	}
+	if p := ix.panelOf(best.Panel); !best.Kind.Guides() && p != nil && p.X != nil && p.Y != nil {
 		// Two inversions, not one. The coord undoes the transform that placed
 		// the mark and hands back the pair the scales mapped into; the scales
 		// then say what those numbers were. Reading the device position
@@ -354,6 +541,97 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	}
 	best.Row = ix.rowAt(best, pt, bestBounds)
 	return best, true
+}
+
+// RowRef is one source row of one layer of one panel, and where it landed.
+//
+// It is what the reverse of a hit test reports. [Hit] answers "what is under
+// this point"; a RowRef answers "where did this row go", which is the question
+// a second chart asks when the first one says which row the pointer is on.
+type RowRef struct {
+	// Panel is which panel the row was drawn in, and Layer which layer of it.
+	Panel, Layer int
+	// Series is the layer's legend label, empty for a layer that has none.
+	Series string
+	// Row is the source row, in the table that was handed in.
+	Row int
+	// At is where the row landed, in device space.
+	At ir.Point
+}
+
+// Locate reports where a source row of a layer landed in the render just
+// watched.
+//
+// It is the inverse of [Index.At], and it is the far end of the wire between
+// two charts: the first says which row the pointer is on, the second says
+// where that row is on screen — which is what a caller drawing a highlight
+// ring, a crosshair or a leader line needs, without rebuilding anything.
+//
+// ok is false when row tracking was off for the render (see
+// [Index.TrackRows]), when the layer reported no row for this one, or when the
+// row is not on screen — a decimated line draws the rows that survived, and a
+// row that was reduced away is not somewhere the reader can be pointed at.
+//
+// A row reported at more than one position — which no built-in mark does, but
+// nothing forbids — reports the last, matching [Index.At]'s rule that a later
+// mark was drawn on top.
+func (ix *Index) Locate(panel, layer, row int) (ir.Point, bool) {
+	var at ir.Point
+	found := false
+	for _, r := range ix.rows {
+		if r.panel == panel && r.layer == layer && r.row == row {
+			at, found = r.at, true
+		}
+	}
+	return at, found
+}
+
+// RowsOf appends every row one layer reported to dst and returns it.
+//
+// The order is the order the layer reported them in, which is the order it
+// drew them. dst is the caller's, so a caller asking every frame keeps one
+// slice and allocates nothing — pass dst[:0] to reuse it.
+func (ix *Index) RowsOf(panel, layer int, dst []RowRef) []RowRef {
+	for _, r := range ix.rows {
+		if r.panel != panel || r.layer != layer {
+			continue
+		}
+		dst = append(dst, ix.refOf(r))
+	}
+	return dst
+}
+
+// RowsIn appends every row that landed inside r to dst and returns it, in
+// paint order.
+//
+// It is what a brush reads: the rectangle a reader dragged, and the rows under
+// it. The test is against the position the *row* was reported at rather than
+// the ink of the mark drawn through it, which is what makes a half-covered bar
+// a matter of where its value is rather than of where its corner is — and is
+// the same position [Index.Locate] hands back and [Hit.Row] resolves through.
+//
+// dst is the caller's; pass dst[:0] to reuse it.
+func (ix *Index) RowsIn(r ir.Rect, dst []RowRef) []RowRef {
+	for _, m := range ix.rows {
+		if r.Contains(m.at) {
+			dst = append(dst, ix.refOf(m))
+		}
+	}
+	return dst
+}
+
+// refOf names a row mark, recovering the layer's label from the marks that
+// layer drew. A rowMark does not carry it: rows and marks are separate lists
+// on purpose, and the label belongs to the layer rather than to either.
+func (ix *Index) refOf(r rowMark) RowRef {
+	ref := RowRef{Panel: r.panel, Layer: r.layer, Row: r.row, At: r.at}
+	for _, m := range ix.marks {
+		if m.panel == r.panel && m.layer == r.layer {
+			ref.Series = m.label
+			break
+		}
+	}
+	return ref
 }
 
 // rawRowAt finds the source row behind a hit: the nearest position its own
@@ -406,7 +684,7 @@ func (ix *Index) rowAt(h Hit, pt ir.Point, bounds ir.Rect) int {
 
 // ranked orders the kinds from most specific to least. A vertex is a row; an
 // area is a shape a row produced; a label is writing about one.
-var ranked = [...]Kind{Vertex, Area, Label}
+var ranked = [...]Kind{Vertex, Area, Label, LegendRow, Colorbar, SizeKey}
 
 func rank(k Kind) int {
 	for i, r := range ranked {
@@ -432,6 +710,19 @@ func (ix *Index) panelOf(i int) *Panel {
 // is and the middle of one is nowhere in particular.
 func (m mark) nearest(pts []ir.Point, pt ir.Point, tol float32) (ir.Point, float32, bool) {
 	switch m.kind {
+	case LegendRow, Colorbar, SizeKey:
+		// A guide is its rectangle and nothing subtler: it is a target rather
+		// than a shape, so being in the box is the whole test. The position
+		// reported is the middle of the row, which is where a caller putting
+		// something beside it would want to anchor.
+		if !m.bounds.Contains(pt) {
+			return ir.Point{}, 0, false
+		}
+		mid := ir.Point{
+			X: (m.bounds.Min.X + m.bounds.Max.X) / 2,
+			Y: (m.bounds.Min.Y + m.bounds.Max.Y) / 2,
+		}
+		return mid, 0, true
 	case Area, Label:
 		if !m.bounds.Contains(pt) || !inside(pts[m.lo:m.hi], pt) {
 			return ir.Point{}, 0, false
@@ -649,3 +940,15 @@ var (
 	_ ir.Backend   = (*probe)(nil)
 	_ ir.Semantics = (*probe)(nil)
 )
+
+// clamp01 confines a ramp position to the bar, so that a pointer on the border
+// reads the end of the ramp rather than past it.
+func clamp01(t float64) float64 {
+	switch {
+	case t < 0:
+		return 0
+	case t > 1:
+		return 1
+	}
+	return t
+}

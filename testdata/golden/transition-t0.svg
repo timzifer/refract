@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300" role="img" aria-labelledby="refract-title">
+<title id="refract-title">Halfway</title>
+<defs>
+<clipPath id="c1"><path d="M50.332,32.8 L584.942,32.8 L584.942,251.725 L50.332,251.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L600,0 L600,300 L0,300 Z" fill="#ffffff"/>
+<polyline fill="none" points="50.332,32.8 50.332,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="157.254,32.8 157.254,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="264.176,32.8 264.176,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="371.098,32.8 371.098,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="478.02,32.8 478.02,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="584.942,32.8 584.942,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,251.725 584.942,251.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,207.94 584.942,207.94" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,164.155 584.942,164.155" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,120.37 584.942,120.37" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,76.585 584.942,76.585" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,32.8 584.942,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,251.725 584.942,251.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,32.8 50.332,251.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,251.725 50.332,256.725" stroke="#333333"/>
+<text x="50.332" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">-1</text>
+<polyline fill="none" points="157.254,251.725 157.254,256.725" stroke="#333333"/>
+<text x="157.254" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="264.176,251.725 264.176,256.725" stroke="#333333"/>
+<text x="264.176" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1</text>
+<polyline fill="none" points="371.098,251.725 371.098,256.725" stroke="#333333"/>
+<text x="371.098" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="478.02,251.725 478.02,256.725" stroke="#333333"/>
+<text x="478.02" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">3</text>
+<polyline fill="none" points="584.942,251.725 584.942,256.725" stroke="#333333"/>
+<text x="584.942" y="260.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="45.332,251.725 50.332,251.725" stroke="#333333"/>
+<text x="41.332" y="251.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="45.332,207.94 50.332,207.94" stroke="#333333"/>
+<text x="41.332" y="207.94" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10</text>
+<polyline fill="none" points="45.332,164.155 50.332,164.155" stroke="#333333"/>
+<text x="41.332" y="164.155" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">20</text>
+<polyline fill="none" points="45.332,120.37 50.332,120.37" stroke="#333333"/>
+<text x="41.332" y="120.37" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">30</text>
+<polyline fill="none" points="45.332,76.585 50.332,76.585" stroke="#333333"/>
+<text x="41.332" y="76.585" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">40</text>
+<polyline fill="none" points="45.332,32.8 50.332,32.8" stroke="#333333"/>
+<text x="41.332" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">50</text>
+<text x="317.637" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">Halfway</text>
+<text x="317.637" y="285.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">x</text>
+<text x="20.616" y="142.262" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 142.262)">y</text>
+<g clip-path="url(#c1)">
+<path d="M114.485,207.94 L200.023,207.94 L200.023,251.725 L114.485,251.725 Z M221.407,164.155 L306.945,164.155 L306.945,251.725 L221.407,251.725 Z M328.329,120.37 L413.867,120.37 L413.867,251.725 L328.329,251.725 Z M435.251,251.725 L520.789,251.725 L520.789,251.725 L435.251,251.725 Z" fill="#0072b2"/>
+</g>
+</svg>

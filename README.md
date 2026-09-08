@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: v1.6.0, released.** Every milestone through **v1.0** has shipped,
+> **Status: v1.7.0, released.** Every milestone through **v1.0** has shipped,
 > and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
 > before the freeze has changed. The API was frozen at the `v1.0.0` tag and
 > follows semver from here, so a breaking change means a major version and a
@@ -31,9 +31,20 @@ everywhere — built on the GoGPU stack.**
 > `v1.6.0`, colour ramps that compress their domain (`scale.ColorLog`) or cut
 > it into classes (`scale.Threshold`, `scale.Quantize`, `scale.Quantile`),
 > which is what a heatmap over counts spanning orders of magnitude needed
-> ([ADR 0042](docs/adr/0042-colour-transforms-and-classes.md)).
+> ([ADR 0042](docs/adr/0042-colour-transforms-and-classes.md)); and `v1.7.0`,
+> **identity, transitions, and guides that answer to a pointer** — `geom.KeyBy`
+> names the column that says which row is which, which is what animation had
+> been blocked on for six milestones ([ADR 0043](docs/adr/0043-mark-identity.md),
+> [ADR 0044](docs/adr/0044-transitions.md)); the host wires one chart to another
+> and refract supplies the two ends of the wire
+> ([ADR 0045](docs/adr/0045-linked-views.md)); the chart owns an overlay — a
+> crosshair, a highlight, a brush, a tooltip
+> ([ADR 0046](docs/adr/0046-overlay-layer.md)); and a legend, a colourbar and a
+> size key can be pointed at and clicked
+> ([ADR 0047](docs/adr/0047-clickable-legend.md),
+> [ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md)).
 > `v1.3.0` and `v1.4.0` tag the core alone; the nested modules are tagged at
-> `v1.5.0` and `v1.6.0` with it: `backend/gg` and `backend/window` share the
+> `v1.5.0`, `v1.6.0` and `v1.7.0` with it: `backend/gg` and `backend/window` share the
 > core's version, the opt-in GPU tier is at `v0.3.0`, and the Arrow adapter at
 > `arrow/v18.0.4`, whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
 > road ahead.
@@ -305,8 +316,30 @@ picture here cannot drift away from the code that produced it.
 - **Backends** — three built-in emitters — SVG, PDF and a browser canvas — the
   gg raster adapter, a native window, and an opt-in GPU tier.
 
+- **Identity and transitions** — `geom.KeyBy` names the column that says which
+  row is which, so a hover in one chart can be acted on in another, and two
+  states of a table can be blended into a movement between them. The blend is
+  in data space, before the scales, and refract owns no clock: `At(f)` is the
+  whole primitive ([ADR 0043](docs/adr/0043-mark-identity.md),
+  [ADR 0044](docs/adr/0044-transitions.md)).
+
+- **An overlay the chart owns** — `refract.Crosshair`, `Highlight`, `Brush` and
+  `Tooltip` paint over the finished chart, after the guides and clipped by
+  nothing. What an overlay draws is not hit-testable, because a tooltip a
+  pointer can hit is a tooltip that flickers
+  ([ADR 0046](docs/adr/0046-overlay-layer.md)).
+- **Guides you can click** — a hit on a legend row reports which series it
+  stands for, and `Live.Toggle` puts that series away and brings it back; the
+  row stays, dimmed, and the axes do not move
+  ([ADR 0047](docs/adr/0047-clickable-legend.md)). A colourbar and a size key
+  report a *quantity* instead, because neither is a series: a classed band
+  gives the interval it covers, a continuous ramp the value under the pointer
+  ([ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md)).
+
 Deliberately **not** here: geographic projections, node-link and Venn diagrams,
-contour and QQ plots, animation, and 3D. They are past v1.0 in
+contour plots, 3D, and any engine that links two charts together — a link is a
+statement about two charts and this model is about one, so the host is the link
+([ADR 0045](docs/adr/0045-linked-views.md)). The rest are past v1.0 in
 [CONCEPT.md §14](CONCEPT.md#14-roadmap--milestones), and
 [docs/chart-types.md](docs/chart-types.md) says what each one would need.
 

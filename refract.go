@@ -184,6 +184,9 @@ type Plot struct {
 
 	serial bool
 
+	overlay render.Overlay
+	hidden  []bool
+
 	handlers map[EventKind][]func(Event)
 }
 
@@ -459,6 +462,69 @@ func (p *Plot) X2(s scale.Scale) *Plot { p.x2 = s; return p }
 // Add appends layers, drawn in the order given.
 func (p *Plot) Add(gs ...geom.Geom) *Plot { p.layers = append(p.layers, gs...); return p }
 
+// SetLayers replaces the plot's layers with the ones given, drawn in the order
+// given. Passing none leaves a plot with no layers, which [Plot.Render]
+// refuses with [ErrNoLayers].
+//
+// It is [Plot.Add]'s counterpart and exists for the same caller: one reacting
+// to something the reader did. A chart that gains a highlight layer on every
+// hover and can never lose one accumulates a layer per pointer move, so a plot
+// that can be added to has to be a plot that can be set. Building a fresh Plot
+// each time is the alternative and a worse one — it discards the scales, and
+// with them the zoom the reader established.
+//
+// Layers already drawn are unaffected until the chart is resolved again:
+// [Live.Rebuild] is what picks this up, and it keeps the view.
+//
+// The slice is copied, so the caller may reuse it.
+func (p *Plot) SetLayers(gs ...geom.Geom) *Plot {
+	p.layers = append(p.layers[:0:0], gs...)
+	return p
+}
+
+// Layers reports the plot's layers, in drawing order. The slice is a copy; the
+// layers in it are not.
+//
+// It is what a caller reaching for [Plot.SetLayers] needs first: keeping the
+// ones that were there and replacing the rest means being able to see them.
+func (p *Plot) Layers() []geom.Geom { return append([]geom.Geom(nil), p.layers...) }
+
+// Overlay installs something to paint over the finished chart — a crosshair, a
+// tooltip, a brush rectangle. Passing nil removes it. See [Overlay].
+//
+// It is on the plot as well as on [Live] so that the two agree about what a
+// chart is: an overlay that only existed on a live surface would make
+// [Plot.Render] and [Live.Draw] draw different pictures of the same model, and
+// exporting what a reader is looking at — the chart with its crosshair where
+// they left it — would be impossible from the model alone.
+//
+// [Live.Overlay] overrides this for one surface. A plot that names one and a
+// Live that names another draws the Live's, because the Live is the thing with
+// a pointer over it.
+func (p *Plot) Overlay(o Overlay) *Plot { p.overlay = o; return p }
+
+// HideLayer turns a layer off, or back on, by its index among the plot's
+// layers. A hidden layer is not drawn, still trains its scales, and still
+// appears in the legend, dimmed.
+//
+// It is on the plot as well as on [Live] for the reason [Plot.Overlay] is:
+// otherwise [Plot.Render] and [Live.Draw] would disagree about what a chart
+// is, and exporting a chart with a series put away would be impossible from
+// the model alone. [Live.Hide] is the one a legend click calls, and it starts
+// from whatever the plot said.
+//
+// An index outside the plot's layers is ignored.
+func (p *Plot) HideLayer(layer int, hide bool) *Plot {
+	if layer < 0 || layer >= len(p.layers) {
+		return p
+	}
+	for len(p.hidden) <= layer {
+		p.hidden = append(p.hidden, false)
+	}
+	p.hidden[layer] = hide
+	return p
+}
+
 // Facet splits the plot into small multiples, one panel per value of a
 // column. See [facet.Wrap] and [facet.Grid].
 //
@@ -566,6 +632,11 @@ func (p *Plot) describe() (render.Chart, error) {
 		Description: p.Description(),
 		Math:        p.math,
 		Serial:      p.serial,
+		Overlay:     p.overlay,
+		// Copied: a Live mutates its chart's slice when a reader hides a
+		// series, and that must not reach back into the plot every other Live
+		// of it is built from.
+		Hidden: append([]bool(nil), p.hidden...),
 	}
 	if len(p.tracks) > 0 {
 		if p.facet != nil {

@@ -594,6 +594,9 @@ func encodeLayerEncoding(d geom.Desc, axes axisKinds) (*Encoding, error) {
 		if d.WidthCol != "" {
 			enc.Width = &Channel{Field: d.WidthCol}
 		}
+		if d.Key != "" {
+			enc.Key = &Channel{Field: d.Key}
+		}
 		if d.ExplodeCol != "" {
 			enc.Explode = &Channel{Field: d.ExplodeCol}
 		}

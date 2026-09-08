@@ -157,6 +157,31 @@ END {
 	# escaped the pool, which is the same bug the gate above exists for.
 	flat("BenchmarkWatchedFrame", "BenchmarkWatchedFrameRows", 2)
 
+	# Row identity across frames, added after v1.6. A hover resolves the key of
+	# the row it landed on, and the whole reason that goes through data.Label
+	# rather than data.Labels is this line: Labels spells the column, which over
+	# a hundred thousand rows is a hundred thousand strings to name one of them.
+	# A pointer asks on every move, so the cost has to be a constant.
+	#
+	# Zero rather than a budget, because a string key is the value the table
+	# already holds and copying it would be the mistake. A numeric key formats
+	# one small string and would read as 1 here — which is why the benchmark
+	# keys on a string column: it pins the path that must not copy.
+	atMost("BenchmarkHover", 0)
+	flat("BenchmarkHover", "BenchmarkHoverKeyed", 0)
+
+	# Transitions, added after v1.6. A frame of an animation is a blend written
+	# into columns that already exist, over a chart that is not resolved again
+	# between frames — so it costs a frame and nothing per row.
+	#
+	# The two ways to break it are both easy to write and both invisible in the
+	# picture: a Tween that rebuilt its columns in At rather than rewriting
+	# them, and a driver that called Rebuild between frames instead of letting
+	# the layer read a Source whose contents changed. Either shows up here as a
+	# hundred thousand allocations and as an animation that is merely slow.
+	flat("BenchmarkTransitionFrame1k", "BenchmarkTransitionFrame100k", 8)
+	atMost("BenchmarkTransitionFrame100k", 128)
+
 	# The streaming path, added in v0.5. A live chart appends a row and freezes
 	# a view once per frame, for as long as the process runs; either of those
 	# allocating is a leak with a plot attached. Both measure the steady state,

@@ -106,6 +106,19 @@ between them is the cost of not being in the one format the two libraries
 agree about ([ADR 0013](adr/0013-arrow-adapter.md)). The borrowed column's
 handful of allocations are the record's own construction, once.
 
+**Identity and transitions.** `Hover` and `HoverKeyed` measure a pointer move
+over a hundred thousand marks, without and with a key column to resolve. Both
+are gated at zero: naming one row must not spell the whole column, which is
+why `data.Label` exists beside `data.Labels`
+([ADR 0043](adr/0043-mark-identity.md)). `TransitionFrame1k` and
+`TransitionFrame100k` measure a frame of an animation. A blend writes into
+columns that already exist, over a chart that is not resolved again between
+frames, so a frame of a transition costs a frame — and the gate compares the
+two sizes, because the two ways to break that are both invisible in the
+picture: a `Tween` that rebuilt its columns rather than rewriting them, and a
+driver that called `Rebuild` between frames
+([ADR 0044](adr/0044-transitions.md)).
+
 ## Results
 
 The table is what `benchtable.awk` wrote from one run of the command above,

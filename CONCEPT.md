@@ -1245,6 +1245,172 @@ All of it is additive: `ColorScale` gained no method, and the three capabilities
 are optional interfaces beside it in the shape ADR 0020 established.
 See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
 
+### v1.7 — Identity, transitions, and guides that answer to a pointer — **shipped**
+
+One milestone with four parts, and they are one milestone because each is the
+answer to the question the last one ended on. Identity was the thing this
+document had said animation was blocked on for six releases; having it made
+transitions a join rather than an interpolator; having those made the overlay
+the only way left to draw what a reader was pointing at; and an overlay that
+could not be pointed at made the guides the last piece of furniture with
+nothing to say. Six records, 0043 to 0048.
+
+#### Identity
+
+The one thing this document had said was blocked, and the two things that
+turned out to be the same problem.
+
+A row number is not an identity. `geom.Rows` reports the row behind a mark, and
+that row is an index into a table as it stands for one frame — append to it,
+filter it, or window a stream and the numbers renumber. So `geom.KeyBy` names a
+column instead, and the key is read from the layer's own source at the row that
+was already being reported. Nothing in `geom` reads it, `Geom` gained no
+method, and the IR gained no identity channel: `geom.Faceter` already exposed
+both halves of what this needed, so twenty geoms became identifiable without
+one of them changing. See [ADR 0043](docs/adr/0043-mark-identity.md).
+
+With a key, tweening is a join. `data.Tween` blends two states of a table in
+**data space, before the scales** — one `Source` whose contents change rather
+than a source per frame, the way `data.Stream` already worked — so every geom,
+coord and backend animates without knowing it can. The row set is the union and
+is fixed for the whole transition, which is what keeps two frames comparable to
+`ir.Damage` and an animation off the full-repaint path. `refract.Transition`
+drives it, and refract owns no clock: `At(f)` is the whole primitive, which is
+also what makes a golden file of a half-finished movement a real frame rather
+than an approximation of one. See
+[ADR 0044](docs/adr/0044-transitions.md).
+
+The same key is what makes one chart able to say something another understands.
+`interact.Index.Locate` is the inverse of a hit test, `Select` and `Event.Rows`
+are the brush the audit had committed to, and `Live.Rebuild` now keeps the
+reader's zoom — because the caller rebuilding is usually answering something
+the reader did, and discarding their view as a side effect is a chart that
+fights back. What is deliberately *not* here is a linking engine: a link is a
+statement about two charts and this model is about one, so the host is the
+link and `examples/linked` is what that looks like. See
+[ADR 0045](docs/adr/0045-linked-views.md).
+
+Not in v1.7, in case they look like oversights. A **string does not
+interpolate** — half of "ingest" is not a node — so anything a geom decides
+from one decides it abruptly: a categorical slot, a discrete colour class, a
+group membership. That answers "can text animate" twice: a label over a
+*number* counts, because a text layer re-spells its column every frame, and
+`data.Round` is what stops it counting in raw floats; a label over a *string*
+snaps, with no cross-fade and no character morph, though its position still
+moves. **Enter and exit do not fade**, because opacity is a property
+of a layer rather than of a row and a per-row opacity channel is the IR change
+[ADR 0007](docs/adr/0007-per-mark-colour.md) refuses; `EnterFrom` puts the
+answer in data space instead, so a bar grows out of its baseline. A
+**`data.Stream` has no identities to join on** and animates by being redrawn,
+which already worked. There is **no keyframe timeline**: a sequence is a list of
+two-state transitions and building one is a host-side loop, so the pair shipped
+first. There was still **no overlay layer** at this point — bucket H's
+remainder — so `Input.Dragged` handed the host the rectangle and the host drew
+it; v1.8 closed that. And there is **no `Grid.Live`**: a grid composes plots
+into a document, and several interactive charts are several `Live`s on several
+surfaces.
+
+#### The overlay, and the last of bucket H
+
+The chart can now draw over itself. A crosshair, a ring round a mark, the
+rectangle a reader is dragging out, a tooltip sized to its own text: all of
+them are things whose positions come from a pointer rather than from a column,
+which is why none of them could be a layer and why `interact` — which only
+reads — could not draw them either. So the overlay is a stage in `render`,
+after the guides, given the backend and where the panels are.
+See [ADR 0046](docs/adr/0046-overlay-layer.md).
+
+It is announced to no observer, and that is the property that makes it usable
+rather than merely present: what an overlay draws is not hit-testable, because
+a tooltip a pointer can hit is a tooltip that flickers. Getting there needed a
+bug fixed that had been latent since v0.5 — `render.Observer` had no way to
+*close* a layer, so everything drawn after the last one was attributed to it,
+and a legend's swatches were being indexed as marks. `render.EndData` is the
+seam that closes it, in the shape `LayerAxes` already established.
+
+`Crosshair`, `Highlight`, `Brush`, `Tooltip` and `Overlays` ship in the root
+package, each a struct whose zero value draws nothing and whose colours come
+from the theme when it is not told. `Tooltip` is the only one that measures,
+and it measures through the backend that is about to draw it — which is what
+`ir.Backend.Measure` has always been for.
+
+Not in v1.8, in case they look like oversights. An overlay that **appears or
+disappears is a full repaint**, because it changes how many calls a frame has
+and `ir.Damage` compares them call for call; one that only moves is a damage
+rectangle, which is the case a crosshair following a pointer is in. An overlay
+is **not in the JSON spec**: where a pointer is is not a fact about a chart.
+An overlay is given scales and areas but **not the marks**:
+a tooltip that snaps to the nearest point gets that from `interact.Index` on the
+caller's side, where the hit test already lives.
+
+#### A legend you can click
+
+The one piece of furniture a reader expects to act on. v1.8 said a legend was
+not clickable because that would mean announcing the guides as hittable, and
+this is that change: `render.LegendEntry` reports each row — which layer, what
+label, what rectangle, whether it is off — and `interact` indexes them under a
+kind of their own, `Guide`. The separation is the point rather than an
+implementation detail: a hit on a swatch must not be confusable with a hit on
+the thing the swatch stands for, so a guide hit carries a layer and a series and
+deliberately carries no value read off an axis.
+See [ADR 0047](docs/adr/0047-clickable-legend.md).
+
+Hiding is `render.Chart.Hidden`, indexed by layer, because visibility is a
+statement about the chart rather than about a geom — a geom that knew whether
+it was being shown would be carrying a fact about a reader. A hidden layer is
+not drawn and is not announced, so a pointer where it used to be finds what is
+behind it; it still trains its scales, and it keeps its legend row, dimmed.
+
+The axes deliberately do not move. A toggle is a reading aid — let me see this
+one without that one on top — and an axis that rescaled under it would make the
+two readings incomparable, which is what the toggle was for. A caller who means
+"this series is not part of this chart" says that with `Plot.SetLayers`.
+
+And refract does not wire the click. `Live.Toggle`, `Hide`, `IsHidden` and
+`ShowAll` are the mechanism, and four lines in a Click handler are the policy —
+because a legend that always toggled would be wrong for one that selects rather
+than filters, one where a series opens something else, or one where only one
+may be shown at a time.
+
+Not in v1.9. A layer contributing several legend rows **toggles as one**: the
+rows are one drawing and there is no way to draw a third of it. And a hidden
+layer **still costs its Train**, which is what keeps the axes still: hiding a
+series does not make a slow chart fast, removing it does.
+
+#### The other two guides
+
+A colourbar and a size key answer to a pointer too, and the reason they needed
+a record of their own is that neither is a series. A legend row stands for a
+layer, which already exists and can be toggled; a colourbar stands for a
+continuum, and clicking one could mean a threshold, a range, a filter or
+nothing. So a guide hit reports a **quantity** and what the quantity means is
+the caller's — the same answer, and load-bearing rather than habitual: a band
+that always filtered would be wrong for a chart where it should select.
+
+A classed bar reports one band per class with the interval it covers, because
+a band is a discrete thing a reader can mean. A continuous one reports itself,
+and the value is read back by inverting the *ramp* — not the axis beside it,
+which disagrees wherever the ramp is compressed
+([ADR 0042](docs/adr/0042-colour-transforms-and-classes.md) settled which of
+the two the reader is looking at). A size key row reports the magnitude its
+sample stands for, which meant `sizeSample` finally carrying its value: a
+filter written against "1.2k" is a filter against a string.
+
+`interact.Kind` gained `Colorbar` and `SizeKey`, and `Guide` was renamed
+`LegendRow` — once there were three kinds of actionable furniture, the general
+name on the specific one was misleading.
+See [ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md).
+
+Not in v1.10. A band reports its **midpoint** rather than a position inside
+itself: one colour stands for one interval and there is no gradient in there to
+read, so `Lo` and `Hi` are the truth. A **drag along a bar selects a range** —
+press at one value, release at another — and needs no mode: a bar cannot be
+panned and there is no view on it to zoom, so a drag over one has one sensible
+reading. Across bands the range is their union. And an **axis is still not
+clickable**: it is drawn per panel
+rather than once per chart, so a hit would have to carry which panel and which
+axis, which is a third vocabulary. ✔
+
 ### Beyond v1.0
 
 - Harden the GPU tier as GoGPU matures.
@@ -1266,17 +1432,28 @@ See [ADR 0042](docs/adr/0042-colour-transforms-and-classes.md). ✔
   matrix chart rather than a relational layout at all.
 - More stats: contour. Normal QQ plots shipped in v1.5, with a general
   quantile-function API in `stat` ([ADR 0041](docs/adr/0041-qq-plots.md)).
-- The rest of bucket H in [docs/chart-types.md](docs/chart-types.md): an
-  overlay layer the chart itself owns — a tooltip, a crosshair, a brush
-  rectangle — which is what linked brushing across panels needs before
-  anything else. Opt-in text collision avoidance shipped in v1.5
+- ~~The rest of bucket H~~ — **shipped in v1.8**: the overlay layer the chart
+  itself owns, a tooltip, a crosshair and a brush rectangle
+  ([ADR 0046](docs/adr/0046-overlay-layer.md)). Linked brushing turned out not
+  to need it first after all — v1.7 shipped the identification and the
+  selection, and this is the feedback. Opt-in text collision avoidance shipped in v1.5
   ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)); automatic avoidance
   of every kind of mark remains open.
-- Animations / transitions. `ir.Damage` diffs two recordings at the level of
-  drawing calls: it says that something changed, not which path corresponds to
-  which. Tweening needs mark identity across frames — a join key — and the
-  nearest thing that exists is `geom.Rows`, which holds only within one frame.
-  The step is a key concept, not an interpolation layer.
+- ~~Animations / transitions.~~ **Shipped in v1.7.** The blocker was stated
+  here for six milestones: `ir.Damage` diffs two recordings at the level of
+  drawing calls, so it says that something changed and not which path
+  corresponds to which, and tweening needs mark identity across frames — a join
+  key — where the nearest thing that existed was `geom.Rows`, which holds only
+  within one frame. The sentence that resolved it was the last one: *the step
+  is a key concept, not an interpolation layer*. So the key is a column the
+  caller names ([ADR 0043](docs/adr/0043-mark-identity.md)) and the blend
+  happens in data space, before the scales, where identity is the only thing
+  that means anything ([ADR 0044](docs/adr/0044-transitions.md)). Nothing under
+  the IR was touched.
+- A keyframe timeline, over more than two states. A sequence is a list of
+  two-state transitions and building one is a host-side loop, so the pair
+  shipped first; an API that owned the sequence would be a real addition rather
+  than sugar, and would be argued on the evidence of people writing that loop.
 - Community plugin ecosystem.
 - 3D (surface/scatter3d) — deliberately late, tightly scoped.
 

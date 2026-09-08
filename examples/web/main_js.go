@@ -8,9 +8,10 @@
 //	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/web/
 //	go run ./examples/web/serve   # or any static file server
 //
-// It is the v0.5 browser story end to end: the same model that renders SVG on
-// a server draws on a canvas, a pointer over it reports the row underneath,
-// the wheel zooms, a drag pans, and a double click resets the view.
+// It is the browser story end to end: the same model that renders SVG on a
+// server draws on a canvas, a pointer over it reports the row underneath, the
+// wheel zooms, a drag pans, a double click resets the view, and clicking a
+// legend row puts that series away.
 package main
 
 import (
@@ -62,6 +63,19 @@ func main() {
 	defer live.Close()
 	live.TrackRows(true)
 
+	// A clickable legend. refract says a legend row was clicked and which
+	// series it stands for; what that means is this program's — putting the
+	// series away here, but it could as easily select it, or open something.
+	// See docs/adr/0047-clickable-legend.md for why the four lines are here
+	// rather than behind a flag on the chart.
+	p.On(refract.Click, func(ev refract.Event) {
+		if ev.Hit.Kind == refract.LegendRow {
+			if err := live.Toggle(ev.Hit.Layer); err != nil {
+				js.Global().Get("console").Call("error", err.Error())
+			}
+		}
+	})
+
 	if err := live.Draw(); err != nil {
 		js.Global().Get("console").Call("error", err.Error())
 		return
@@ -84,6 +98,8 @@ func plot() *refract.Plot {
 		refract.Title("Interactive"),
 		refract.XTitle("sample"),
 		refract.YTitle("value"),
+		// A legend, because it is what the reader clicks to put a series away.
+		refract.Legend(true),
 	)
 	p.X(scale.Linear(scale.Nice()))
 	p.Y(scale.Linear(scale.Nice()))

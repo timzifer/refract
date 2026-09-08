@@ -1,6 +1,10 @@
 package refract
 
-import "math"
+import (
+	"math"
+
+	"github.com/timzifer/refract/ir"
+)
 
 // Input turns a surface's raw pointer input into chart interaction.
 //
@@ -35,6 +39,90 @@ type Input struct {
 	lastY    float64
 
 	slop float64
+	drag Drag
+
+	// bar is the colourbar a drag started on, and barTo the last point of it
+	// the pointer was over. A drag that begins on a colourbar is a range along
+	// it whatever [Input.Drag] says, because a bar cannot be panned and a
+	// rectangle dragged out over one means the values between its ends.
+	onBar      bool
+	bar, barTo Hit
+}
+
+// Drag is what dragging the pointer across the chart does.
+type Drag uint8
+
+// The drag modes.
+const (
+	// DragPans moves the view under the pointer, which is what a drag has
+	// always done and what a reader of a map expects.
+	DragPans Drag = iota
+	// DragSelects drags out a rectangle and fires [Select] with the rows
+	// under it on release. The view does not move.
+	DragSelects
+	// DragZooms drags out a rectangle and zooms to it on release, which is
+	// the other thing a rubber band conventionally means.
+	DragZooms
+)
+
+// String names the mode, for tests and error messages.
+func (d Drag) String() string {
+	switch d {
+	case DragPans:
+		return "pan"
+	case DragSelects:
+		return "select"
+	case DragZooms:
+		return "zoom"
+	}
+	return "unknown"
+}
+
+// Drag sets what a drag does and returns i, so the call can be chained onto
+// [Live.Input].
+//
+// It is a mode rather than a modifier key because a modifier is a fact about a
+// keyboard and this package has never seen one: a browser reports shift on its
+// own events, a window reports it on its own, and a touch screen has none at
+// all. A surface that wants shift-to-select reads its own event and sets the
+// mode; a surface that wants a toolbar button sets it from the button. Either
+// way the state machine is the same one.
+//
+// Changing it mid-drag takes effect on the next press, so a mode switched
+// under a held button does not turn half a pan into half a selection.
+//
+// A drag that *starts on a colourbar* ignores this and selects a range of
+// values along the bar, whatever the mode says. There is no view to pan on a
+// bar and no rectangle to zoom to, so a drag over one has exactly one sensible
+// reading — see [Live.Select] and [interact.Colorbar].
+func (i *Input) Drag(d Drag) *Input { i.drag = d; return i }
+
+// Dragged reports the rectangle a rubber-band drag currently covers, and
+// whether there is one. A surface draws it as feedback; [Input.Dragging] is
+// the same question without the geometry.
+//
+// It is empty in [DragPans], where a drag moves the chart rather than marking
+// out part of it.
+func (i *Input) Dragged() (ir.Rect, bool) {
+	if !i.dragging {
+		return ir.Rect{}, false
+	}
+	if i.onBar {
+		// Along the bar, across all of it: a range on a colourbar is an
+		// interval of values, and how far sideways the pointer wandered while
+		// choosing it means nothing.
+		return ir.Rect{
+			Min: ir.Point{X: i.bar.Area.Min.X, Y: float32(min(i.downY, i.lastY))},
+			Max: ir.Point{X: i.bar.Area.Max.X, Y: float32(max(i.downY, i.lastY))},
+		}, true
+	}
+	if i.drag == DragPans {
+		return ir.Rect{}, false
+	}
+	return ir.Rect{
+		Min: ir.Point{X: float32(min(i.downX, i.lastX)), Y: float32(min(i.downY, i.lastY))},
+		Max: ir.Point{X: float32(max(i.downX, i.lastX)), Y: float32(max(i.downY, i.lastY))},
+	}, true
 }
 
 // DefaultClickSlop is how far the pointer may travel between press and release
@@ -79,10 +167,33 @@ func (i *Input) Move(x, y float64) error {
 			// Still inside the slop: this is the wobble of a click, not a pan.
 			return nil
 		}
+		if i.onBar {
+			// A drag along a colourbar selects a range of values. It moves
+			// nothing: there is no view to pan on a bar, and the rectangle
+			// being dragged out is what it means.
+			if h, ok := i.l.Index().At(ir.Point{X: float32(x), Y: float32(y)}, 0); ok && h.Kind == Colorbar {
+				i.barTo = h
+			}
+			return nil
+		}
+		if i.drag != DragPans {
+			// A rubber band moves nothing while it is being dragged out. The
+			// rectangle is [Input.Dragged]; what to do with it before release
+			// — draw it, or not — is the surface's.
+			return nil
+		}
 		return i.l.PanBy(dx, dy)
 	}
 	i.lastX, i.lastY = x, y
 	i.l.Move(x, y)
+	// A hover does not change the chart, so Live.Move does not draw. A chart
+	// with an overlay is the exception: the handler that just ran is where a
+	// crosshair's position or a tooltip's text is set, and nothing else is
+	// going to repaint. A frame identical to the last is still not painted, so
+	// a chart without an overlay pays nothing for this line.
+	if i.l.CurrentOverlay() != nil {
+		return i.l.Draw()
+	}
 	return nil
 }
 
@@ -92,6 +203,10 @@ func (i *Input) Down(x, y float64) error {
 	i.down, i.dragging = true, false
 	i.downX, i.downY = x, y
 	i.lastX, i.lastY = x, y
+	i.onBar, i.bar, i.barTo = false, Hit{}, Hit{}
+	if h, ok := i.l.Index().At(ir.Point{X: float32(x), Y: float32(y)}, 0); ok && h.Kind == Colorbar {
+		i.onBar, i.bar, i.barTo = true, h, h
+	}
 	return nil
 }
 
@@ -112,13 +227,36 @@ func (i *Input) Up(x, y float64) error {
 		i.lastX, i.lastY = x, y
 		return nil
 	}
+	// The release position is part of the drag: it is the far corner of a
+	// rubber band, so it is recorded before the band is read and not after.
 	dragged := i.dragging || i.beyondSlop(x, y)
-	i.down, i.dragging = false, false
+	i.dragging = dragged
 	i.lastX, i.lastY = x, y
-	if dragged {
+	mode := i.drag
+	band, hasBand := i.Dragged()
+	onBar, from, to := i.onBar, i.bar, i.barTo
+	i.down, i.dragging = false, false
+	i.onBar, i.bar, i.barTo = false, Hit{}, Hit{}
+	if !dragged {
+		i.l.Click(x, y)
 		return nil
 	}
-	i.l.Click(x, y)
+	if onBar {
+		i.l.selectRange(from, to, band)
+		return nil
+	}
+	// A pan has already fired on every step of itself and has nothing left to
+	// report. A rubber band has done nothing at all until now: this is where
+	// it means something.
+	if !hasBand {
+		return nil
+	}
+	switch mode {
+	case DragSelects:
+		i.l.Select(band)
+	case DragZooms:
+		return i.l.ZoomTo(band)
+	}
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/timzifer/refract/data"
+	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/interact"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/render"
@@ -19,6 +21,10 @@ type (
 	EventKind = interact.EventKind
 	// Hit is the mark under a pointer. See [interact.Hit].
 	Hit = interact.Hit
+	// RowRef is where one source row landed. See [interact.RowRef].
+	RowRef = interact.RowRef
+	// Kind is what sort of thing a hit landed on. See [interact.Kind].
+	Kind = interact.Kind
 )
 
 // The event kinds. See [interact.EventKind].
@@ -28,6 +34,29 @@ const (
 	Click = interact.Click
 	Zoom  = interact.Zoom
 	Pan   = interact.Pan
+	// Select is a region the reader dragged out. See [Live.Select].
+	Select = interact.Select
+)
+
+// The mark kinds a hit can report. See [interact.Kind].
+const (
+	// Vertex is a point a layer drew. See [interact.Vertex].
+	Vertex = interact.Vertex
+	// Area is a filled shape. See [interact.Area].
+	Area = interact.Area
+	// Label is text a layer drew. See [interact.Label].
+	Label = interact.Label
+	// LegendRow is a row of the legend, which is furniture a reader can act
+	// on. See [interact.LegendRow] and [Live.Toggle].
+	//
+	// It is spelled with the Row because [Legend] is already the option that
+	// asks a plot for one.
+	LegendRow = interact.LegendRow
+	// Colorbar is a colourbar, or one band of a classed one. See
+	// [interact.Colorbar].
+	Colorbar = interact.Colorbar
+	// SizeKey is a row of a size key. See [interact.SizeKey].
+	SizeKey = interact.SizeKey
 )
 
 // On registers a handler for an event kind.
@@ -87,8 +116,8 @@ func (p *Plot) emit(ev Event) {
 // Live resolves the plot into panels when it is created, so that a zoom lands
 // on scales that are still there next frame. Adding a layer, changing the
 // facet or replacing a scale afterwards needs [Live.Rebuild], which starts
-// again from the plot as it now stands — and, like any fresh start, forgets
-// where the view was zoomed to.
+// again from the plot as it now stands and puts the reader's view back onto
+// the axes that survive.
 //
 // # Two kinds of method
 //
@@ -277,8 +306,25 @@ func (l *Live) Rescale(dpr float64) error {
 func (l *Live) DPR() float64 { return l.dpr }
 
 // Rebuild resolves the plot again, picking up layers, scales or a facet added
-// since the Live was created. It forgets any zoom on a facet's free axes,
-// which belong to panels that no longer exist.
+// since the Live was created, and keeps the view the reader had established.
+//
+// Keeping the view is the whole point of the method rather than a courtesy.
+// The thing a caller rebuilds for is usually a reaction to something the
+// reader did — a hover in one chart that adds a highlight layer to this one —
+// and throwing away their zoom as a side effect of answering them is a chart
+// that fights back. [Live.View] and [Live.SetView] are the same capability
+// spelled out, for a caller who wants it across something wider than a
+// rebuild; a caller who genuinely wants a fresh start has [Live.Autoscale].
+//
+// A view can only be put back onto axes that exist. A facet whose free axes
+// belonged to panels the new plot does not have loses those, because a domain
+// from a panel that is gone describes nothing — and a rebuild that changes the
+// panel count keeps nothing at all, for the same reason.
+//
+// It does not paint. Restoring the view needs the new panels, and the panels
+// are what a render announces, so this renders once into its own recording to
+// find them — which draws nothing, and is why a rebuild costs a frame that
+// nobody sees. The frame the reader sees is the caller's next [Live.Draw].
 func (l *Live) Rebuild() error {
 	c, err := l.p.chart()
 	if err != nil {
@@ -288,13 +334,65 @@ func (l *Live) Rebuild() error {
 	if l.idx.TrackingRows() {
 		c.RowSink = l.idx
 	}
+	// An overlay installed on this surface outlives a rebuild. The plot's is
+	// what a fresh chart carries, and [Live.Overlay] is what a pointer over
+	// *this* surface is driving — so the surface's wins, exactly as its doc
+	// says, rather than being reset by a rebuild the caller asked for for some
+	// other reason.
+	if l.chart.Overlay != nil {
+		c.Overlay = l.chart.Overlay
+	}
+	// So does a hidden series. A rebuild picks up a layer the caller added; it
+	// is not a caller saying they want back the ones a reader put away. The
+	// state is kept by index, so adding a layer keeps the earlier ones hidden
+	// and inserting one in the middle does not — which is why inserting is
+	// worth avoiding while anything is hidden.
+	c.Hidden = l.chart.Hidden
 	// A Live that has been resized keeps its size across a rebuild: the plot
 	// still says what it was built with, and the surface is the size it is.
 	c.Width, c.Height = l.width, l.height
 	c.Theme = l.p.themeFor(l.width, l.height)
+
+	view := l.View()
 	l.chart = c
 	l.drawn = false
+	if view.Empty() {
+		return nil
+	}
+	// The panels are the render's to announce. On a chart with one panel, or
+	// with shared axes, the scales the new chart holds are the same objects
+	// the old one did and already carry the zoom — but a facet with free axes
+	// builds fresh clones per panel, and those have never heard of it. So find
+	// them the only way there is, and pin them before anything is painted.
+	if err := l.probe(); err != nil {
+		return err
+	}
+	l.restore(view)
 	return nil
+}
+
+// probe renders a frame nobody sees, to populate the index with the panels the
+// current chart has. It records rather than paints: l.next is reset at the top
+// of every Draw, so borrowing it here costs no buffer and leaves nothing
+// behind.
+func (l *Live) probe() error {
+	l.idx.Reset()
+	l.next.Reset()
+	return render.Draw(l.idx.Watch(l.next), l.chart)
+}
+
+// restore puts a view back onto the panels the index currently holds, without
+// drawing. [Live.SetView] is this plus the frame.
+func (l *Live) restore(v View) {
+	panels := l.idx.Panels()
+	if len(v.panels) != len(panels) {
+		return
+	}
+	for i, p := range panels {
+		for j, s := range axesOf(p) {
+			writeAxis(s, v.panels[i].axes[j])
+		}
+	}
 }
 
 // Draw renders the current state of the plot.
@@ -367,9 +465,9 @@ func (l *Live) Move(x, y float64) Event {
 		l.panel = -1
 		if l.over {
 			l.over = false
-			return l.fire(Event{Kind: Leave, Point: pt, Panel: -1})
+			return l.fire(l.withGuide(Event{Kind: Leave, Point: pt, Panel: -1}, pt))
 		}
-		return l.fire(Event{Kind: Hover, Point: pt, Panel: -1})
+		return l.fire(l.withGuide(Event{Kind: Hover, Point: pt, Panel: -1}, pt))
 	}
 	l.over, l.panel = true, panel
 	ev := Event{Kind: Hover, Point: pt, Panel: panel}
@@ -495,9 +593,174 @@ func (l *Live) Autoscale() error {
 	return l.Draw()
 }
 
+// Select reports the rows under a device-space rectangle, firing one [Select]
+// event per layer the rectangle touched.
+//
+// It is the read half of a brush: the rectangle comes from wherever the caller
+// got one — a drag through [Input] with [Input.Drag] set to [DragSelects], a
+// region computed from a value, a test — and what comes back is the rows, not
+// a decision about them. What a selection *means* is the caller's: highlight
+// them here, filter another chart by them, put them in a table beside the
+// plot. refract does not remember which rows are selected, because a library
+// that did would have to answer whose selection it was when two charts
+// disagreed.
+//
+// The events are returned as well as fired, so a caller driving this directly
+// need not register a handler to see the answer. They come in layer order
+// within a panel, and panel order across the chart.
+//
+// It reports nothing without row tracking — see [Live.TrackRows]. A rectangle
+// over marks whose rows are unknown is a rectangle over an unanswered
+// question, and reporting the marks instead would be answering a different
+// one. It does not draw: like [Live.Move] and [Live.Click], asking the chart
+// something does not change it.
+func (l *Live) Select(r ir.Rect) []Event {
+	refs := l.idx.RowsIn(r, nil)
+	if len(refs) == 0 {
+		return nil
+	}
+	// One event per layer, in the order the layers were drawn — which is the
+	// order the index reports them in, so first appearance is paint order and
+	// no sort is needed. A layer's refs need not be contiguous, so each pass
+	// gathers the whole layer rather than a run of it.
+	var out []Event
+	for i, ref := range refs {
+		if seenLayer(refs[:i], ref.Panel, ref.Layer) {
+			continue
+		}
+		rows := make([]int, 0, len(refs)-i)
+		for _, r2 := range refs[i:] {
+			if r2.Panel == ref.Panel && r2.Layer == ref.Layer {
+				rows = append(rows, r2.Row)
+			}
+		}
+		out = append(out, Event{
+			Kind:  Select,
+			Rect:  r,
+			Panel: ref.Panel,
+			// Row is -1: a selection is a set of rows, and naming one of them
+			// as the hit would be naming whichever the scan reached first.
+			Hit:  Hit{Panel: ref.Panel, Layer: ref.Layer, Series: ref.Series, Row: -1},
+			Rows: rows,
+		})
+	}
+	for i := range out {
+		l.p.emit(out[i])
+	}
+	return out
+}
+
+// selectRange fires the [Select] for a drag along a colourbar: the interval
+// between the two ends of the drag.
+//
+// The two ends are colourbar hits rather than points, because what a position
+// on a bar *means* is the bar's answer and not arithmetic anyone else should
+// be doing. A drag within one band selects that band; a drag across several
+// selects from the bottom of the first to the top of the last, because a
+// reader dragging over three bands means all three and not the two boundaries
+// they happened to cross.
+//
+// It reports no rows. A range on a colourbar is a statement about values, and
+// which rows fall in it is a question about the data that the caller is better
+// placed to answer — with the column in hand, and without refract guessing
+// which of several layers was meant.
+func (l *Live) selectRange(from, to Hit, band ir.Rect) Event {
+	if from.Kind != interact.Colorbar {
+		return Event{}
+	}
+	if to.Kind != interact.Colorbar {
+		to = from
+	}
+	lo, hi := from.Value, to.Value
+	class := from.Class
+	if from.Class >= 0 && to.Class >= 0 {
+		// Classed: the union of the two bands, which is what dragging over
+		// them means. A drag that stayed in one keeps that band's identity.
+		lo, hi = min(from.Lo, to.Lo), max(from.Hi, to.Hi)
+		if from.Class != to.Class {
+			class = -1
+		}
+	} else if lo > hi {
+		lo, hi = hi, lo
+	}
+	return l.fire(Event{
+		Kind:  Select,
+		Point: ir.Point{X: (band.Min.X + band.Max.X) / 2, Y: (band.Min.Y + band.Max.Y) / 2},
+		Panel: -1,
+		Rect:  band,
+		Found: true,
+		Hit: Hit{
+			Kind: interact.Colorbar, Panel: -1, Layer: -1, Row: -1,
+			Area: from.Area, Class: class,
+			Lo: lo, Hi: hi, Value: lo + (hi-lo)/2,
+			At: ir.Point{X: (band.Min.X + band.Max.X) / 2, Y: (band.Min.Y + band.Max.Y) / 2},
+		},
+	})
+}
+
+func seenLayer(refs []RowRef, panel, layer int) bool {
+	for _, r := range refs {
+		if r.Panel == panel && r.Layer == layer {
+			return true
+		}
+	}
+	return false
+}
+
+// withGuide fills in a hit on a guide for an event outside every panel.
+//
+// A pointer in the margins is over no data, which is why hovering there
+// reports no hit — but the guides live in the margins and are the furniture a
+// reader acts on. So the margins are searched for a guide and for nothing
+// else: a mark near the panel edge is reachable from just outside it by the
+// hit tolerance, and reporting one here would make a hover in the margin mean
+// two different things.
+func (l *Live) withGuide(ev Event, pt ir.Point) Event {
+	if hit, ok := l.idx.At(pt, 0); ok && hit.Kind.Guides() {
+		ev.Hit, ev.Found = hit, true
+	}
+	return ev
+}
+
 func (l *Live) fire(ev Event) Event {
+	if ev.Found {
+		ev.Key = l.keyOf(ev.Hit)
+	}
 	l.p.emit(ev)
 	return ev
+}
+
+// keyOf reads the identity of the row a hit landed on, or "" when there is
+// none to read.
+//
+// The layer it reads is the plot's, l.p.layers[h.Layer] — not the panel's.
+// Those are different objects on a faceted chart: a panel holds a
+// [geom.Faceter] Subset copy whose Source is the *cut*, one panel's worth of
+// rows. A hit's Row has already been resolved back through [data.Subset] to
+// the table the caller handed in (see docs/adr/0015-hit-testing.md), so
+// reading the cut with it would index the wrong table — silently, and with a
+// plausible answer. The layer index is the same in both because a facet
+// preserves layer order.
+//
+// It costs one column lookup and, for a numeric or temporal key, one small
+// string. That is why it goes through [data.Label] rather than [data.Labels],
+// which would spell the whole column to answer about one row of it — on every
+// pointer move.
+func (l *Live) keyOf(h Hit) string {
+	if h.Row < 0 || h.Layer < 0 || h.Layer >= len(l.p.layers) {
+		return ""
+	}
+	g := l.p.layers[h.Layer]
+	col := geom.KeyOf(g)
+	if col == "" {
+		return ""
+	}
+	src, ok := geom.SourceOf(g)
+	if !ok {
+		return ""
+	}
+	key, _ := data.Label(src, col, h.Row)
+	return key
 }
 
 // panelAt returns the panel a device point is in, falling back to the first

@@ -323,10 +323,13 @@ The dependency order is not a preference:
    listed last in this order and first in nothing, because sorting by
    machinery is what makes a schedule and these have none — each is small,
    independent, and was blocking a whole class of charts from being *usable*
-   rather than from being drawn. What is left of the bucket is an **overlay
-   layer the chart itself owns** — a tooltip, a crosshair, a brush rectangle —
-   which `interact` cannot draw because it only reads, and which linked
-   brushing across panels needs before anything else. **Label collision
+   rather than from being drawn. The bucket is now empty: the last of it
+   was an **overlay layer the chart itself owns** — a tooltip, a crosshair, a
+   brush rectangle — which `interact` cannot draw because it only reads, and
+   which shipped in v1.8 as a stage in `render`, the one package that knows
+   drawing order ([ADR 0046](adr/0046-overlay-layer.md)). It is drawn last and
+   announced to no observer, so what it draws is not hit-testable: a tooltip a
+   pointer can hit is a tooltip that flickers. **Label collision
    avoidance** is implemented for the next release through
    `geom.AvoidOverlap(true)` ([ADR 0040](adr/0040-label-collision-avoidance.md)).
 10. ~~**Relational layouts**~~ — E, shipped in v1.4

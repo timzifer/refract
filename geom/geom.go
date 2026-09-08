@@ -149,6 +149,7 @@ type config struct {
 	textCol    string
 
 	groupCol   string
+	keyCol     string
 	widthCol   string
 	fromCol    string
 	toCol      string
@@ -251,6 +252,34 @@ func OnMissing(m Missing) Option { return func(c *config) { c.missing = m } }
 
 // Label names the series in the legend. It defaults to the Y column's name.
 func Label(s string) Option { return func(c *config) { c.label = s } }
+
+// KeyBy names the column that identifies a row across renders, and across
+// charts.
+//
+// Nothing in this package reads it. A layer draws exactly what it drew before,
+// and the column need not be one the mark plots — it is an answer to a
+// question asked from outside: *which row is this, still*.
+//
+// It exists because a row number is not an identity. [Rows] reports the row
+// behind a mark, and that row is an index into the table as it stands for that
+// frame; a table appended to, filtered or windowed renumbers its rows, and a
+// row number carried across two frames of a stream names two different
+// measurements. A key is a value the data already carries, so it survives
+// whatever happens to the ordering.
+//
+// Two things want one. A tooltip in one chart that highlights a flow in
+// another needs a name for the thing under the pointer that the other chart
+// also knows — see [github.com/timzifer/refract.Event.Key]. And a transition
+// between two states of a table matches their rows by it, because "the same
+// bar, moved" and "one bar gone and another arrived" are different pictures
+// and only the data can say which this is.
+//
+// The values are read with [github.com/timzifer/refract/data.Label], so a
+// numeric key is spelled the way a facet panel key and a categorical tick are
+// spelled. Keys are not checked for uniqueness: a caller who names a column
+// with duplicates gets duplicates, and [Rows] and the panel and layer indices
+// are still there beside it.
+func KeyBy(col string) Option { return func(c *config) { c.keyCol = col } }
 
 // Shape sets the marker shape for scatter geoms. Setting it explicitly opts
 // the layer out of a theme's redundant-encoding ladder — see
