@@ -7,7 +7,7 @@ go 1.25.0
 // says which.
 require (
 	github.com/gogpu/gg v0.52.5
-	github.com/timzifer/refract v1.5.0
+	github.com/timzifer/refract v1.6.0
 	golang.org/x/image v0.45.0
 )
 
