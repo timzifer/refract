@@ -105,6 +105,7 @@ func TestAClassedColourScaleSurvivesTheRoundTrip(t *testing.T) {
 		"threshold":    scale.Threshold(palette.Viridis, []float64{20, 30}),
 		"quantize":     scale.Quantize(palette.Viridis, 4),
 		"quantize log": scale.Quantize(palette.Viridis, 4, scale.ColorLog(0)),
+		"quantile":     scale.Quantile(palette.Viridis, 3),
 	} {
 		c := colorChart(cs)
 		want, got := draw(t, c), draw(t, roundTrip(t, c))

@@ -205,3 +205,139 @@ func TestClassedColoursDoNotAllocate(t *testing.T) {
 		}
 	}
 }
+
+func TestQuantilePutsEquallyManyObservationsInEachClass(t *testing.T) {
+	c := scale.Quantile(palette.Viridis, 4)
+	// A skewed sample: equal-width classes would put all but three values in
+	// the bottom one.
+	vs := make([]float64, 0, 100)
+	for i := 1; i <= 100; i++ {
+		vs = append(vs, float64(i*i))
+	}
+	c.Train(vs...)
+
+	counts := map[ir.Color]int{}
+	for _, v := range vs {
+		counts[c.Color(v)]++
+	}
+	if len(counts) != 4 {
+		t.Fatalf("four classes painted %d colours", len(counts))
+	}
+	for col, n := range counts {
+		if n < 24 || n > 26 {
+			t.Errorf("class %v holds %d of 100 observations, want about 25", col, n)
+		}
+	}
+
+	// The same data under equal-width classes is the failure this scale
+	// exists to avoid.
+	q := scale.Quantize(palette.Viridis, 4)
+	q.Train(vs...)
+	worst := 0
+	for _, n := range countByColor(q, vs) {
+		if n > worst {
+			worst = n
+		}
+	}
+	if worst < 50 {
+		t.Errorf("the equal-width scale's fullest class holds %d of 100, want it lopsided", worst)
+	}
+}
+
+func TestQuantileBreaksAreTheQuantiles(t *testing.T) {
+	c := scale.Quantile(palette.Viridis, 4)
+	vs := make([]float64, 0, 101)
+	for i := 0; i <= 100; i++ {
+		vs = append(vs, float64(i))
+	}
+	c.Train(vs...)
+	want := []float64{25, 50, 75}
+	got := c.Breaks()
+	if len(got) != len(want) {
+		t.Fatalf("Breaks() = %v, want the quartiles %v", got, want)
+	}
+	for i := range want {
+		if math.Abs(got[i]-want[i]) > 1e-9 {
+			t.Errorf("break %d = %g, want %g", i, got[i], want[i])
+		}
+	}
+}
+
+func TestQuantileAccumulatesAcrossTrainingCalls(t *testing.T) {
+	// A chart trains one scale from several layers, so the boundaries must
+	// come from everything it has seen rather than from the last call.
+	c := scale.Quantile(palette.Viridis, 2)
+	c.Train(1, 2, 3)
+	c.Train(97, 98, 99)
+	got := c.Breaks()
+	if len(got) != 1 || math.Abs(got[0]-50) > 1e-9 {
+		t.Errorf("Breaks() = %v, want the median of all six values", got)
+	}
+}
+
+func TestQuantileWithNoDataStillPaints(t *testing.T) {
+	c := scale.Quantile(palette.Viridis, 4)
+	if got := c.Breaks(); len(got) != 0 {
+		t.Errorf("Breaks() = %v on an untrained scale, want none", got)
+	}
+	if got := c.Color(5); got == (ir.Color{}) {
+		t.Error("an untrained quantile scale painted nothing")
+	}
+}
+
+func TestQuantileIgnoresValuesTheRampCannotPlace(t *testing.T) {
+	c := scale.Quantile(palette.Viridis, 2, scale.ColorLog(0))
+	c.Train(1, 0, -5, math.NaN(), 100)
+	// The sample is the two positive values, so the median is between them.
+	got := c.Breaks()
+	if len(got) != 1 || got[0] <= 1 || got[0] >= 100 {
+		t.Errorf("Breaks() = %v, want one boundary between the two positive values", got)
+	}
+}
+
+func TestQuantileColoursDoNotAllocate(t *testing.T) {
+	c := scale.Quantile(palette.Viridis, 5)
+	vs := make([]float64, 0, 1000)
+	for i := range 1000 {
+		vs = append(vs, float64(i))
+	}
+	c.Train(vs...)
+	if got := testing.AllocsPerRun(100, func() {
+		for v := 0.0; v < 1000; v += 100 {
+			_ = c.Color(v)
+		}
+	}); got != 0 {
+		t.Errorf("Color allocated %v times per run", got)
+	}
+}
+
+func TestQuantileRoundTripsAsItsClassCount(t *testing.T) {
+	orig := scale.Quantile(palette.Viridis, 5)
+	d, ok := scale.DescribeColor(orig)
+	if !ok {
+		t.Fatal("a quantile scale does not describe itself")
+	}
+	if d.Classes != 5 || len(d.Breaks) != 0 {
+		t.Errorf("described as %d classes and breaks %v, want 5 and no pinned boundaries", d.Classes, d.Breaks)
+	}
+	back, err := scale.ColorFromDesc(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs := []float64{1, 2, 3, 40, 500, 6000}
+	orig.Train(vs...)
+	back.Train(vs...)
+	for _, v := range vs {
+		if got, want := back.Color(v), orig.Color(v); got != want {
+			t.Errorf("Color(%g) = %v after a round trip, want %v", v, got, want)
+		}
+	}
+}
+
+func countByColor(cs scale.ColorScale, vs []float64) map[ir.Color]int {
+	out := map[ir.Color]int{}
+	for _, v := range vs {
+		out[cs.Color(v)]++
+	}
+	return out
+}

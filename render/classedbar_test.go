@@ -80,3 +80,17 @@ func TestClassedBarsWithDifferentBreaksAreNotMerged(t *testing.T) {
 		t.Errorf("two scales cutting at different values drew %d of the two boundaries: %v", labels, texts(rec))
 	}
 }
+
+// A quantile bar's bands are as tall as their classes are wide, which over
+// skewed data means very different heights. That is the distribution showing
+// through, and it is the reason the bar is not drawn in equal blocks.
+func TestAQuantileBarKeepsItsClassesInProportion(t *testing.T) {
+	rec := draw(t, chart(colored(scale.Quantile(palette.Viridis, 2))))
+	if got := len(gradients(rec)); got != 0 {
+		t.Errorf("a quantile scale drew %d gradients, want none", got)
+	}
+	// The column is 10, 20, 30, 40, so the median is 25.
+	if !hasText(rec, "25") {
+		t.Errorf("the bar has no median label: %v", texts(rec))
+	}
+}

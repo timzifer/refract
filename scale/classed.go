@@ -80,18 +80,101 @@ func Quantize(ramp palette.Ramp, classes int, opts ...ColorOption) ClassedColorS
 	return &classed{kind: KindQuantize, base: newColorScale(ramp, false, opts), n: classes}
 }
 
-// classed is [Threshold] and [Quantize]. The two differ only in where the
-// boundaries come from, so they are one type: everything else — the domain,
-// the transform, the undefined colour, which colour a class gets — is shared,
-// and writing it twice is how the two drift apart.
+// Quantile returns a colour scale that cuts the domain so that each class
+// holds as near as possible the same number of observations.
+//
+// It is the scale for a quantity whose distribution is the thing worth seeing:
+// a count, an income, a latency. Equal-width classes over such data put nearly
+// every observation in one class and leave the rest to name a handful of
+// outliers, which is [Quantize]'s honest failure and this scale's whole
+// purpose. What it gives up in exchange is that a class no longer stands for a
+// fixed span — two charts drawn from different rows cut at different values,
+// so a quantile ramp is read against its own bar and never against another's.
+//
+// # Cost
+//
+// Quantiles cannot be computed from a running minimum and maximum, so this is
+// the one colour scale that keeps what it is trained on: every finite value,
+// held until the scale is discarded. That is a fixed cost per row rather than
+// per scale, and it is the reason the boundaries are recomputed at the end of
+// each [ColorScale.Train] rather than lazily — training is serial and drawing
+// is not, so a scale that sorted itself the first time a mark asked for a
+// colour would be sorting itself from several panels at once.
+//
+// A chart redrawn from a [github.com/timzifer/refract/data.Stream] should
+// therefore hand each frame a scale of its own, or compute the boundaries once
+// and pin them with [Threshold]. A scale trained on every frame of a live
+// chart has kept every frame of it.
+//
+// A nil ramp uses [palette.DefaultRamp].
+func Quantile(ramp palette.Ramp, classes int, opts ...ColorOption) ClassedColorScale {
+	if classes < 1 {
+		classes = 1
+	}
+	return &classed{kind: KindQuantile, base: newColorScale(ramp, false, opts), n: classes}
+}
+
+// classed is [Threshold], [Quantize] and [Quantile]. The three differ only in
+// where the boundaries come from, so they are one type: everything else — the
+// domain, the transform, the undefined colour, which colour a class gets — is
+// shared, and writing it twice is how they drift apart.
 type classed struct {
 	kind  ColorKind
 	base  *colorScale
 	given []float64 // KindThreshold: the boundaries, ascending.
-	n     int       // KindQuantize: the class count.
+	n     int       // KindQuantize and KindQuantile: the class count.
+
+	// sample is every value a quantile scale has been trained on, ascending,
+	// and cuts the boundaries computed from it.
+	sample []float64
+	cuts   []float64
 }
 
-func (c *classed) Train(vs ...float64) { c.base.Train(vs...) }
+func (c *classed) Train(vs ...float64) {
+	c.base.Train(vs...)
+	if c.kind != KindQuantile {
+		return
+	}
+	for _, v := range vs {
+		// The same values the domain accepts, so that a log ramp's sample
+		// does not hold values the ramp has no colour for.
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && c.base.defined(v) {
+			c.sample = append(c.sample, v)
+		}
+	}
+	sort.Float64s(c.sample)
+	c.recut()
+}
+
+// recut recomputes a quantile scale's boundaries from its sample.
+//
+// It runs at the end of training rather than at the first read because
+// training is serial and drawing is not: a scale that sorted itself when a
+// mark first asked for a colour would be sorting itself from every panel at
+// once. Training is called once per layer with a whole column, so the sort
+// costs a handful of passes over the data rather than one per row.
+func (c *classed) recut() {
+	c.cuts = c.cuts[:0]
+	if len(c.sample) == 0 {
+		return
+	}
+	for i := 1; i < c.n; i++ {
+		c.cuts = append(c.cuts, quantileOf(c.sample, float64(i)/float64(c.n)))
+	}
+}
+
+// quantileOf returns the p-th quantile of an ascending sample, interpolating
+// between the two order statistics it falls between. It is the definition
+// NumPy and R's default use, so a boundary this scale draws is a boundary the
+// analysis that chose the class count would have computed.
+func quantileOf(sorted []float64, p float64) float64 {
+	h := float64(len(sorted)-1) * p
+	lo := int(math.Floor(h))
+	if lo >= len(sorted)-1 {
+		return sorted[len(sorted)-1]
+	}
+	return sorted[lo] + (h-float64(lo))*(sorted[lo+1]-sorted[lo])
+}
 
 // Domain reports the interval the bar covers.
 //
@@ -134,8 +217,8 @@ func (c *classed) Classes() int {
 }
 
 func (c *classed) Breaks() []float64 {
-	if c.kind == KindThreshold {
-		return append([]float64(nil), c.given...)
+	if b, ok := c.stored(); ok {
+		return append([]float64(nil), b...)
 	}
 	lo, hi := c.Domain()
 	out := make([]float64, 0, c.n-1)
@@ -143,6 +226,21 @@ func (c *classed) Breaks() []float64 {
 		out = append(out, c.base.valueIn(lo, hi, float64(i)/float64(c.n)))
 	}
 	return out
+}
+
+// stored returns the boundaries the scale holds, and whether it holds them at
+// all: a quantize scale derives its own from the domain on the spot, and an
+// untrained quantile scale holds none, which is not the same thing. It
+// allocates nothing, which is what lets [classed.classIndex] use it once per
+// mark.
+func (c *classed) stored() ([]float64, bool) {
+	switch c.kind {
+	case KindThreshold:
+		return c.given, true
+	case KindQuantile:
+		return c.cuts, true
+	}
+	return nil, false
 }
 
 func (c *classed) Color(v float64) ir.Color {
@@ -160,10 +258,10 @@ func (c *classed) Color(v float64) ir.Color {
 // classIndex is which class v falls in. It allocates nothing: a geom calls it
 // once per mark.
 func (c *classed) classIndex(v float64, n int) int {
-	if c.kind == KindThreshold {
+	if b, ok := c.stored(); ok {
 		// The count of breaks at or below v, so a value equal to a break
 		// lands in the class above it.
-		return sort.Search(len(c.given), func(i int) bool { return c.given[i] > v })
+		return sort.Search(len(b), func(i int) bool { return b[i] > v })
 	}
 	lo, hi := c.Domain()
 	i := int(c.base.positionIn(lo, hi, v) * float64(n))
@@ -211,6 +309,9 @@ func (c *classed) DescribeColor() ColorDesc {
 	case KindThreshold:
 		d.Breaks = append([]float64(nil), c.given...)
 	default:
+		// A quantile scale's boundaries are the data rather than the scale:
+		// pinning them would stop them being recomputed the next time the
+		// chart is drawn over different rows, which is the whole contract.
 		d.Classes = c.n
 	}
 	return d

@@ -308,6 +308,9 @@ const (
 	KindThreshold ColorKind = "threshold"
 	// KindQuantize cuts it into equal classes. See [Quantize].
 	KindQuantize ColorKind = "quantize"
+	// KindQuantile cuts it so that each class holds equally many
+	// observations. See [Quantile].
+	KindQuantile ColorKind = "quantile"
 )
 
 // ColorDesc is a colour scale reduced to what configures it.
@@ -422,6 +425,8 @@ func ColorFromDesc(d ColorDesc) (ColorScale, error) {
 		return Threshold(ramp, d.Breaks, opts...), nil
 	case KindQuantize:
 		return Quantize(ramp, d.Classes, opts...), nil
+	case KindQuantile:
+		return Quantile(ramp, d.Classes, opts...), nil
 	}
 	if build, ok := registeredColor(d.Kind); ok {
 		return build(d)
