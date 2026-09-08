@@ -28,8 +28,9 @@ func TestReleaseCheckCannotUseWorkspaceOrRepairManifests(t *testing.T) {
 	t.Setenv("GOWORK", "some/go.work")
 	t.Setenv("GOFLAGS", "-mod=mod")
 	t.Setenv("CGO_ENABLED", "1")
+	t.Setenv("GOPRIVATE", "")
 	c := command(".", "test", "./...")
-	for key, want := range map[string]string{"GOWORK": "off", "GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0"} {
+	for key, want := range environment {
 		n := 0
 		for _, e := range c.Env {
 			k, v, _ := strings.Cut(e, "=")

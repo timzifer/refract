@@ -43,8 +43,9 @@ reproduces it.
 > Each nested module requires the core at a published tag, not through a
 > `replace` directive. The workspace still overrides that for local
 > development, so a change to the core is picked up immediately — but the
-> module as published always resolves to a real release. Bumping those require
-> lines is part of tagging a release, and needs the core's tag to exist first.
+> module as published always resolves to a real release. That require is a
+> floor, not a pin: it moves only when the nested module needs a core API the
+> version it names does not have, and the release check is what says so.
 
 ## Everyday commands
 
@@ -382,71 +383,89 @@ ruleset's bypass at the new key's id.
 
 ## Releasing
 
-Before tagging **each module**, run its release check from the repository root:
+Before tagging anything, run the release check from the repository root:
 
 ```sh
-go run ./internal/cmd/releasecheck -module .
-go run ./internal/cmd/releasecheck -module backend/gg
-go run ./internal/cmd/releasecheck -module arrow/v18
-go run ./internal/cmd/releasecheck -module backend/gg/gpu
-go run ./internal/cmd/releasecheck -module backend/window
+go run ./internal/cmd/releasecheck -module all
 ```
 
-The tool builds, tests and vets with `GOWORK=off`, `CGO_ENABLED=0` and
-`-mod=readonly`, and refuses `replace` directives. A green workspace test is
-not evidence that a nested module can use the version in its `require` line.
+The tool builds, tests and vets each module with `GOWORK=off`,
+`CGO_ENABLED=0`, `-mod=readonly` and `GOPRIVATE=github.com/timzifer/refract`,
+and refuses `replace` directives. A green workspace test is not evidence that a
+nested module can use the version in its `require` line; this is. Single
+modules can be checked with `-module .`, `-module backend/gg`, `-module
+arrow/v18`, `-module backend/gg/gpu` or `-module backend/window`.
+
+Green means each nested module builds, tests and vets against **exactly the
+core it names in its `require` line**, with the workspace out of the way. That
+is the whole contract a release has to keep, so a green check is the licence to
+tag — the `require` lines do not have to name the version being tagged.
+
 The **Release dependencies** workflow can run the same check manually on a
 candidate branch; tag pushes also check the module that tag releases. That
 post-tag check is a backstop, not a substitute for the pre-tag command.
 
-A nested module whose development code needs an API the published core does not
-have yet — as the Arrow adapter's did between v1.2.0 and v1.5.0 — correctly
-fails its isolated check until the new core is published and the nested
-manifests are updated in the order below. Do not silence that with a workspace,
-a local replacement or a tag that does not exist. `-module all` is useful after every prerequisite is published;
-checking only the core first allows a staged release to get started.
+### Tagging
 
-The modules are tagged in dependency order, because each nested module
-requires the core — and `backend/window` and `backend/gg/gpu` require
-`backend/gg` — at a published tag rather than through a `replace`. A tag has
-to exist before a `require` line can name it.
+With the check green, tag all five modules on the same commit. Order does not
+matter, because no `require` line names a tag that does not exist yet. Each
+nested module's tag prefix is its directory:
 
-1. **The core.** Tag `vX.Y.Z` on the commit to release. `go.mod` at the root
-   has no `require` block, so nothing precedes it.
-2. **The `require` lines.** In `backend/gg/go.mod`, `backend/window/go.mod`,
-   `backend/gg/gpu/go.mod` and `arrow/v18/go.mod`, bump
-   `github.com/timzifer/refract` to the tag from step 1 — and in the last
-   two (`backend/gg/gpu` and `backend/window`),
-   `github.com/timzifer/refract/backend/gg` to the tag it is about to
-   get. Run `go mod tidy` in each and commit. `go.work` overrides these during
-   development, so the change is invisible locally; it is what a downstream
-   `go get` resolves.
+```sh
+git tag vX.Y.Z
+git tag backend/gg/vX.Y.Z
+git tag backend/window/vX.Y.Z
+git tag backend/gg/gpu/v0.N.0
+git tag arrow/v18.N.M
+git push origin --tags
+```
 
-   This step is two commits, not one, because `go mod tidy` resolves for real:
-   it fetches the version the `require` line names, and a tag that does not
-   exist yet is a `404` from the module proxy. So `backend/gg` and `arrow/v18`
-   — which require only the core — are bumped, tidied, committed and **pushed**
-   first, and `backend/gg`'s own tag from step 3 goes on that commit. Only then
-   can `backend/gg/gpu` and `backend/window` be tidied at all. Both halves need
-   the tag *and the commit it points at* to be reachable from a pushed branch:
-   the proxy caches a negative lookup for a few minutes, so a tag pushed ahead
-   of its commit costs a wait rather than an error you can retry away.
-3. **The nested modules.** Tag each with its directory as the prefix:
-   `backend/gg/vX.Y.Z`, `backend/window/vX.Y.Z`, `backend/gg/gpu/v0.N.0` and
-   `arrow/v18.N.M`. The first two share the core's version — they are the
-   supported raster and native paths, and their own APIs are small. The GPU
-   tier stays at `v0` for as long as it is opt-in beta, so its tag says what
-   the README says. The Arrow adapter's major is Arrow's, and its tag prefix
-   is `arrow/` rather than `arrow/v18/`: a module's tag prefix is its
-   subdirectory without the major-version suffix, even when the module lives
-   in a major-version subdirectory ([ADR 0030](docs/adr/0030-arrow-major-version.md)).
-4. **The docs.** The README's status line and `CONCEPT.md` §14 name the
-   milestone; the results table in `docs/benchmarks.md` is regenerated when a
-   release changes what a benchmark measures.
+`backend/gg` and `backend/window` share the core's version — they are the
+supported raster and native paths, and their own APIs are small. The GPU tier
+stays at `v0` for as long as it is opt-in beta, so its tag says what the README
+says. The Arrow adapter's major is Arrow's, and its tag prefix is `arrow/`
+rather than `arrow/v18/`: a module's tag prefix is its subdirectory without the
+major-version suffix, even when the module lives in a major-version
+subdirectory ([ADR 0030](docs/adr/0030-arrow-major-version.md)).
 
-A release that skips step 2 publishes nested modules that resolve to an older
-core than the one they were tested against. That is the failure the order
-exists to prevent.
+Then the docs: the README's status line and `CONCEPT.md` §14 name the
+milestone, and the results table in `docs/benchmarks.md` is regenerated when a
+release changes what a benchmark measures.
+
+### When a require line does have to move
+
+A nested module's `require` on the core is a floor, not a pin — minimal version
+selection raises it for anyone who imports both — so it only moves when the
+module needs a core API the required core does not have. The Arrow adapter's
+did between v1.2.0 and v1.5.0. `releasecheck` is what says so: that module's
+build or test fails, with the workspace off, against the core it names.
+
+Do not silence that with a workspace, a local replacement or a tag that does
+not exist. Publish the prerequisite first, then bump:
+
+1. **The core.** Tag `vX.Y.Z` and push it. `go.mod` at the root has no
+   `require` block, so nothing precedes it.
+2. **The require lines.** Bump `github.com/timzifer/refract` in the failing
+   module's `go.mod` — and, in `backend/gg/gpu` and `backend/window`,
+   `github.com/timzifer/refract/backend/gg` if that is what is short — then
+   `go mod tidy` and commit. `go.work` overrides these during development, so
+   the change is invisible locally; it is what a downstream `go get` resolves.
+
+   `go mod tidy` resolves for real, so run it with
+   `GOPRIVATE=github.com/timzifer/refract` in the environment: that keeps
+   `proxy.golang.org` out of the path for this repository's own tags. The
+   proxy caches a negative lookup for a few minutes, so a tag pushed moments
+   ago is otherwise a `404` that no retry clears. Fetching straight from git
+   sees the tag immediately. `releasecheck` sets this itself.
+
+   `backend/gg/gpu` and `backend/window` require `backend/gg` as well, so if
+   that tag is also being bumped it has to be pushed before they can be tidied.
+3. **Re-check and tag.** `releasecheck -module all` again, then tag as above.
+
+The order exists to prevent one failure: publishing a nested module that
+resolves to a core it was never tested against. The check is what proves it
+was.
+
 
 ## Style
 

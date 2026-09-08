@@ -60,6 +60,18 @@ func selectModules(module, tag string) ([]string, error) {
 	return nil, fmt.Errorf("unknown module %q", module)
 }
 
+// environment is what every check runs under, replacing whatever the caller
+// set. GOPRIVATE names this repository so that the module proxy is out of the
+// path for its own tags: the proxy caches a negative lookup for a few minutes,
+// which turns a tag pushed moments ago into a 404 that no amount of retrying
+// clears. Fetching straight from git sees the tag as soon as it is pushed.
+var environment = map[string]string{
+	"GOWORK":      "off",
+	"GOFLAGS":     "-mod=readonly",
+	"CGO_ENABLED": "0",
+	"GOPRIVATE":   "github.com/timzifer/refract",
+}
+
 func command(dir string, args ...string) *exec.Cmd {
 	c := exec.Command("go", args...)
 	c.Dir = filepath.FromSlash(dir)
@@ -67,11 +79,13 @@ func command(dir string, args ...string) *exec.Cmd {
 	// across operating systems. A caller's -mod=mod must not repair a release.
 	for _, e := range os.Environ() {
 		key, _, _ := strings.Cut(e, "=")
-		if !strings.EqualFold(key, "GOWORK") && !strings.EqualFold(key, "GOFLAGS") && !strings.EqualFold(key, "CGO_ENABLED") {
+		if _, overridden := environment[strings.ToUpper(key)]; !overridden {
 			c.Env = append(c.Env, e)
 		}
 	}
-	c.Env = append(c.Env, "GOWORK=off", "GOFLAGS=-mod=readonly", "CGO_ENABLED=0")
+	for key, value := range environment {
+		c.Env = append(c.Env, key+"="+value)
+	}
 	return c
 }
 
