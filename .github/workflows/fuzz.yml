@@ -1,0 +1,34 @@
+name: Parser fuzzing
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: ./internal/sfnt
+            target: FuzzFont
+          - package: ./spec
+            target: FuzzSpec
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go test '${{ matrix.package }}' -run='^$' -fuzz='^${{ matrix.target }}$' -fuzztime=30s -parallel=2
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: '**/testdata/fuzz/**'

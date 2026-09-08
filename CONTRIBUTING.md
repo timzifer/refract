@@ -428,3 +428,19 @@ exists to prevent.
 Standard Go, `gofmt`-clean, doc comments on exported identifiers. Comments
 should say *why*, not restate the code; the codebase's existing comments are the
 guide. British or American spelling — just be consistent within a file.
+
+## Parser fuzzing
+
+Normal tests execute the seed corpora. For mutation testing, run:
+
+```sh
+go test ./internal/sfnt -run='^$' -fuzz='^FuzzFont$' -fuzztime=30s -parallel=2
+go test ./spec -run='^$' -fuzz='^FuzzSpec$' -fuzztime=30s -parallel=2
+```
+
+The Parser fuzzing workflow runs both on pull requests and main and attaches
+failure corpora. Keep minimized failing inputs as regression seeds. Font
+fuzzing follows accepted fonts through glyph lookup and deterministic
+subsetting, checking that advances survive. Spec fuzzing checks decoding and
+re-encoding; it does not render arbitrary requested image sizes. Input limits
+bound test resources, not the public parsers' accepted input sizes.
