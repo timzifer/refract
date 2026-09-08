@@ -17,8 +17,8 @@ require github.com/gogpu/gg v0.52.5
 // carries the same ceiling, and .github/dependabot.yml.
 require (
 	github.com/gogpu/wgpu v0.32.1
-	github.com/timzifer/refract v1.2.0
-	github.com/timzifer/refract/backend/gg v1.2.0
+	github.com/timzifer/refract v1.5.0
+	github.com/timzifer/refract/backend/gg v1.5.0
 )
 
 require (
