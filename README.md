@@ -224,7 +224,12 @@ picture here cannot drift away from the code that produced it.
   `scale.Qualitative` for categories. Which guide the layer contributes follows
   from which it was handed — a ramp gets a colourbar, a palette gets one legend
   entry per category
-  ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
+  ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)) — and a
+  chart of one layer painted from categories shows that legend by default,
+  because the colours are the only thing naming them.
+  `scale.Named` colours categories the caller enumerates — `RUN` green, `FAULT`
+  red — rather than in order of first appearance, so the colour of a state does
+  not depend on which window of a stream is on screen.
   Ramps interpolate in linear light, so a gradient has no dark band through its
   middle. A ramp can run logarithmically across its domain (`scale.ColorLog`,
   `scale.ColorSymLog`) — without it a heatmap over counts spanning orders of
@@ -234,6 +239,14 @@ picture here cannot drift away from the code that produced it.
   `scale.Quantize` for equal ones, `scale.Quantile` for equally many
   observations in each. A classed scale's colourbar is drawn in bands and
   labelled at the boundaries.
+- **Paths that change colour** — `Line` and `Step` take `ColorBy` too, and draw
+  the path in stretches of one colour. Where a stretch ends follows from the
+  scale rather than from an option: a classed scale puts the corner *on* the
+  threshold, interpolated between the two rows, so the chart says when the limit
+  was passed; a discrete scale puts it on the row where the new category was
+  first seen, because nothing was measured in between and a machine's state has
+  no halfway. A continuous ramp on a path is refused — a stroke carries one
+  colour and no stops ([ADR 0049](docs/adr/0049-paths-colour-in-classes.md)).
 - **Coordinate systems** — `coord.Cartesian` is the identity and the default;
   `coord.Polar` wraps one axis around a circle and reads the other as a radius,
   which turns the marks that already exist into pie, donut, radar, rose, wind

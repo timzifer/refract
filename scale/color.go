@@ -124,6 +124,19 @@ func ColorSymLog(base, threshold float64) ColorOption {
 // transparent, which draws nothing.
 func ColorUndefined(col ir.Color) ColorOption { return func(c *colorScale) { c.undef = col } }
 
+// ColorFallback sets the palette a [Named] scale colours a label it was not
+// given a colour for from. The default is [palette.Default].
+//
+// It is a separate option from [ColorUndefined] because the two answer
+// different questions. Undefined is for a value that is not a category at all —
+// a null, a NaN — and drawing nothing is the honest answer to it. A label the
+// caller did not enumerate *is* a category, and it is one the chart should
+// show: it is how a reader learns that the machine reported a state nobody
+// wrote down. It has no effect on any other kind of scale.
+func ColorFallback(p palette.Qualitative) ColorOption {
+	return func(c *colorScale) { c.fallback = p }
+}
+
 // Sequential returns a colour scale that runs a ramp across the domain from
 // end to end. It is the scale for a quantity with a natural low and high —
 // a count, a duration, a temperature.
@@ -173,6 +186,7 @@ type colorScale struct {
 	reverse   bool
 	fixed     bool
 	undef     ir.Color
+	fallback  palette.Qualitative
 	xf        colorXform
 }
 

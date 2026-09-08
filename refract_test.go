@@ -404,3 +404,91 @@ func apply(xs []float64, fn func(float64) float64) []float64 {
 	}
 	return out
 }
+
+func TestGoldenThresholdLine(t *testing.T) {
+	xs := ramp(0, 12, 60)
+	src := refract.Float64Columns(map[string][]float64{
+		"x": xs,
+		"y": apply(xs, func(v float64) float64 { return 100 + 40*math.Sin(v) }),
+	})
+	p := refract.New(
+		refract.Size(640, 400),
+		refract.Title("Latency against its budget"),
+		refract.XTitle("minute"),
+		refract.YTitle("ms"),
+	)
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.Linear(scale.Nice()))
+	// The band says where the limit is; the line says when it was over it.
+	p.Add(
+		geom.HBand(120, 140, geom.Extend(false)),
+		geom.Line(src, geom.X("x"), geom.Y("y"),
+			geom.ColorBy("y", scale.Threshold(
+				palette.Ramp{palette.Blue, palette.Orange, palette.Red},
+				[]float64{110, 120},
+			))),
+	)
+	golden(t, "line-threshold", p)
+}
+
+func TestGoldenStatusStep(t *testing.T) {
+	src := refract.NewTable().
+		Float64("minute", []float64{0, 3, 5, 9, 12, 16, 20}).
+		Float64("rate", []float64{80, 80, 0, 0, 55, 55, 80}).
+		String("state", []string{"RUN", "RUN", "FAULT", "FAULT", "WARTUNG", "WARTUNG", "RUN"})
+	p := refract.New(
+		refract.Size(640, 400),
+		refract.Title("Line 3, by machine state"),
+		refract.XTitle("minute"),
+		refract.YTitle("parts/min"),
+	)
+	p.X(scale.Linear(scale.Nice()))
+	p.Y(scale.Linear(scale.Nice(), scale.Zero()))
+	p.Add(geom.Step(src, geom.X("minute"), geom.Y("rate"),
+		geom.ColorBy("state", scale.Named(map[string]ir.Color{
+			"RUN":     palette.Green,
+			"FAULT":   palette.Red,
+			"WARTUNG": palette.Orange,
+		}))))
+	golden(t, "step-status", p)
+}
+
+// TestOneLayerPaintedFromCategoriesGetsALegend. A layer coloured per mark from
+// a discrete scale is several series in everything but name — the colour is
+// the only thing saying which mark is which category — and nothing but the
+// legend names them.
+func TestOneLayerPaintedFromCategoriesGetsALegend(t *testing.T) {
+	src := refract.NewTable().
+		Float64("x", []float64{0, 1, 2, 3}).
+		Float64("y", []float64{1, 2, 3, 4}).
+		Float64("load", []float64{1, 2, 3, 4}).
+		String("state", []string{"running", "running", "fault", "fault"})
+
+	p := refract.New(refract.Size(400, 300))
+	p.X(scale.Linear())
+	p.Y(scale.Linear())
+	p.Add(geom.Step(src, geom.X("x"), geom.Y("y"),
+		geom.ColorBy("state", scale.Named(map[string]ir.Color{
+			"running": palette.Green,
+			"fault":   palette.Red,
+		}))))
+	got := renderString(t, p)
+	for _, want := range []string{">running<", ">fault<"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the chart does not name %s", want)
+		}
+	}
+
+	// A classed scale is not this case: it contributes a colourbar, which
+	// names itself, so the default stays off.
+	q := refract.New(refract.Size(400, 300))
+	q.X(scale.Linear())
+	q.Y(scale.Linear())
+	q.Add(geom.Line(src, geom.X("x"), geom.Y("y"),
+		geom.ColorBy("load", scale.Threshold(palette.Viridis, []float64{2.5}))))
+	// The colourbar is titled after the colour column; a legend row would be
+	// titled after the Y column, which nothing else in this chart writes.
+	if strings.Contains(renderString(t, q), ">y<") {
+		t.Error("a classed line grew a legend entry beside its colourbar")
+	}
+}

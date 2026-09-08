@@ -450,6 +450,8 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		d.Kind = scale.KindQuantize
 	case string(scale.KindQuantile):
 		d.Kind = scale.KindQuantile
+	case string(scale.KindNamed):
+		d.Kind = scale.KindNamed
 	case string(scale.KindQualitative), "ordinal", "nominal":
 		// "ordinal" is what Vega-Lite calls a scale from categories to a
 		// discrete range, so a hand-written document that says it means this.
@@ -488,6 +490,27 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		d.Undefined = c
 	} else {
 		d.Undefined = ir.Transparent
+	}
+	if d.Kind == scale.KindNamed {
+		// A named scale's domain is its categories, not the two ends of an
+		// interval, so it is read as labels and the numeric branch below is
+		// not reached — a two-category scale would otherwise be decoded as a
+		// pinned domain of two NaNs.
+		for _, v := range s.Domain {
+			label, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("refract/spec: a named colour scale's domain holds category names")
+			}
+			d.Labels = append(d.Labels, label)
+		}
+		for _, hex := range s.Fallback {
+			c, err := parseColor(hex)
+			if err != nil {
+				return nil, err
+			}
+			d.Fallback = append(d.Fallback, c)
+		}
+		return scale.ColorFromDesc(d)
 	}
 	if len(s.Domain) == 2 {
 		lo, hi := asNumber(s.Domain[0]), asNumber(s.Domain[1])

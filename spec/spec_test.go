@@ -84,6 +84,16 @@ func TestEveryMarkSurvivesTheRoundTrip(t *testing.T) {
 		{"bar", geom.Bar(src, geom.X("x"), geom.Y("y"), geom.BarWidth(0.5), geom.Baseline(1))},
 		{"area", geom.Area(src, geom.X("x"), geom.Y("y"), geom.Y2("z"), geom.Opacity(0.4))},
 		{"step", geom.Step(src, geom.X("x"), geom.Y("y"), geom.Steps(geom.StepPre))},
+		// A path coloured from a column draws several strokes rather than
+		// one, so a round trip that lost the scale would show up as a
+		// different picture rather than as a different Desc.
+		{"line-threshold", geom.Line(src, geom.X("x"), geom.Y("y"),
+			geom.ColorBy("y", scale.Threshold(palette.Viridis, []float64{3, 6})))},
+		{"step-named", geom.Step(src, geom.X("x"), geom.Y("y"),
+			geom.ColorBy("region", scale.Named(map[string]ir.Color{
+				"a": palette.Green,
+				"b": palette.Red,
+			})))},
 		{"boxplot", geom.Boxplot(src, geom.X("region"), geom.Y("y"), geom.Whisker(2), geom.Outliers(false))},
 		{"hline", geom.HLine(3, geom.Color(palette.Red))},
 		{"vline", geom.VLine(1.5)},

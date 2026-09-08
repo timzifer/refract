@@ -3,6 +3,8 @@ package render_test
 import (
 	"testing"
 
+	"github.com/timzifer/refract/data"
+	"github.com/timzifer/refract/geom"
 	"github.com/timzifer/refract/internal/irtest"
 	"github.com/timzifer/refract/ir"
 	"github.com/timzifer/refract/palette"
@@ -92,5 +94,24 @@ func TestAQuantileBarKeepsItsClassesInProportion(t *testing.T) {
 	// The column is 10, 20, 30, 40, so the median is 25.
 	if !hasText(rec, "25") {
 		t.Errorf("the bar has no median label: %v", texts(rec))
+	}
+}
+
+// A line coloured by a classed scale contributes the same stepped bar a
+// classed scatter does: the guide follows from the scale, not from the mark.
+func TestAThresholdLineGetsAClassedColourbar(t *testing.T) {
+	src := data.Float64Columns(map[string][]float64{
+		"x": {0, 1, 2, 3},
+		"y": {10, 25, 35, 15},
+	})
+	cs := scale.Threshold(palette.Viridis, []float64{20, 30})
+	rec := draw(t, chart(geom.Line(src, geom.X("x"), geom.Y("y"), geom.ColorBy("y", cs))))
+	for _, want := range []string{"20", "30"} {
+		if !hasText(rec, want) {
+			t.Errorf("the bar has no %q boundary label: %v", want, texts(rec))
+		}
+	}
+	if got := len(gradients(rec)); got != 0 {
+		t.Errorf("a classed line drew %d gradients, want a stepped bar", got)
 	}
 }

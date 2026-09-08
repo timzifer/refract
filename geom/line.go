@@ -32,8 +32,13 @@ func (g *lineGeom) Train(x, y scale.Scale) error {
 	if err := g.s.checkMissing(g.cfg, x, y); err != nil {
 		return err
 	}
+	if err := g.cfg.checkPathColor(g.s); err != nil {
+		g.err = err
+		return g.err
+	}
 	trainColumn(x, g.s.x)
 	trainColumn(y, g.s.y)
+	g.cfg.trainColors(g.s)
 	// A line does not stack: two series drawn on top of each other are two
 	// readings, and adding them would invent a third nobody measured.
 	g.err = g.gs.train(g.src, g.s, g.cfg, x, y, NoStack)
@@ -44,7 +49,7 @@ func (g *lineGeom) Build(b ir.Backend, f Frame) error {
 	if g.err != nil {
 		return g.err
 	}
-	sc := acquire(f)
+	sc := acquire(f).colored(g.cfg.varying(g.s))
 	defer sc.release()
 
 	if g.gs.grouped() {
@@ -78,20 +83,62 @@ func (g *lineGeom) build(b ir.Backend, f Frame, sc *scratch, s series, col ir.Co
 		// The vertices are the rows, whether the path drawn through them is
 		// straight or a curve — which is why this is reported here rather than
 		// left to be read off the drawing call.
+		// Reported over the unsplit marks: the vertices a colour boundary
+		// adds are not rows, and the one a run shares with the next would
+		// otherwise be indexed twice at the same place.
 		f.Marks(pts, sc.rowsOf(seg, keep, len(x)))
-		if g.cfg.tension <= 0 {
-			strokeRun(b, cd, &sc.line, pts, stroke, g.cfg.closed)
+		if cs, sp, ok := splitFor(g.cfg, f); ok && g.cfg.varying(seg) {
+			g.strokeRuns(b, cd, sc, cs, sp, seg, x, y, keep, stroke)
 			continue
 		}
-		sc.line.Reset()
-		appendCurve(&sc.line, cd, pts, float32(clamp01(g.cfg.tension)), true)
-		if g.cfg.closed {
-			closeLoop(&sc.line, cd, pts)
-		}
-		b.StrokePath(&sc.line, stroke)
+		g.strokeOne(b, cd, sc, pts, stroke, g.cfg.closed)
 	}
 	return nil
 }
+
+// strokeOne draws one run of the path, straight or curved.
+func (g *lineGeom) strokeOne(b ir.Backend, cd coord.Coord, sc *scratch, pts []ir.Point, stroke ir.Stroke, closed bool) {
+	if g.cfg.tension <= 0 {
+		strokeRun(b, cd, &sc.line, pts, stroke, closed)
+		return
+	}
+	sc.line.Reset()
+	appendCurve(&sc.line, cd, pts, float32(clamp01(g.cfg.tension)), true)
+	if closed {
+		closeLoop(&sc.line, cd, pts)
+	}
+	b.StrokePath(&sc.line, stroke)
+}
+
+// strokeRuns draws a segment whose colour comes from a column: one call per
+// stretch of one colour, over columns split at the changes.
+//
+// Only the last run may close the path, because a closed run is a loop and a
+// stretch of a line is not one. A curve is fitted per run, so the join at a
+// boundary is continuous in position but not in tangent — the alternative is
+// a spline that ignores where the colour changed, which puts the corner in the
+// wrong place to make it smooth.
+func (g *lineGeom) strokeRuns(b ir.Backend, cd coord.Coord, sc *scratch, cs scale.ColorScale, sp colorSplit, seg series, x, y []float32, keep []int, stroke ir.Stroke) {
+	kx, ky := sc.kept(x, y, keep)
+	vals := sc.keptValues(seg.c, keep)
+	sx, sy, runs := sc.colorRuns(cs, sp, vals, kx, ky)
+	sc.cpts = cd.Points(grow(sc.cpts, len(sx))[:0], sx, sy)
+	for i, run := range runs {
+		if run.hi <= run.lo {
+			continue
+		}
+		stroke.Color = run.color
+		if !stroke.Visible() {
+			continue
+		}
+		g.strokeOne(b, cd, sc, sc.cpts[run.lo:run.hi+1], stroke, g.cfg.closed && i == len(runs)-1)
+	}
+}
+
+// ColorGuide contributes the colourbar of a line coloured by a classed scale.
+// A discrete scale gets legend entries instead, which [config.legends] already
+// builds — see [Guided].
+func (g *lineGeom) ColorGuide() (ColorGuide, bool) { return g.cfg.colorGuide(g.s, g.err) }
 
 func (g *lineGeom) Legends(f Frame) []LegendEntry {
 	if g.err != nil {
@@ -183,6 +230,9 @@ func (sc *scratch) interpolate(s series, ok []bool) series {
 	if s.y2 != nil {
 		out.y2 = grow(sc.fz, last-first+1)[:0]
 	}
+	if s.c != nil && sc.wantColors {
+		out.c = grow(sc.fc, last-first+1)[:0]
+	}
 	// An interpolated series is not a contiguous run of the source: some of
 	// its elements are values that were never measured. It therefore carries a
 	// row per element, with -1 for the invented ones — but only when someone
@@ -196,6 +246,9 @@ func (sc *scratch) interpolate(s series, ok []bool) series {
 		sc.fx, sc.fy = out.x, out.y
 		if out.y2 != nil {
 			sc.fz = out.y2
+		}
+		if out.c != nil {
+			sc.fc = out.c
 		}
 		if out.rows != nil {
 			sc.irows = out.rows
@@ -222,6 +275,14 @@ func (sc *scratch) interpolate(s series, ok []bool) series {
 		if s.y2 != nil {
 			out.y2 = append(out.y2, lerp(s.y2[prev], s.y2[next], t))
 		}
+		if out.c != nil {
+			// The colour of an invented row is the one before it, held,
+			// rather than a value interpolated between two. A category
+			// half way between "running" and "faulted" is not a category,
+			// and for a classed scale the crossing that matters is worked
+			// out between the measured neighbours anyway.
+			out.c = append(out.c, s.c[prev])
+		}
 		if out.rows != nil {
 			out.rows = append(out.rows, -1)
 		}
@@ -235,6 +296,9 @@ func (s *series) append(src series, i int) {
 	s.y = append(s.y, src.y[i])
 	if s.y2 != nil {
 		s.y2 = append(s.y2, src.y2[i])
+	}
+	if s.c != nil {
+		s.c = append(s.c, src.c[i])
 	}
 	if s.rows != nil {
 		s.rows = append(s.rows, src.rowAt(i))

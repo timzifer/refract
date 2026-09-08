@@ -210,7 +210,18 @@ func encodeColorScale(cs scale.ColorScale) (*Scale, error) {
 	for _, c := range d.Colors {
 		out.Range = append(out.Range, colorHex(c))
 	}
-	if d.Fixed && d.Kind != scale.KindQualitative {
+	for _, label := range d.Labels {
+		// A named scale's categories and their colours are a domain/range
+		// pair, which is how Vega-Lite spells an explicit mapping from
+		// categories to a discrete range. The scheme beside them is the
+		// fallback rather than the mapping, which is the one thing this
+		// document says that Vega-Lite's cannot.
+		out.Domain = append(out.Domain, label)
+	}
+	for _, c := range d.Fallback {
+		out.Fallback = append(out.Fallback, colorHex(c))
+	}
+	if d.Fixed && d.Kind != scale.KindQualitative && d.Kind != scale.KindNamed {
 		// A discrete scale's domain is the labels it has been shown, and those
 		// are the data rather than the scale — the same line an ordinal axis
 		// draws between a fixed category set and a discovered one.
@@ -254,7 +265,7 @@ func encodeSizeScale(ss scale.SizeScale) (*Scale, error) {
 // for a discrete scale, a quantity for a ramp. Vega-Lite draws the same
 // distinction with the same two words.
 func colorChannelType(s *Scale) string {
-	if s != nil && s.Type == string(scale.KindQualitative) {
+	if s != nil && (s.Type == string(scale.KindQualitative) || s.Type == string(scale.KindNamed)) {
 		return "nominal"
 	}
 	return "quantitative"
