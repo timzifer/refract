@@ -144,15 +144,24 @@ func (g *hexGeom) Build(b ir.Backend, f Frame) error {
 // every cell but the densest few rounds to the background.
 func (g *hexGeom) shades(sc *scratch, base ir.Color) []indexRun {
 	sc.cols = grow(sc.cols, len(sc.cells))
+	// The counts are compressed once, not twice. A colour scale carrying its
+	// own log transform is already doing exactly this job, and taking the
+	// logarithm of the cell fraction as well would spend most of the ramp on
+	// the difference between one row and two.
+	scaling := stat.Log
+	if g.cfg.colorScale != nil && scale.ColorTransformOf(g.cfg.colorScale) != scale.TransformLinear {
+		scaling = stat.Linear
+	}
 	for i, c := range sc.cells {
-		t := sc.hex.Fraction(c.Count, stat.Log)
+		t := sc.hex.Fraction(c.Count, scaling)
 		if g.cfg.colorScale != nil {
-			// The ramp is read across its own domain rather than across the
-			// counts. Nothing trained it on them — the count column does not
-			// exist in the table — and training it here would write a scale two
-			// panels may be drawing from at once.
-			lo, hi := g.cfg.colorScale.Domain()
-			sc.cols[i] = g.cfg.colorScale.Color(lo + t*(hi-lo))
+			// The ramp is read along itself rather than across the counts.
+			// Nothing trained it on them — the count column does not exist in
+			// the table — and training it here would write a scale two panels
+			// may be drawing from at once. Reading it along itself is what
+			// keeps an even step in density an even step along the ramp
+			// whatever shape the ramp has.
+			sc.cols[i] = g.cfg.colorScale.Color(scale.ColorValueOf(g.cfg.colorScale, t))
 			continue
 		}
 		// Without a ramp the cell is the layer's own colour, faded by how empty

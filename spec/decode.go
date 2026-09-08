@@ -448,11 +448,20 @@ func decodeColorScale(s Scale) (scale.ColorScale, error) {
 		// discrete range, so a hand-written document that says it means this.
 		d.Kind = scale.KindQualitative
 	case "", string(scale.KindSequential):
+	case string(scale.TransformLog), string(scale.TransformSymLog):
+		// Vega-Lite spells a colour scale's transform as its type, so a
+		// hand-written document that says "log" means a sequential ramp run
+		// logarithmically. An explicit transform below still wins.
+		d.Transform = scale.ColorTransform(s.Type)
 	default:
 		// A kind this package did not define; scale.ColorFromDesc decides
 		// whether anyone registered it.
 		d.Kind = scale.ColorKind(s.Type)
 	}
+	if s.Transform != "" {
+		d.Transform = scale.ColorTransform(s.Transform)
+	}
+	d.Base, d.Constant = s.Base, s.Constant
 	if s.Center != nil {
 		d.Center = *s.Center
 	}
