@@ -1,0 +1,32 @@
+name: Release dependencies
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: Module to check before tagging (prerequisites must be published)
+        type: choice
+        default: all
+        options: [all, '.', backend/gg, arrow/v18, backend/gg/gpu, backend/window]
+  push:
+    tags: ['v*', 'backend/gg/v*', 'backend/gg/gpu/v*', 'backend/window/v*', 'arrow/v18.*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: 'off'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Check the selected module against published dependencies
+        env:
+          SELECTED_MODULE: ${{ inputs.module || 'all' }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: go run ./internal/cmd/releasecheck -module "$SELECTED_MODULE" -tag "$RELEASE_TAG"

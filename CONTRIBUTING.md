@@ -382,6 +382,30 @@ ruleset's bypass at the new key's id.
 
 ## Releasing
 
+Before tagging **each module**, run its release check from the repository root:
+
+```sh
+go run ./internal/cmd/releasecheck -module .
+go run ./internal/cmd/releasecheck -module backend/gg
+go run ./internal/cmd/releasecheck -module arrow/v18
+go run ./internal/cmd/releasecheck -module backend/gg/gpu
+go run ./internal/cmd/releasecheck -module backend/window
+```
+
+The tool builds, tests and vets with `GOWORK=off`, `CGO_ENABLED=0` and
+`-mod=readonly`, and refuses `replace` directives. A green workspace test is
+not evidence that a nested module can use the version in its `require` line.
+The **Release dependencies** workflow can run the same check manually on a
+candidate branch; tag pushes also check the module that tag releases. That
+post-tag check is a backstop, not a substitute for the pre-tag command.
+
+The current Arrow development code needs the new core null APIs, while its
+manifest still names v1.2.0. Its isolated check therefore correctly fails until
+the next core is published and the nested manifests are updated in the order
+below. Do not silence this with a workspace, a local replacement or a tag that
+does not exist. `-module all` is useful after every prerequisite is published;
+checking only the core first allows a staged release to get started.
+
 The modules are tagged in dependency order, because each nested module
 requires the core — and `backend/window` and `backend/gg/gpu` require
 `backend/gg` — at a published tag rather than through a `replace`. A tag has
@@ -392,7 +416,8 @@ to exist before a `require` line can name it.
 2. **The `require` lines.** In `backend/gg/go.mod`, `backend/window/go.mod`,
    `backend/gg/gpu/go.mod` and `arrow/v18/go.mod`, bump
    `github.com/timzifer/refract` to the tag from step 1 — and in the last
-   three, `github.com/timzifer/refract/backend/gg` to the tag it is about to
+   two (`backend/gg/gpu` and `backend/window`),
+   `github.com/timzifer/refract/backend/gg` to the tag it is about to
    get. Run `go mod tidy` in each and commit. `go.work` overrides these during
    development, so the change is invisible locally; it is what a downstream
    `go get` resolves.
