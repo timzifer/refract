@@ -211,7 +211,14 @@ picture here cannot drift away from the code that produced it.
   entry per category
   ([ADR 0020](docs/adr/0020-discrete-colour-and-multi-entry-legends.md)).
   Ramps interpolate in linear light, so a gradient has no dark band through its
-  middle.
+  middle. A ramp can run logarithmically across its domain (`scale.ColorLog`,
+  `scale.ColorSymLog`) — without it a heatmap over counts spanning orders of
+  magnitude rounds every cell but the densest few to one end — or be cut into
+  classes so that a colour names an interval rather than a shade to estimate:
+  `scale.Threshold` for boundaries that come from outside the data,
+  `scale.Quantize` for equal ones, `scale.Quantile` for equally many
+  observations in each. A classed scale's colourbar is drawn in bands and
+  labelled at the boundaries.
 - **Coordinate systems** — `coord.Cartesian` is the identity and the default;
   `coord.Polar` wraps one axis around a circle and reads the other as a radius,
   which turns the marks that already exist into pie, donut, radar, rose, wind
