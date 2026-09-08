@@ -36,6 +36,19 @@ const (
 	Select = interact.Select
 )
 
+// The mark kinds a hit can report. See [interact.Kind].
+const (
+	// Vertex is a point a layer drew. See [interact.Vertex].
+	Vertex = interact.Vertex
+	// Area is a filled shape. See [interact.Area].
+	Area = interact.Area
+	// Label is text a layer drew. See [interact.Label].
+	Label = interact.Label
+	// Guide is a row of the legend, which is furniture a reader can act on.
+	// See [interact.Guide] and [Live.Toggle].
+	Guide = interact.Guide
+)
+
 // On registers a handler for an event kind.
 //
 //	p.On(refract.Hover, func(ev refract.Event) {
@@ -319,6 +332,12 @@ func (l *Live) Rebuild() error {
 	if l.chart.Overlay != nil {
 		c.Overlay = l.chart.Overlay
 	}
+	// So does a hidden series. A rebuild picks up a layer the caller added; it
+	// is not a caller saying they want back the ones a reader put away. The
+	// state is kept by index, so adding a layer keeps the earlier ones hidden
+	// and inserting one in the middle does not — which is why inserting is
+	// worth avoiding while anything is hidden.
+	c.Hidden = l.chart.Hidden
 	// A Live that has been resized keeps its size across a rebuild: the plot
 	// still says what it was built with, and the surface is the size it is.
 	c.Width, c.Height = l.width, l.height
@@ -436,9 +455,9 @@ func (l *Live) Move(x, y float64) Event {
 		l.panel = -1
 		if l.over {
 			l.over = false
-			return l.fire(Event{Kind: Leave, Point: pt, Panel: -1})
+			return l.fire(l.withGuide(Event{Kind: Leave, Point: pt, Panel: -1}, pt))
 		}
-		return l.fire(Event{Kind: Hover, Point: pt, Panel: -1})
+		return l.fire(l.withGuide(Event{Kind: Hover, Point: pt, Panel: -1}, pt))
 	}
 	l.over, l.panel = true, panel
 	ev := Event{Kind: Hover, Point: pt, Panel: panel}
@@ -628,6 +647,21 @@ func seenLayer(refs []RowRef, panel, layer int) bool {
 		}
 	}
 	return false
+}
+
+// withGuide fills in a hit on a legend row for an event outside every panel.
+//
+// A pointer in the margins is over no data, which is why hovering there
+// reports no hit — but a legend lives in the margins and is the one piece of
+// furniture a reader expects to act on. So the margins are searched for a
+// guide and for nothing else: a mark near the panel edge is reachable from
+// just outside it by the hit tolerance, and reporting one here would make a
+// hover in the margin mean two different things.
+func (l *Live) withGuide(ev Event, pt ir.Point) Event {
+	if hit, ok := l.idx.At(pt, 0); ok && hit.Kind == interact.Guide {
+		ev.Hit, ev.Found = hit, true
+	}
+	return ev
 }
 
 func (l *Live) fire(ev Event) Event {

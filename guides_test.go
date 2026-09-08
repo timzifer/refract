@@ -1,10 +1,17 @@
 package refract_test
 
-// Guides are furniture. ADR 0015 says so — "the grid, the axes, the titles and
-// the guides are furniture; a pointer landing on a grid line has not landed on
-// anything a reader would ask about" — and until render gained EndData the
-// index did not know when the data pass ended, so a legend's swatches were
-// recorded as marks of whichever layer was drawn last.
+// Guides are furniture, and one of them answers to a pointer.
+//
+// ADR 0015 said a pointer landing on a guide has not landed on anything a
+// reader would ask about, and until render gained EndData the index did not
+// even know when the data pass ended — so a legend's swatches were being
+// recorded as *marks* of whichever layer was drawn last, which is the thing
+// that rule was against.
+//
+// A legend is now indexed on purpose, and the rule still holds, because what
+// it is indexed as is different: kind Guide, in panel -1, carrying the layer
+// it stands for rather than a value read off an axis. ADR 0046's revisit
+// clause is what these two tests are the boundary of.
 
 import (
 	"testing"
@@ -36,17 +43,51 @@ func legendChart(t *testing.T, legend bool) *refract.Live {
 	return live
 }
 
-func TestAGuideIsNotIndexed(t *testing.T) {
-	without := legendChart(t, false).Index().MarkCount()
-	with := legendChart(t, true).Index().MarkCount()
-	if with != without {
-		t.Errorf("a legend added %d marks to the index; a swatch is furniture, not a mark", with-without)
+// A legend contributes rows a pointer can find, and nothing that reads as data.
+func TestAGuideIsIndexedAsAGuideAndNotAsAMark(t *testing.T) {
+	bare := legendChart(t, false)
+	withLegend := legendChart(t, true)
+
+	if got, want := withLegend.Index().MarkCount(), bare.Index().MarkCount()+1; got != want {
+		t.Errorf("marks = %d, want %d — one row for the one series", got, want)
+	}
+
+	// The one it added is a Guide. Everything else is what it always was.
+	ix := withLegend.Index()
+	area := ix.Panels()[0].Area
+	var guides int
+	for x := float32(2); x < 600; x += 2 {
+		for y := float32(2); y < 300; y += 2 {
+			pt := irPt(x, y)
+			hit, ok := ix.At(pt, 0)
+			if !ok {
+				continue
+			}
+			if hit.Kind == interact.Guide {
+				guides++
+				if area.Contains(pt) {
+					t.Fatalf("a guide was hit inside the panel at (%v,%v)", x, y)
+				}
+				if hit.Series != "a" {
+					t.Errorf("the guide reports series %q, want %q", hit.Series, "a")
+				}
+				if hit.Layer != 0 {
+					t.Errorf("the guide reports layer %d, want 0", hit.Layer)
+				}
+				if hit.Panel != -1 {
+					t.Errorf("the guide reports panel %d, want -1 — a legend is the chart's", hit.Panel)
+				}
+			}
+		}
+	}
+	if guides == 0 {
+		t.Error("the legend is not reachable by a pointer")
 	}
 }
 
 // Index.At is reachable without going through Live, which gates on the panel —
 // so the index has to be right rather than merely unreachable.
-func TestNothingOutsideAPanelIsHit(t *testing.T) {
+func TestNothingOutsideAPanelIsHitAsData(t *testing.T) {
 	live := legendChart(t, true)
 	ix := live.Index()
 	// Grown by the hit tolerance: a mark just inside the panel edge is meant
@@ -64,8 +105,14 @@ func TestNothingOutsideAPanelIsHit(t *testing.T) {
 			if near.Contains(pt) {
 				continue
 			}
-			if hit, ok := ix.At(pt, 0); ok {
-				t.Fatalf("a point well outside every panel, at (%v,%v), hit layer %d (%v) — furniture is being indexed",
+			hit, ok := ix.At(pt, 0)
+			if !ok {
+				continue
+			}
+			// A legend row is reachable and is meant to be. Anything else out
+			// here would be furniture indexed as data.
+			if hit.Kind != interact.Guide {
+				t.Fatalf("a point well outside every panel, at (%v,%v), hit layer %d as %v — furniture is being indexed as data",
 					x, y, hit.Layer, hit.Kind)
 			}
 		}

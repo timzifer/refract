@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320" role="img" aria-labelledby="refract-title">
+<title id="refract-title">One series put away</title>
+<defs>
+<clipPath id="c1"><path d="M50.332,32.8 L583.328,32.8 L583.328,271.725 L50.332,271.725 Z"/></clipPath>
+</defs>
+<path d="M0,0 L640,0 L640,320 L0,320 Z" fill="#ffffff"/>
+<polyline fill="none" points="50.332,32.8 50.332,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="183.581,32.8 183.581,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="316.83,32.8 316.83,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="450.079,32.8 450.079,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="583.328,32.8 583.328,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,271.725 583.328,271.725" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,192.083 583.328,192.083" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,112.442 583.328,112.442" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,32.8 583.328,32.8" stroke="#dddddd"/>
+<polyline fill="none" points="50.332,271.725 583.328,271.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,32.8 50.332,271.725" stroke="#333333"/>
+<polyline fill="none" points="50.332,271.725 50.332,276.725" stroke="#333333"/>
+<text x="50.332" y="280.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">0</text>
+<polyline fill="none" points="183.581,271.725 183.581,276.725" stroke="#333333"/>
+<text x="183.581" y="280.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">1</text>
+<polyline fill="none" points="316.83,271.725 316.83,276.725" stroke="#333333"/>
+<text x="316.83" y="280.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">2</text>
+<polyline fill="none" points="450.079,271.725 450.079,276.725" stroke="#333333"/>
+<text x="450.079" y="280.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">3</text>
+<polyline fill="none" points="583.328,271.725 583.328,276.725" stroke="#333333"/>
+<text x="583.328" y="280.725" font-family="sans-serif" font-size="11" text-anchor="middle" dominant-baseline="hanging" fill="#555555">4</text>
+<polyline fill="none" points="45.332,271.725 50.332,271.725" stroke="#333333"/>
+<text x="41.332" y="271.725" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">0</text>
+<polyline fill="none" points="45.332,192.083 50.332,192.083" stroke="#333333"/>
+<text x="41.332" y="192.083" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">10</text>
+<polyline fill="none" points="45.332,112.442 50.332,112.442" stroke="#333333"/>
+<text x="41.332" y="112.442" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">20</text>
+<polyline fill="none" points="45.332,32.8 50.332,32.8" stroke="#333333"/>
+<text x="41.332" y="32.8" font-family="sans-serif" font-size="11" text-anchor="end" dominant-baseline="central" fill="#555555">30</text>
+<text x="316.83" y="23.488" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#1a1a1a">One series put away</text>
+<text x="316.83" y="305.516" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333">x</text>
+<text x="20.616" y="152.262" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#333333" transform="rotate(-90 20.616 152.262)">y</text>
+<g clip-path="url(#c1)">
+<polyline fill="none" points="50.332,192.083 183.581,80.585 316.83,152.263 450.079,48.728 583.328,120.406" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<polyline fill="none" points="597.328,143.712 609.328,143.712" stroke="#0072b2" stroke-width="1.75" stroke-linecap="round"/>
+<text x="615.328" y="143.712" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333">a</text>
+<polyline fill="none" points="597.328,160.812 609.328,160.812" stroke="#e69f00" stroke-opacity="0.33" stroke-width="1.75" stroke-linecap="round"/>
+<text x="615.328" y="160.812" font-family="sans-serif" font-size="12" dominant-baseline="central" fill="#333333" fill-opacity="0.33">b</text>
+</svg>

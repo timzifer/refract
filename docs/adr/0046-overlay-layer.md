@@ -79,8 +79,12 @@ been a visible one.
 
 `render.EndData` is the fix: an optional interface beside `Observer`, in the
 shape `LayerAxes` already established, called once after the last layer.
-`interact.Index` implements it by closing the layer. `TestAGuideIsNotIndexed`
-and `TestNothingOutsideAPanelIsHit` pin both halves.
+`interact.Index` implements it by closing the layer.
+`TestAGuideIsIndexedAsAGuideAndNotAsAMark` and
+`TestNothingOutsideAPanelIsHitAsData` pin both halves — under those names since
+[ADR 0047](0047-clickable-legend.md), which made a legend row findable on
+purpose and under a kind of its own. The rule they enforce is unchanged: no
+piece of furniture is indexed as data.
 
 ### The built-ins are structs whose zero value draws nothing
 
@@ -140,17 +144,19 @@ reason.
   everything the built-ins use is exported, so a caller wanting a scrubber, a
   range band or a magnifier writes one and installs it the same way.
 - Nothing about hit-testing changed for a chart that has no overlay, except
-  that a legend swatch is no longer indexed — which is a fix, and which lowers
-  `Index.MarkCount` for a chart with a guide.
+  that a legend swatch is no longer indexed *as a mark* — which is the fix. It
+  is indexed as a `Guide` since [ADR 0047](0047-clickable-legend.md), which is
+  a different thing and reachable only by asking for it.
 
 ## Revisit if
 
-An overlay wants to be hit-testable after all — a legend whose entries can be
-clicked to hide a series is the case, and it is a real one. It is not this
-record's: a clickable legend is furniture that answers to a pointer, which
-means the *guides* would need to be announced, with their own kind, so that a
-hit on one is distinguishable from a hit on a mark. That is a wider change than
-adding a second reason to index something.
+~~An overlay wants to be hit-testable after all — a legend whose entries can be
+clicked to hide a series is the case, and it is a real one.~~ **Answered by
+[ADR 0047](0047-clickable-legend.md).** It went the way this record predicted:
+the guides are announced, through an optional `render.LegendEntry` beside
+`Observer`, and indexed under a kind of their own so that a hit on a swatch is
+distinguishable from a hit on the thing the swatch stands for. The overlay
+itself is still not hit-testable and there is still no reason for it to be.
 
 An overlay also cannot currently read the rows a layer drew — it is given
 scales and areas, not marks. A tooltip that wanted to snap to the nearest point

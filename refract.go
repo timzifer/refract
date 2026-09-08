@@ -185,6 +185,7 @@ type Plot struct {
 	serial bool
 
 	overlay render.Overlay
+	hidden  []bool
 
 	handlers map[EventKind][]func(Event)
 }
@@ -502,6 +503,28 @@ func (p *Plot) Layers() []geom.Geom { return append([]geom.Geom(nil), p.layers..
 // a pointer over it.
 func (p *Plot) Overlay(o Overlay) *Plot { p.overlay = o; return p }
 
+// HideLayer turns a layer off, or back on, by its index among the plot's
+// layers. A hidden layer is not drawn, still trains its scales, and still
+// appears in the legend, dimmed.
+//
+// It is on the plot as well as on [Live] for the reason [Plot.Overlay] is:
+// otherwise [Plot.Render] and [Live.Draw] would disagree about what a chart
+// is, and exporting a chart with a series put away would be impossible from
+// the model alone. [Live.Hide] is the one a legend click calls, and it starts
+// from whatever the plot said.
+//
+// An index outside the plot's layers is ignored.
+func (p *Plot) HideLayer(layer int, hide bool) *Plot {
+	if layer < 0 || layer >= len(p.layers) {
+		return p
+	}
+	for len(p.hidden) <= layer {
+		p.hidden = append(p.hidden, false)
+	}
+	p.hidden[layer] = hide
+	return p
+}
+
 // Facet splits the plot into small multiples, one panel per value of a
 // column. See [facet.Wrap] and [facet.Grid].
 //
@@ -610,6 +633,10 @@ func (p *Plot) describe() (render.Chart, error) {
 		Math:        p.math,
 		Serial:      p.serial,
 		Overlay:     p.overlay,
+		// Copied: a Live mutates its chart's slice when a reader hides a
+		// series, and that must not reach back into the plot every other Live
+		// of it is built from.
+		Hidden: append([]bool(nil), p.hidden...),
 	}
 	if len(p.tracks) > 0 {
 		if p.facet != nil {

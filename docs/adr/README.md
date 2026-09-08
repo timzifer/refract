@@ -56,6 +56,7 @@ depends on.
 | [0044](0044-transitions.md) | A transition is a keyed join blended in data space, driven by the host's clock | Accepted | — |
 | [0045](0045-linked-views.md) | Linked views are the host's; refract supplies the two ends of the wire | Accepted | — |
 | [0046](0046-overlay-layer.md) | The chart owns an overlay, drawn last and announced to nobody | Accepted | — |
+| [0047](0047-clickable-legend.md) | A legend answers to a pointer; hiding is the chart's, toggling the caller's | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the

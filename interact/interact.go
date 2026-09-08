@@ -47,7 +47,26 @@ const (
 	Area
 	// Label is text a layer drew.
 	Label
+	// Guide is a row of the legend: furniture a reader can act on, rather than
+	// a mark. It is last because it is not data — a hit on it says which
+	// series a swatch stands for, not what is under the pointer.
+	Guide
 )
+
+// String names the kind, for tests and error messages.
+func (k Kind) String() string {
+	switch k {
+	case Vertex:
+		return "vertex"
+	case Area:
+		return "area"
+	case Label:
+		return "label"
+	case Guide:
+		return "guide"
+	}
+	return "unknown"
+}
 
 // Hit is what the pointer found.
 type Hit struct {
@@ -66,6 +85,11 @@ type Hit struct {
 	// Distance is how far At is from the point that was asked about, in
 	// device units. It is zero for a point inside an area.
 	Distance float32
+
+	// Hidden reports whether the series this hit's layer is currently turned
+	// off, and is only meaningful when Kind is [Guide]. It is what lets a
+	// handler say "show" or "hide" rather than having to ask the chart.
+	Hidden bool
 
 	// Row is the source row behind the mark, or -1 when it is not known.
 	//
@@ -159,6 +183,9 @@ type mark struct {
 	label        string
 	lo, hi       int // into pts
 	bounds       ir.Rect
+	// hidden is whether the series a Guide mark stands for is currently
+	// turned off. It is meaningless on any other kind.
+	hidden bool
 
 	// x and y are the scales this mark was drawn against, when they are not
 	// the panel's own — a layer bound to a secondary axis reads a different
@@ -247,6 +274,24 @@ func (ix *Index) Layer(i int, label string) {
 // outside every panel — but [Index.At] is reachable on its own, and an overlay
 // draws *inside* a panel, where it would be hit.
 func (ix *Index) EndData() { ix.open = false }
+
+// LegendEntry implements the render package's optional LegendEntry: it records
+// where a row of the legend was drawn, so that a pointer over it can be told
+// which series it stands for.
+//
+// The row is indexed as a mark of kind [Guide] in panel -1, because a legend
+// belongs to the chart rather than to a panel and inverting its position
+// through a panel's scales would report a value from a place no value was
+// drawn. [Hit.X] and [Hit.Y] are therefore zero on a guide hit; [Hit.Layer]
+// and [Hit.Series] are what it is for.
+func (ix *Index) LegendEntry(layer int, label string, area ir.Rect, hidden bool) {
+	lo := len(ix.pts)
+	ix.pts = append(ix.pts, area.Min, area.Max)
+	ix.marks = append(ix.marks, mark{
+		panel: -1, layer: layer, kind: Guide, label: label,
+		lo: lo, hi: len(ix.pts), bounds: area, hidden: hidden,
+	})
+}
 
 // LayerAxes implements the render package's LayerAxes: it records which scales
 // the layer about to be drawn reads.
@@ -339,6 +384,7 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 		best, found = Hit{
 			Panel: m.panel, Layer: m.layer, Series: m.label,
 			Kind: m.kind, At: at, Distance: d, Row: -1,
+			Hidden: m.hidden,
 		}, true
 		bestX, bestY = m.x, m.y
 	}
@@ -510,7 +556,7 @@ func (ix *Index) rowAt(h Hit, pt ir.Point, bounds ir.Rect) int {
 
 // ranked orders the kinds from most specific to least. A vertex is a row; an
 // area is a shape a row produced; a label is writing about one.
-var ranked = [...]Kind{Vertex, Area, Label}
+var ranked = [...]Kind{Vertex, Area, Label, Guide}
 
 func rank(k Kind) int {
 	for i, r := range ranked {
@@ -536,6 +582,19 @@ func (ix *Index) panelOf(i int) *Panel {
 // is and the middle of one is nowhere in particular.
 func (m mark) nearest(pts []ir.Point, pt ir.Point, tol float32) (ir.Point, float32, bool) {
 	switch m.kind {
+	case Guide:
+		// A legend row is its rectangle and nothing subtler: it is a target
+		// rather than a shape, so being in the box is the whole test. The
+		// position reported is the middle of the row, which is where a caller
+		// putting something beside it would want to anchor.
+		if !m.bounds.Contains(pt) {
+			return ir.Point{}, 0, false
+		}
+		mid := ir.Point{
+			X: (m.bounds.Min.X + m.bounds.Max.X) / 2,
+			Y: (m.bounds.Min.Y + m.bounds.Max.Y) / 2,
+		}
+		return mid, 0, true
 	case Area, Label:
 		if !m.bounds.Contains(pt) || !inside(pts[m.lo:m.hi], pt) {
 			return ir.Point{}, 0, false

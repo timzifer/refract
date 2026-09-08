@@ -1329,11 +1329,45 @@ disappears is a full repaint**, because it changes how many calls a frame has
 and `ir.Damage` compares them call for call; one that only moves is a damage
 rectangle, which is the case a crosshair following a pointer is in. An overlay
 is **not in the JSON spec**: where a pointer is is not a fact about a chart.
-A **legend is still not clickable** — that would mean announcing the guides as
-hittable furniture, which is a wider change than adding a second reason to
-index something. And an overlay is given scales and areas but **not the marks**:
+An overlay is given scales and areas but **not the marks**:
 a tooltip that snaps to the nearest point gets that from `interact.Index` on the
 caller's side, where the hit test already lives. ✔
+
+### v1.9 — A legend you can click — **shipped**
+
+The one piece of furniture a reader expects to act on. v1.8 said a legend was
+not clickable because that would mean announcing the guides as hittable, and
+this is that change: `render.LegendEntry` reports each row — which layer, what
+label, what rectangle, whether it is off — and `interact` indexes them under a
+kind of their own, `Guide`. The separation is the point rather than an
+implementation detail: a hit on a swatch must not be confusable with a hit on
+the thing the swatch stands for, so a guide hit carries a layer and a series and
+deliberately carries no value read off an axis.
+See [ADR 0047](docs/adr/0047-clickable-legend.md).
+
+Hiding is `render.Chart.Hidden`, indexed by layer, because visibility is a
+statement about the chart rather than about a geom — a geom that knew whether
+it was being shown would be carrying a fact about a reader. A hidden layer is
+not drawn and is not announced, so a pointer where it used to be finds what is
+behind it; it still trains its scales, and it keeps its legend row, dimmed.
+
+The axes deliberately do not move. A toggle is a reading aid — let me see this
+one without that one on top — and an axis that rescaled under it would make the
+two readings incomparable, which is what the toggle was for. A caller who means
+"this series is not part of this chart" says that with `Plot.SetLayers`.
+
+And refract does not wire the click. `Live.Toggle`, `Hide`, `IsHidden` and
+`ShowAll` are the mechanism, and four lines in a Click handler are the policy —
+because a legend that always toggled would be wrong for one that selects rather
+than filters, one where a series opens something else, or one where only one
+may be shown at a time.
+
+Not in v1.9. A layer contributing several legend rows **toggles as one**: the
+rows are one drawing and there is no way to draw a third of it. A **colourbar
+and a size key are not clickable** — a colourbar row is a value rather than a
+series, so it has no layer to toggle and would need a vocabulary of its own.
+And a hidden layer **still costs its Train**, which is what keeps the axes
+still: hiding a series does not make a slow chart fast, removing it does. ✔
 
 ### Beyond v1.0
 

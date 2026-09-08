@@ -27,8 +27,12 @@ import (
 type guide struct {
 	kind layout.GuideKind
 
-	// entries is a legend's rows.
+	// entries is a legend's rows, and layers is the layer each row came from —
+	// parallel to entries, so that a click on a row knows what it toggles. A
+	// layer that contributes several rows appears several times, and a row
+	// nothing can be attributed to carries -1.
 	entries []geom.LegendEntry
+	layers  []int
 	// color is a colourbar's guide, and size a size key's.
 	color geom.ColorGuide
 	size  geom.SizeGuide
@@ -51,8 +55,8 @@ type sizeSample struct {
 // with all three is laid out the same way every time.
 func chartGuides(c Chart, panels []Panel, th theme.Theme, area ir.Rect) []guide {
 	var out []guide
-	if es := legendEntries(c, panels, area); len(es) > 0 {
-		out = append(out, guide{kind: layout.GuideLegend, entries: es})
+	if es, from := legendEntries(c, panels, area); len(es) > 0 {
+		out = append(out, guide{kind: layout.GuideLegend, entries: es, layers: from})
 	}
 	for _, cg := range colorGuides(layersOf(panels)) {
 		out = append(out, guide{kind: layout.GuideColorbar, color: cg})
@@ -225,7 +229,7 @@ func layoutGuides(gs []guide, th theme.Theme) []layout.Guide {
 }
 
 // drawGuide paints one guide into the box the solver reserved for it.
-func drawGuide(b ir.Backend, box ir.Rect, th theme.Theme, g guide) {
+func drawGuide(b ir.Backend, box ir.Rect, th theme.Theme, g guide, obs Observer, hidden []bool) {
 	if box.Empty() {
 		return
 	}
@@ -235,7 +239,7 @@ func drawGuide(b ir.Backend, box ir.Rect, th theme.Theme, g guide) {
 	case layout.GuideSize:
 		drawSizeKey(b, box, th, g)
 	default:
-		drawLegend(b, box, th, g.entries)
+		drawLegend(b, box, th, g, obs, hidden)
 	}
 }
 

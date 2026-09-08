@@ -34,7 +34,7 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 			if c.Observer != nil {
 				c.Observer.Panel(i, areas[i], p.X, p.Y, cd)
 			}
-			if err := drawLayers(b, p, areas[i], th, c.Observer, c.RowSink, cd); err != nil {
+			if err := drawLayers(b, p, areas[i], th, c.Observer, c.RowSink, cd, c.Hidden); err != nil {
 				return err
 			}
 		}
@@ -60,7 +60,7 @@ func drawData(b ir.Backend, c Chart, panels []Panel, areas []ir.Rect, th theme.T
 			cd := p.setRange(c.coordOf(p), areas[i])
 			rec := acquireRecorder(m)
 			recs[i] = rec
-			errs[i] = drawLayers(rec, p, areas[i], th, nil, nil, cd)
+			errs[i] = drawLayers(rec, p, areas[i], th, nil, nil, cd, c.Hidden)
 		}()
 	}
 	wg.Wait()
