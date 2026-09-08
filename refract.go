@@ -184,6 +184,8 @@ type Plot struct {
 
 	serial bool
 
+	overlay render.Overlay
+
 	handlers map[EventKind][]func(Event)
 }
 
@@ -486,6 +488,20 @@ func (p *Plot) SetLayers(gs ...geom.Geom) *Plot {
 // ones that were there and replacing the rest means being able to see them.
 func (p *Plot) Layers() []geom.Geom { return append([]geom.Geom(nil), p.layers...) }
 
+// Overlay installs something to paint over the finished chart — a crosshair, a
+// tooltip, a brush rectangle. Passing nil removes it. See [Overlay].
+//
+// It is on the plot as well as on [Live] so that the two agree about what a
+// chart is: an overlay that only existed on a live surface would make
+// [Plot.Render] and [Live.Draw] draw different pictures of the same model, and
+// exporting what a reader is looking at — the chart with its crosshair where
+// they left it — would be impossible from the model alone.
+//
+// [Live.Overlay] overrides this for one surface. A plot that names one and a
+// Live that names another draws the Live's, because the Live is the thing with
+// a pointer over it.
+func (p *Plot) Overlay(o Overlay) *Plot { p.overlay = o; return p }
+
 // Facet splits the plot into small multiples, one panel per value of a
 // column. See [facet.Wrap] and [facet.Grid].
 //
@@ -593,6 +609,7 @@ func (p *Plot) describe() (render.Chart, error) {
 		Description: p.Description(),
 		Math:        p.math,
 		Serial:      p.serial,
+		Overlay:     p.overlay,
 	}
 	if len(p.tracks) > 0 {
 		if p.facet != nil {

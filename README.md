@@ -312,6 +312,12 @@ picture here cannot drift away from the code that produced it.
   whole primitive ([ADR 0043](docs/adr/0043-mark-identity.md),
   [ADR 0044](docs/adr/0044-transitions.md)).
 
+- **An overlay the chart owns** — `refract.Crosshair`, `Highlight`, `Brush` and
+  `Tooltip` paint over the finished chart, after the guides and clipped by
+  nothing. What an overlay draws is not hit-testable, because a tooltip a
+  pointer can hit is a tooltip that flickers
+  ([ADR 0046](docs/adr/0046-overlay-layer.md)).
+
 Deliberately **not** here: geographic projections, node-link and Venn diagrams,
 contour plots, 3D, and any engine that links two charts together — a link is a
 statement about two charts and this model is about one, so the host is the link

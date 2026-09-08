@@ -153,6 +153,14 @@ func (i *Input) Move(x, y float64) error {
 	}
 	i.lastX, i.lastY = x, y
 	i.l.Move(x, y)
+	// A hover does not change the chart, so Live.Move does not draw. A chart
+	// with an overlay is the exception: the handler that just ran is where a
+	// crosshair's position or a tooltip's text is set, and nothing else is
+	// going to repaint. A frame identical to the last is still not painted, so
+	// a chart without an overlay pays nothing for this line.
+	if i.l.CurrentOverlay() != nil {
+		return i.l.Draw()
+	}
 	return nil
 }
 

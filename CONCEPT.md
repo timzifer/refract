@@ -1294,11 +1294,46 @@ answer in data space instead, so a bar grows out of its baseline. A
 **`data.Stream` has no identities to join on** and animates by being redrawn,
 which already worked. There is **no keyframe timeline**: a sequence is a list of
 two-state transitions and building one is a host-side loop, so the pair shipped
-first. There is still **no overlay layer** — bucket H's remainder — and
-therefore no tooltip, crosshair or brush rectangle refract itself draws;
-`Input.Dragged` hands the host the rectangle meanwhile. And there is **no
-`Grid.Live`**: a grid composes plots into a document, and several interactive
-charts are several `Live`s on several surfaces. ✔
+first. There was still **no overlay layer** at this point — bucket H's
+remainder — so `Input.Dragged` handed the host the rectangle and the host drew
+it; v1.8 closed that. And there is **no `Grid.Live`**: a grid composes plots
+into a document, and several interactive charts are several `Live`s on several
+surfaces. ✔
+
+### v1.8 — The overlay, and the last of bucket H — **shipped**
+
+The chart can now draw over itself. A crosshair, a ring round a mark, the
+rectangle a reader is dragging out, a tooltip sized to its own text: all of
+them are things whose positions come from a pointer rather than from a column,
+which is why none of them could be a layer and why `interact` — which only
+reads — could not draw them either. So the overlay is a stage in `render`,
+after the guides, given the backend and where the panels are.
+See [ADR 0046](docs/adr/0046-overlay-layer.md).
+
+It is announced to no observer, and that is the property that makes it usable
+rather than merely present: what an overlay draws is not hit-testable, because
+a tooltip a pointer can hit is a tooltip that flickers. Getting there needed a
+bug fixed that had been latent since v0.5 — `render.Observer` had no way to
+*close* a layer, so everything drawn after the last one was attributed to it,
+and a legend's swatches were being indexed as marks. `render.EndData` is the
+seam that closes it, in the shape `LayerAxes` already established.
+
+`Crosshair`, `Highlight`, `Brush`, `Tooltip` and `Overlays` ship in the root
+package, each a struct whose zero value draws nothing and whose colours come
+from the theme when it is not told. `Tooltip` is the only one that measures,
+and it measures through the backend that is about to draw it — which is what
+`ir.Backend.Measure` has always been for.
+
+Not in v1.8, in case they look like oversights. An overlay that **appears or
+disappears is a full repaint**, because it changes how many calls a frame has
+and `ir.Damage` compares them call for call; one that only moves is a damage
+rectangle, which is the case a crosshair following a pointer is in. An overlay
+is **not in the JSON spec**: where a pointer is is not a fact about a chart.
+A **legend is still not clickable** — that would mean announcing the guides as
+hittable furniture, which is a wider change than adding a second reason to
+index something. And an overlay is given scales and areas but **not the marks**:
+a tooltip that snaps to the nearest point gets that from `interact.Index` on the
+caller's side, where the hit test already lives. ✔
 
 ### Beyond v1.0
 
@@ -1321,10 +1356,11 @@ charts are several `Live`s on several surfaces. ✔
   matrix chart rather than a relational layout at all.
 - More stats: contour. Normal QQ plots shipped in v1.5, with a general
   quantile-function API in `stat` ([ADR 0041](docs/adr/0041-qq-plots.md)).
-- The rest of bucket H in [docs/chart-types.md](docs/chart-types.md): an
-  overlay layer the chart itself owns — a tooltip, a crosshair, a brush
-  rectangle — which is what linked brushing across panels needs before
-  anything else. Opt-in text collision avoidance shipped in v1.5
+- ~~The rest of bucket H~~ — **shipped in v1.8**: the overlay layer the chart
+  itself owns, a tooltip, a crosshair and a brush rectangle
+  ([ADR 0046](docs/adr/0046-overlay-layer.md)). Linked brushing turned out not
+  to need it first after all — v1.7 shipped the identification and the
+  selection, and this is the feedback. Opt-in text collision avoidance shipped in v1.5
   ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)); automatic avoidance
   of every kind of mark remains open.
 - ~~Animations / transitions.~~ **Shipped in v1.7.** The blocker was stated

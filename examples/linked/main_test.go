@@ -101,3 +101,23 @@ func TestNoKeyLightsNothing(t *testing.T) {
 		}
 	}
 }
+
+// The feedback is drawn by refract rather than by this program: a crosshair
+// and a tooltip on the chart being hovered, and a ring on each flow the hover
+// selected in the other.
+func TestTheOverlaysAreDrawn(t *testing.T) {
+	_, _, throughput, flow := runExample(t)
+
+	// The tooltip names the stage under the pointer and reads its values off
+	// the same event the highlight was computed from.
+	for _, want := range []string{"parse", "hour ", " rps"} {
+		if !strings.Contains(throughput, want) {
+			t.Errorf("the throughput chart's tooltip does not carry %q", want)
+		}
+	}
+	// The rings are one stroked path of three circles, at the Highlight's
+	// default width of two — which nothing else in this chart strokes at.
+	if !strings.Contains(flow, `stroke-width="2"`) {
+		t.Error("the flow chart carries no ring round the highlighted flows")
+	}
+}

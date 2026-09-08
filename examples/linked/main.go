@@ -22,6 +22,11 @@
 //     arrives on every pointer move does not accumulate one layer per move.
 //   - Live.Rebuild puts the reader's zoom back, so answering a hover does not
 //     throw away wherever they had been looking.
+//   - An overlay draws the feedback. The first chart gets a crosshair and a
+//     tooltip where the pointer is; the second gets a ring round the node the
+//     hovered stage feeds. Both are drawn by refract, over the finished chart,
+//     and neither is hit-testable — so pointing at the tooltip cannot dismiss
+//     it.
 //
 // # Why the highlight recolours rather than overdraws
 //
@@ -49,6 +54,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"strconv"
 
 	"github.com/timzifer/refract"
 	"github.com/timzifer/refract/data"
@@ -187,6 +193,24 @@ func run(throughputPath, flowPath string) (hovered string, highlighted int, err 
 		return "", 0, err
 	}
 	defer flowLive.Close()
+	// The sankey reports its rows so that the ring below can be put where a
+	// flow actually landed.
+	flowLive.TrackRows(true)
+
+	// The feedback. Both overlays are installed once and their fields moved
+	// per event: an overlay is a pointer the caller keeps, so there is nothing
+	// to re-install when the pointer moves.
+	// They go on the *plots* rather than on the Lives, so that the SVGs written
+	// out at the end carry them: Plot.Render draws the plot's overlay, and a
+	// picture of an interactive chart that left out what the reader was looking
+	// at would be a picture of a different chart. Live.Overlay is what to reach
+	// for when the overlay belongs to one surface and not to the model.
+	cross := &refract.Crosshair{Panel: -1}
+	tip := &refract.Tooltip{}
+	line.Overlay(refract.Overlays{cross, tip})
+
+	rings := &refract.Highlight{Panel: -1, Radius: 10}
+	flow.Overlay(rings)
 
 	// The wire. A hover in chart 1 arrives here with a key; what that key
 	// means in chart 2 is this program's business, and nothing refract could
@@ -194,6 +218,22 @@ func run(throughputPath, flowPath string) (hovered string, highlighted int, err 
 	line.On(refract.Hover, func(ev refract.Event) {
 		lit := flowsThrough(ev.Key)
 		hovered, highlighted = ev.Key, count(lit)
+
+		// The crosshair follows the pointer; the tooltip says what is under
+		// it. A hover with no mark under it clears both, which is one frame's
+		// full repaint — see ADR 0046 on why appearing and disappearing costs
+		// more than moving.
+		cross.At, cross.Show = ev.Point, ev.Found
+		if ev.Found {
+			tip.At = ev.Point
+			tip.Lines = []string{
+				ev.Key,
+				"hour " + strconv.FormatFloat(ev.Hit.X, 'f', 0, 64),
+				strconv.FormatFloat(ev.Hit.Y, 'f', 0, 64) + " rps",
+			}
+		} else {
+			tip.Lines = nil
+		}
 
 		// SetLayers rather than Add: this runs on every pointer move, and a
 		// chart that only ever gained layers would gain one per pixel of
@@ -203,6 +243,23 @@ func run(throughputPath, flowPath string) (hovered string, highlighted int, err 
 		// answering a hover would cost them their place in the chart.
 		if err := flowLive.Rebuild(); err != nil {
 			return
+		}
+		if err := flowLive.Draw(); err != nil {
+			return
+		}
+
+		// And a ring round each of them. Index.Locate is the inverse of a hit
+		// test: chart 1 said which stage, this program worked out which edges,
+		// and the sankey says where those edges are on screen. Nothing about
+		// the layer changed, so the ring cannot disturb the reading.
+		rings.At = rings.At[:0]
+		for row, on := range lit {
+			if !on {
+				continue
+			}
+			if at, ok := flowLive.Index().Locate(0, 0, row); ok {
+				rings.At = append(rings.At, at)
+			}
 		}
 		flowLive.Draw()
 	})

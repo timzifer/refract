@@ -235,6 +235,19 @@ func (ix *Index) Layer(i int, label string) {
 	ix.layer, ix.label, ix.open = i, label, true
 }
 
+// EndData implements the render package's optional EndData: it closes the layer
+// that was open, so that the guides drawn after the data — and the chart's
+// overlay after them — are not indexed as marks of whichever layer happened to
+// be drawn last.
+//
+// Without it the last Layer call stays the most recent thing this was told, and
+// a legend swatch is indexed as a shape belonging to that layer. That was
+// invisible for as long as the only way in was
+// [github.com/timzifer/refract.Live.Move], which does not hit-test a point
+// outside every panel — but [Index.At] is reachable on its own, and an overlay
+// draws *inside* a panel, where it would be hit.
+func (ix *Index) EndData() { ix.open = false }
+
 // LayerAxes implements the render package's LayerAxes: it records which scales
 // the layer about to be drawn reads.
 //

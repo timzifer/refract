@@ -120,6 +120,14 @@ type Chart struct {
 	//
 	// It is not called Rows because that name is already the facet grid's.
 	RowSink geom.Rows
+
+	// Overlay paints over the finished chart — a crosshair, a tooltip, a brush
+	// rectangle. It is nil for an ordinary chart and costs nothing then.
+	//
+	// It is drawn last, after the guides, and is not announced to Observer:
+	// what an overlay draws is not a mark and must not be hit-testable. See
+	// [Overlay].
+	Overlay Overlay
 }
 
 // Observer is told the structure a render is drawing, as it draws it.
@@ -168,6 +176,28 @@ type LayerAxes interface {
 	// drawn against. It is called immediately before it, and both are ranged
 	// for the panel already announced.
 	LayerAxes(x, y scale.Scale)
+}
+
+// EndData is an optional interface beside [Observer]: an observer that
+// implements it is told when the last layer has been drawn.
+//
+// It exists because [Observer] has no way to close a layer. Layer opens one and
+// the next Panel opens another, so after the final layer of the final panel the
+// most recent Layer call is still the most recent thing an observer was told —
+// and everything drawn afterwards is attributed to it. What is drawn afterwards
+// is the guides and the chart's [Overlay], neither of which is a mark: a
+// pointer landing on a legend swatch has not landed on a row of the layer that
+// happened to be drawn last, and one landing on a crosshair has not landed on
+// anything at all.
+//
+// It is optional rather than a third method on Observer for the reason
+// [LayerAxes] is: Observer is implemented outside this package and never gains
+// one ([CONCEPT §15](../CONCEPT.md#15-versioning--stability)).
+type EndData interface {
+	// EndData reports that the data pass is over and everything after it is
+	// furniture. It is called once per render, after the last layer of the
+	// last panel, and is not called at all by a render with no layers.
+	EndData()
 }
 
 // Panel is one Cartesian area of a multi-panel chart.
@@ -287,10 +317,22 @@ func Draw(b ir.Backend, c Chart) error {
 	}
 	drawBackground(b, canvas, th)
 
+	// An overlay is told the coords the panels were actually drawn in. They
+	// are collected here rather than recomputed afterwards: ranging a panel
+	// generates its ticks, and doing that twice would allocate a tick list per
+	// frame for nobody to read.
+	var coords []coord.Coord
+	if c.Overlay != nil {
+		coords = make([]coord.Coord, len(panels))
+	}
+
 	fur := acquireFurniture()
 	for i, p := range panels {
 		area := lay.Areas[i]
 		cd, xTicks, yTicks := p.rangeTo(c.coordOf(p), area, th)
+		if coords != nil {
+			coords[i] = cd
+		}
 		fur.Reset()
 		cd.Furniture(fur, area, metricsOf(th), xTicks, yTicks)
 		drawPanelFill(b, area, th)
@@ -307,6 +349,12 @@ func Draw(b ir.Backend, c Chart) error {
 	if err := drawData(b, c, panels, lay.Areas, th); err != nil {
 		return err
 	}
+	// Everything below this line is furniture. An observer that wants to know
+	// is told, so that a guide's swatch is not indexed as a mark of whichever
+	// layer was drawn last — see [EndData].
+	if e, ok := c.Observer.(EndData); ok {
+		e.EndData()
+	}
 
 	// The solver reserves one box per guide, in order, so these are parallel.
 	// The legend is rebuilt against the real plot rectangle: an entry can
@@ -322,7 +370,42 @@ func Draw(b ir.Backend, c Chart) error {
 		}
 		drawGuide(b, box, th, g)
 	}
+
+	// Last of all, over everything, clipped by nothing. See [Overlay].
+	if c.Overlay != nil {
+		c.Overlay.DrawOverlay(b, overlayFrame(panels, lay.Areas, coords, canvas, th))
+	}
 	return nil
+}
+
+// overlayFrame gathers what an overlay is told: the panels as they were
+// actually drawn, with the scales already ranged to them and the coords the
+// paint pass framed.
+//
+// The scales are the panels' own objects rather than copies. An overlay reads
+// them in the same frame that drew them, and a copy would be a copy per frame
+// of something nothing is going to change.
+func overlayFrame(panels []Panel, areas []ir.Rect, coords []coord.Coord, canvas ir.Rect, th theme.Theme) OverlayFrame {
+	f := OverlayFrame{Canvas: canvas, Theme: th}
+	if len(panels) == 0 {
+		return f
+	}
+	f.Panels = make([]OverlayPanel, 0, len(panels))
+	for i, p := range panels {
+		if i >= len(areas) {
+			break
+		}
+		op := OverlayPanel{
+			Index: i,
+			Area:  areas[i],
+			X:     p.X, Y: p.Y, Y2: p.Y2, X2: p.X2,
+		}
+		if i < len(coords) {
+			op.Coord = coords[i]
+		}
+		f.Panels = append(f.Panels, op)
+	}
+	return f
 }
 
 // coord is the chart's coordinate system, which is [coord.Cartesian] when it

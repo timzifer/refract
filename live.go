@@ -311,6 +311,14 @@ func (l *Live) Rebuild() error {
 	if l.idx.TrackingRows() {
 		c.RowSink = l.idx
 	}
+	// An overlay installed on this surface outlives a rebuild. The plot's is
+	// what a fresh chart carries, and [Live.Overlay] is what a pointer over
+	// *this* surface is driving — so the surface's wins, exactly as its doc
+	// says, rather than being reset by a rebuild the caller asked for for some
+	// other reason.
+	if l.chart.Overlay != nil {
+		c.Overlay = l.chart.Overlay
+	}
 	// A Live that has been resized keeps its size across a rebuild: the plot
 	// still says what it was built with, and the surface is the size it is.
 	c.Width, c.Height = l.width, l.height
