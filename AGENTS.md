@@ -162,6 +162,17 @@ reports: with Γ on the axes the impedance grid would have no tick behind it. It
 is also why there are no VSWR circles. Before reaching for a second grid family,
 read ADR 0033's "Revisit if" — widening this is one decision, not several.
 
+**And check first whether the family is furniture at all.**
+[ADR 0050](docs/adr/0050-locus-annotations.md) is the proposed answer for the
+four families 0033 declined, and it does not widen anything: a curve given by a
+formula rather than by a tick is an *annotation* defined in data space, so the
+coord draws it through `Point` like any other mark and `render` never sees it.
+A `Shape` may also hold more than one subpath, which is how a ternary chart's
+third grid family is drawn without a third tick list
+([ADR 0051](docs/adr/0051-barycentric-coord.md)). What genuinely still needs the
+wider seam is a *labelled* family with no tick behind it — a projection's
+graticule, a ternary's third ladder — and that is one decision for all of them.
+
 **PDF is refract's own emitter, not `gg-pdf`.** That library cannot draw
 geometry — its path operations reach a stub in `gxpdf` — so the roadmap's plan
 of routing PDF through gg's recording API would have produced pages with tick

@@ -13,6 +13,14 @@ The milestone column follows [CONCEPT §14](../CONCEPT.md). Nothing here is a
 commitment to draw every form as a named constructor; several are recipes over a
 mark that does not exist yet, and the catalogue says which.
 
+**Buckets A through H have shipped. I through M are planned and have records but
+no code** — [ADR 0050](adr/0050-locus-annotations.md) through
+[ADR 0054](adr/0054-statistical-instruments.md). They are written down early
+because three of them answer a question an earlier record explicitly left open,
+and a question answered in a conversation rather than in the repository gets
+answered again, differently, later. Each is additive and nothing in v1.7 waits
+on any of them.
+
 ## The plumbing, and what it unlocks
 
 | Piece | Status | Unlocks |
@@ -27,6 +35,11 @@ mark that does not exist yet, and the catalogue says which.
 | Distribution stats (`Bin`, KDE, hexbin, ECDF, loess) | **shipped in v0.9** — [ADR 0028](adr/0028-distribution-stats.md) | histogram, violin, hexbin, ridgeline, beeswarm, smoothing |
 | A Smith coordinate system (`coord.Smith`) + pinned ticks (`scale.TickValues`) | **shipped in v1.2** — [ADR 0033](adr/0033-smith-charts.md) | Smith chart, admittance (Y) chart, matching-network locus, impedance region |
 | Relational layouts (squarify, sankey, chord) | **shipped in v1.4** — [ADR 0039](adr/0039-relational-layouts.md) | treemap, icicle, sunburst, flame graph, sankey, alluvial, chord, arc diagram |
+| A locus: a family of curves given by a formula (`geom.Locus`) | **planned** — [ADR 0050](adr/0050-locus-annotations.md) | Nichols, VSWR circles, constant-Q arcs, the ZY overlay, Hall chart, funnel-plot contours |
+| A barycentric coord (`coord.Ternary`) | **planned** — [ADR 0051](adr/0051-barycentric-coord.md) | ternary plots, QFL and QAP diagrams, the soil texture triangle, phase and flammability diagrams, Piper |
+| A probability scale (`scale.Probability`) | **planned** — [ADR 0052](adr/0052-probability-scales.md) | Weibull, normal and Gumbel probability paper, hazard plots, a log-odds axis |
+| A deterministic tree layout (`stat.Tidy`) | **planned** — [ADR 0053](adr/0053-tidy-tree-layout.md) | dendrogram, phylogram, radial dendrogram, org and decision trees, clustered heatmap |
+| Domain reductions in `stat` | **planned** — [ADR 0054](adr/0054-statistical-instruments.md) | survival curves, the SPC family, correlograms, ROC and PR curves, Lorenz |
 
 ## A — needs a rectangle mark, and nothing else — **shipped in v0.7**
 
@@ -146,7 +159,7 @@ v0.8 — spokes and rings the coord reports and `render` strokes — and paralle
 coordinates would want the same shape of answer from a coord of its own rather
 than a second one drawn by a geom.
 
-## E — needs a relational layout — **shipped in v1.4**, except node-link and Venn
+## E — needs a relational layout — **shipped in v1.4**, except force-directed node-link and Venn
 
 Sankey/alluvial, chord, arc diagram, node-link, treemap, sunburst/icicle,
 Venn/UpSet.
@@ -165,7 +178,9 @@ be two: the legend and the hit test were already general enough, which is what
 | Sankey, alluvial | `geom.Sankey` | Cartesian |
 | Arc diagram | `geom.Arc` | Cartesian |
 | **Chord diagram** | `geom.Arc` | `coord.Polar()` + `geom.Baseline(1)` |
-| Node-link | missing | — |
+| Node-link, force-directed | missing | — |
+| Node-link, tree-shaped | `geom.Tree` — planned, [ADR 0053](adr/0053-tidy-tree-layout.md) | Cartesian |
+| **Radial dendrogram** | `geom.Tree` — planned | `coord.Polar()` |
 | Venn / UpSet | missing | — |
 
 **Four marks, six charts.** Every layout here fills the unit square — a span
@@ -194,11 +209,17 @@ Both of ADR 0012's properties hold and are tested: node and link order comes
 from first appearance in the source table, never from map iteration, and the
 sankey's relaxation runs `stat.SankeySweeps` sweeps rather than to convergence.
 
-**What is still missing, and why.** A node-link layout is a force simulation,
-whose whole method is to run until it settles — so it cannot be a pure function
-of its input at a bounded sweep count that also looks good, and ADR 0012 has to
-be answered on its own terms before it lands. Venn is a circle-packing
-optimiser, and UpSet is a matrix chart rather than a relational layout at all.
+**What is still missing, and why.** A *force-directed* node-link layout is a
+simulation whose whole method is to run until it settles — so it cannot be a
+pure function of its input at a bounded sweep count that also looks good, and
+ADR 0012 has to be answered on its own terms before it lands. Venn is a
+circle-packing optimiser, and UpSet is a matrix chart rather than a relational
+layout at all.
+
+**That sentence was one size too large, and bucket L is the correction.** It
+binds force layouts and not tree layouts: Reingold–Tilford, in Buchheim's
+linear-time form, is O(n), deterministic and bounded, which is `stat.Squarify`'s
+shape exactly. See [ADR 0053](adr/0053-tidy-tree-layout.md).
 
 ## F — needs new stats — **shipped in v0.9**, except contour
 
@@ -272,6 +293,11 @@ and a combined ZY overlay are each a third grid family, and there are two tick
 lists. That is the same constraint that chose the data model, and the two would
 be reopened together.
 
+**Bucket I is the answer, and it is not the one ADR 0033 predicted.** All three
+are curves given by a formula in impedance space rather than grid lines given by
+a tick, so they are annotations, and the Smith coord draws them without knowing
+they exist. See [ADR 0050](adr/0050-locus-annotations.md).
+
 ## H — what is not a chart type
 
 The forms above are shapes. This bucket is the other kind of gap: things a
@@ -289,6 +315,144 @@ something else.
 | A chart in a language | **shipped** — [ADR 0035](adr/0035-label-format-and-locale.md) | `scale.Locale` and `refract.Locale`. The time ladder rendered through Go's English tables and `strconv` writes a decimal point; for a German reader the second is not foreign but wrong. |
 | A PDF in a script WinAnsi cannot hold | **shipped** — [ADR 0038](adr/0038-embedded-fonts.md) | `pdf.WithFont`. The PDF emitter named the base-14 Helvetica and encoded WinAnsi, so every rune outside Latin-1 became `?` — Greek, Cyrillic, Hebrew, Thai and every CJK script, in the format people send to customers. |
 | Absence in a text or temporal column | **shipped** — [ADR 0034](adr/0034-null-values.md) | `data.Nulls`. A null read back as `""` was a band of its own on an ordinal axis and one read back as the zero time stretched a domain across two millennia. |
+
+## I — needs a locus — **planned**, [ADR 0050](adr/0050-locus-annotations.md)
+
+A **locus** is a family of curves given by a formula rather than by data: the
+set of points in the plane where some derived quantity is constant. `geom.HLine`
+is the degenerate member of the family and has been there since v0.1.
+
+The bucket exists because four charts wanted the same thing and each was
+individually too small to build machinery for. It is an annotation and not
+furniture — `render` still walks two tick lists and still labels nothing a
+scale did not write — and because a locus is defined in **data space**, the
+coordinate stage draws it. That is the v0.8 move again: a VSWR circle is not
+implemented as a circle, it is implemented as the set of impedances whose
+reflection has a given magnitude, and `coord.Smith` makes it a circle.
+
+| Chart | The family | Coord |
+|---|---|---|
+| **Nichols diagram** | closed-loop magnitude and phase, `stat.NicholsM` / `stat.NicholsN` | Cartesian — the response itself is `Line` and needs nothing |
+| VSWR circles | constant \|Γ\| | `coord.Smith` |
+| Constant-Q arcs | \|x\| = Q·r | `coord.Smith` |
+| ZY overlay | the impedance families read through y = 1/z | `coord.Smith` |
+| Hall chart | the same two circle families as Nichols, before the log-polar step | Cartesian or `coord.Polar` |
+| Funnel plot contours | pseudo-confidence limits in (effect, standard error) | Cartesian |
+| Psychrometric, Mollier | constant enthalpy, wet-bulb, relative humidity | Cartesian |
+
+**The Nichols diagram is the one to build it for.** MATLAB's Control System
+Toolbox draws it and `python-control` draws it; outside those two the form does
+not exist, and Go has nothing. The arithmetic is smaller than the picture
+suggests: both contour families are circles in the complex L-plane, and the
+chart is that plane in log-polar view.
+
+## J — needs a barycentric coord — **planned**, [ADR 0051](adr/0051-barycentric-coord.md)
+
+Three components that sum to a constant, read as one point in a triangle. It is
+the second-most-common coordinate system in the physical sciences after polar
+and the tooling for it is thin everywhere: Plotly has it, R needs `ggtern`,
+Python needs `python-ternary`, D3 and Vega-Lite have nothing, **Go has nothing
+at all**.
+
+`coord.Ternary` reads X and Y as two components and derives the third, so the
+constraint holds by construction and `scale.Scale` is untouched. The map is
+**affine**, which makes it the cheapest coord in the package — `Straight()` is
+true, an edge is a `LineTo`, `Area` is four transformed corners, `Invert` is a
+2×2 matrix.
+
+| Chart | Recipe |
+|---|---|
+| Ternary scatter, line, path | `Scatter` or `Line` in `coord.Ternary()` |
+| Ternary density | `Rect` over binned compositions — a parallelogram per cell, correctly |
+| QFL, QAP, soil texture triangle | the same, with the field's own corner labels |
+| Phase and flammability diagrams | the same, plus `Region` and `geom.Locus` for the boundaries |
+| Probability simplex | the same, over three class probabilities |
+| Piper diagram | two ternary panels and one Cartesian panel in a `Grid`, plus the projection arithmetic |
+
+**The third grid family is the interesting part.** Three labelled ladders, two
+tick lists. The constant-c lines are drawn as a second subpath inside the X
+ticks' own shapes, so they cost `Furniture` nothing; their *labels* are what is
+missing, and that is deliberately left as the case that would reopen ADR 0033's
+seam — once, together with a projection's graticule, rather than twice.
+
+## K — needs a probability scale — **planned**, [ADR 0052](adr/0052-probability-scales.md)
+
+Probability paper: an axis warped so that one distribution's cumulative
+function plots as a straight line, and the line's slope and intercept are the
+fitted parameters. `geom.QQ` from v1.5 is the same information the other way
+round — it warps the sample and leaves the axis linear, so its ladder is
+labelled in z-scores; this warps the axis, so the ladder is labelled in
+percentages, which is what the reader came for.
+
+**Every chart in this bucket is `geom.ECDF` on a warped axis. There is no new
+mark.**
+
+| Chart | Axis | Field |
+|---|---|---|
+| Normal probability plot | `scale.Probit` on Y | metrology, quality, psychometrics |
+| **Weibull plot** | `scale.CLogLog` on Y, log on X | reliability engineering |
+| Gumbel / extreme-value paper | `scale.Gumbel` on Y | hydrology, structural loads |
+| Lognormal probability plot | `scale.Probit` on Y, log on X | particle sizing, dose–response |
+| Log-odds axis | `scale.Logit` | epidemiology |
+
+Weibull analysis is the load-bearing one: the slope is the shape parameter β,
+which says whether failures are infant mortality, random or wear-out. The field
+has dedicated commercial software and no general-purpose library.
+
+## L — needs a deterministic tree layout — **planned**, [ADR 0053](adr/0053-tidy-tree-layout.md)
+
+Bucket E declined node-link layouts because a force simulation's whole method
+is to run until it settles. A **tidy tree** is not a force simulation:
+Reingold–Tilford, in Buchheim's linear-time form, is O(n), deterministic,
+bounded and a pure function of its input — `stat.Squarify`'s shape exactly.
+
+`geom.Tree` reads bucket E's own channels — `ID`, `Parent`, `Value` — and adds
+none, which is what [ADR 0039](adr/0039-relational-layouts.md)'s revisit clause
+predicted a node-link layout would read.
+
+| Chart | Mark | Coord |
+|---|---|---|
+| Dendrogram, phylogram, cladogram | `geom.Tree` with `Value` as the merge height | Cartesian |
+| Org chart, decision tree, file tree | `geom.Tree` with the depth as the height | Cartesian |
+| **Radial dendrogram** | `geom.Tree` | `coord.Polar()` |
+| **Clustered heatmap** | `Rect` plus a `geom.Tree` in a `Plot.Track` on two edges | Cartesian |
+
+The last one is the reason to build it. It is the most-published figure shape
+in bioinformatics, it needs a rectangle, a colour ramp, an ordinal axis and a
+band at a panel's edge — all four of which shipped by v0.10 — and it has been
+one missing band's worth of content away ever since.
+
+## M — needs a domain reduction — **planned**, [ADR 0054](adr/0054-statistical-instruments.md)
+
+The other buckets are missing a shape. This one is missing only **arithmetic**:
+every chart in it is drawable with marks that shipped by v0.10, and none of them
+can be drawn because refract does not hold the numbers.
+
+The admission rule, which is what the record is really for: *a reduction belongs
+in `stat` when its output is the chart's geometry, and there is no reading of it
+that is not the chart.*
+
+| Chart | Stat | Mark |
+|---|---|---|
+| Kaplan–Meier survival curve | `stat.KaplanMeier` + Greenwood | `geom.Survival`, with the risk table as a `Track` |
+| SPC: X̄-R, I-MR, p, np, c, u | `stat.ControlLimits` + the Nelson rules | `Line`, `Scatter`, `HLine` — **no mark**, because limits come from a baseline period and not from the plotted points |
+| Correlogram | `stat.ACF`, `stat.PACF` | `Bar` + `HLine` |
+| ROC, precision–recall | `stat.ROC` | `Line` |
+| Lorenz curve, Gini | `stat.Lorenz` | `Line` + `Segment` |
+
+**One of the five got cheaper while this was being written.**
+[ADR 0049](adr/0049-paths-colour-in-classes.md) taught `Line` and `Step` to
+colour from a column in classes, and an out-of-limit run on a control chart is
+exactly that: `ColorBy` over `scale.Threshold` puts the colour change on the
+limit crossing rather than on the next sample, which is the reading an SPC
+chart is for.
+
+**Four more are recipes and are named here so the catalogue stops calling them
+missing.** A **forest plot** is `ErrorBar` + `Text` + a `Track` (the pooled
+estimate is a meta-analysis and is the caller's); a **funnel plot** is a scatter
+plus bucket I's contours; a **Pareto chart** is sorted bars with the cumulative
+percentage on the secondary axis v1.3 shipped; **Bland–Altman** is a scatter and
+three reference lines.
 
 ## Already possible today
 
@@ -338,6 +502,31 @@ The dependency order is not a preference:
    ([ADR 0039](adr/0039-relational-layouts.md)): the only bucket that shared
    nothing with the others, and therefore the only one that could be moved
    without cost.
+
+The five that follow are planned. They are listed in the order their records
+argue for, which is again a dependency order rather than a preference — the
+first is the only one anything else waits on.
+
+11. **A locus** — I ([ADR 0050](adr/0050-locus-annotations.md)). First, because
+   it is the only one of the five with a dependent: bucket J keeps it as the
+   escape hatch for a fourth grid family, and bucket M's funnel plot is a
+   scatter plus one. It also closes three lines ADR 0033 left open, which no
+   other work will close.
+12. **A barycentric coord** — J ([ADR 0051](adr/0051-barycentric-coord.md)). The
+   widest genuine gap in the general-purpose world with a real user base, on the
+   seam v0.8 already cut, and the cheapest coord in the package because the map
+   is affine.
+13. **A probability scale** — K ([ADR 0052](adr/0052-probability-scales.md)).
+   The smallest diff in this list and the one with the rarest output: five
+   charts and no new mark, because every one of them is `geom.ECDF` on a warped
+   axis.
+14. **A tree layout** — L ([ADR 0053](adr/0053-tidy-tree-layout.md)). One mark,
+   four charts, and it makes bucket E's "node-link is missing" an honest
+   sentence instead of an over-broad one.
+15. **Domain reductions** — M ([ADR 0054](adr/0054-statistical-instruments.md)).
+   Last, and deliberately: it is the widest reach in the catalogue and the least
+   architecture, so nothing waits on it and it costs nothing to defer. Most of
+   the work in it is documentation.
 
 **Sankey deliberately sat last, and the order was right.** It was the single
 most-requested form in this catalogue that benefits from none of the plumbing
