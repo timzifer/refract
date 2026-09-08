@@ -23,6 +23,8 @@ type (
 	Hit = interact.Hit
 	// RowRef is where one source row landed. See [interact.RowRef].
 	RowRef = interact.RowRef
+	// Kind is what sort of thing a hit landed on. See [interact.Kind].
+	Kind = interact.Kind
 )
 
 // The event kinds. See [interact.EventKind].
@@ -44,9 +46,17 @@ const (
 	Area = interact.Area
 	// Label is text a layer drew. See [interact.Label].
 	Label = interact.Label
-	// Guide is a row of the legend, which is furniture a reader can act on.
-	// See [interact.Guide] and [Live.Toggle].
-	Guide = interact.Guide
+	// LegendRow is a row of the legend, which is furniture a reader can act
+	// on. See [interact.LegendRow] and [Live.Toggle].
+	//
+	// It is spelled with the Row because [Legend] is already the option that
+	// asks a plot for one.
+	LegendRow = interact.LegendRow
+	// Colorbar is a colourbar, or one band of a classed one. See
+	// [interact.Colorbar].
+	Colorbar = interact.Colorbar
+	// SizeKey is a row of a size key. See [interact.SizeKey].
+	SizeKey = interact.SizeKey
 )
 
 // On registers a handler for an event kind.
@@ -649,16 +659,16 @@ func seenLayer(refs []RowRef, panel, layer int) bool {
 	return false
 }
 
-// withGuide fills in a hit on a legend row for an event outside every panel.
+// withGuide fills in a hit on a guide for an event outside every panel.
 //
 // A pointer in the margins is over no data, which is why hovering there
-// reports no hit — but a legend lives in the margins and is the one piece of
-// furniture a reader expects to act on. So the margins are searched for a
-// guide and for nothing else: a mark near the panel edge is reachable from
-// just outside it by the hit tolerance, and reporting one here would make a
-// hover in the margin mean two different things.
+// reports no hit — but the guides live in the margins and are the furniture a
+// reader acts on. So the margins are searched for a guide and for nothing
+// else: a mark near the panel edge is reachable from just outside it by the
+// hit tolerance, and reporting one here would make a hover in the margin mean
+// two different things.
 func (l *Live) withGuide(ev Event, pt ir.Point) Event {
-	if hit, ok := l.idx.At(pt, 0); ok && hit.Kind == interact.Guide {
+	if hit, ok := l.idx.At(pt, 0); ok && hit.Kind.Guides() {
 		ev.Hit, ev.Found = hit, true
 	}
 	return ev

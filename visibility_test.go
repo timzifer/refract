@@ -50,7 +50,7 @@ func rowOf(t *testing.T, l *refract.Live, label string) ir.Point {
 	for x := float32(2); x < 640; x += 2 {
 		for y := float32(2); y < 320; y += 2 {
 			hit, ok := ix.At(ir.Point{X: x, Y: y}, 0)
-			if ok && hit.Kind == refract.Guide && hit.Series == label {
+			if ok && hit.Kind == refract.LegendRow && hit.Series == label {
 				return ir.Point{X: x, Y: y}
 			}
 		}
@@ -69,7 +69,7 @@ func TestALegendRowReportsItsSeries(t *testing.T) {
 	if !ok {
 		t.Fatal("no hit")
 	}
-	if hit.Kind != refract.Guide {
+	if hit.Kind != refract.LegendRow {
 		t.Errorf("kind = %v, want guide", hit.Kind)
 	}
 	if hit.Layer != 1 || hit.Series != "b" {
@@ -99,7 +99,7 @@ func TestAHoverInTheMarginFindsTheLegend(t *testing.T) {
 
 	at := rowOf(t, live, "a")
 	live.Move(float64(at.X), float64(at.Y))
-	if !got.Found || got.Hit.Kind != refract.Guide {
+	if !got.Found || got.Hit.Kind != refract.LegendRow {
 		t.Fatalf("a hover over the legend found %v (found=%v)", got.Hit.Kind, got.Found)
 	}
 	if got.Panel != -1 {
@@ -150,7 +150,7 @@ func TestAHiddenSeriesKeepsItsLegendRow(t *testing.T) {
 	}
 	at := rowOf(t, live, "b")
 	hit, ok := live.Index().At(at, 0)
-	if !ok || hit.Kind != refract.Guide {
+	if !ok || hit.Kind != refract.LegendRow {
 		t.Fatal("the hidden series lost its legend row")
 	}
 	if !hit.Hidden {
@@ -222,7 +222,7 @@ func TestToggleGoesBothWays(t *testing.T) {
 func TestClickingALegendRowHidesItsSeries(t *testing.T) {
 	p, live, _ := twoSeries(t)
 	p.On(refract.Click, func(ev refract.Event) {
-		if ev.Hit.Kind == refract.Guide {
+		if ev.Hit.Kind == refract.LegendRow {
 			live.Toggle(ev.Hit.Layer)
 		}
 	})

@@ -69,7 +69,7 @@ func main() {
 	// See docs/adr/0047-clickable-legend.md for why the four lines are here
 	// rather than behind a flag on the chart.
 	p.On(refract.Click, func(ev refract.Event) {
-		if ev.Hit.Kind == refract.Guide {
+		if ev.Hit.Kind == refract.LegendRow {
 			if err := live.Toggle(ev.Hit.Layer); err != nil {
 				js.Global().Get("console").Call("error", err.Error())
 			}

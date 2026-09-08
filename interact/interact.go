@@ -47,11 +47,32 @@ const (
 	Area
 	// Label is text a layer drew.
 	Label
-	// Guide is a row of the legend: furniture a reader can act on, rather than
-	// a mark. It is last because it is not data — a hit on it says which
-	// series a swatch stands for, not what is under the pointer.
-	Guide
+	// LegendRow is a row of the legend: furniture a reader can act on rather than
+	// data. A hit on one says which series a swatch stands for, not what is
+	// under the pointer — see [Hit.Layer] and [Hit.Series].
+	//
+	// It is spelled apart from [Label], which is text a *layer* drew and is a
+	// mark like any other.
+	LegendRow
+	// Colorbar is a colourbar, or one band of a classed one. A hit on it says
+	// which value the ramp reaches there — see [Hit.Value] — and, for a band,
+	// which class and over what interval.
+	Colorbar
+	// SizeKey is a row of a size key. A hit on it says which value the sample
+	// stands for.
+	SizeKey
 )
+
+// Guides reports whether a kind is furniture a reader can act on rather than
+// something a layer drew. It is what a handler branches on before reading the
+// fields only a guide fills in.
+func (k Kind) Guides() bool {
+	switch k {
+	case LegendRow, Colorbar, SizeKey:
+		return true
+	}
+	return false
+}
 
 // String names the kind, for tests and error messages.
 func (k Kind) String() string {
@@ -62,8 +83,12 @@ func (k Kind) String() string {
 		return "area"
 	case Label:
 		return "label"
-	case Guide:
-		return "guide"
+	case LegendRow:
+		return "legend"
+	case Colorbar:
+		return "colorbar"
+	case SizeKey:
+		return "size key"
 	}
 	return "unknown"
 }
@@ -87,9 +112,29 @@ type Hit struct {
 	Distance float32
 
 	// Hidden reports whether the series this hit's layer is currently turned
-	// off, and is only meaningful when Kind is [Guide]. It is what lets a
+	// off, and is only meaningful when Kind is [LegendRow]. It is what lets a
 	// handler say "show" or "hide" rather than having to ask the chart.
 	Hidden bool
+
+	// Value is the quantity a guide hit stands for: the value a colourbar's
+	// ramp reaches under the pointer, or the value a size key's sample is
+	// drawn for. It is meaningless for every other kind, which report their
+	// position through X and Y instead.
+	//
+	// A colourbar reads its value through the *ramp* rather than through the
+	// axis beside it. The two disagree wherever the ramp is compressed — a log
+	// ramp, a diverging one centred off zero — and the ramp is the thing the
+	// reader is pointing at.
+	Value float64
+
+	// Class is which band of a classed colourbar was hit, or -1 for a hit on a
+	// continuous ramp and for every kind that is not a colourbar.
+	//
+	// Lo and Hi are that band's interval. They are what a filter is written
+	// against: a reader clicking the third band of a quantile scale means the
+	// rows between those two numbers, not the single value under their finger.
+	Class  int
+	Lo, Hi float64
 
 	// Row is the source row behind the mark, or -1 when it is not known.
 	//
@@ -183,9 +228,19 @@ type mark struct {
 	label        string
 	lo, hi       int // into pts
 	bounds       ir.Rect
-	// hidden is whether the series a Guide mark stands for is currently
+	// hidden is whether the series a LegendRow mark stands for is currently
 	// turned off. It is meaningless on any other kind.
 	hidden bool
+
+	// cs is the colour scale a Colorbar mark reads its value through, and
+	// class, bandLo and bandHi describe the band when it is one. class is -1
+	// for a continuous ramp. They are named apart from lo and hi above, which
+	// are indices into pts and mean something else entirely.
+	cs             scale.ColorScale
+	class          int
+	bandLo, bandHi float64
+	// value is what a SizeKey mark's sample stands for.
+	value float64
 
 	// x and y are the scales this mark was drawn against, when they are not
 	// the panel's own — a layer bound to a secondary axis reads a different
@@ -285,12 +340,57 @@ func (ix *Index) EndData() { ix.open = false }
 // drawn. [Hit.X] and [Hit.Y] are therefore zero on a guide hit; [Hit.Layer]
 // and [Hit.Series] are what it is for.
 func (ix *Index) LegendEntry(layer int, label string, area ir.Rect, hidden bool) {
-	lo := len(ix.pts)
+	ix.addGuide(mark{
+		kind: LegendRow, layer: layer, label: label, hidden: hidden, class: -1,
+	}, area)
+}
+
+// ColorbarEntry implements the render package's optional ColorbarEntry: it
+// records a colourbar, or one band of a classed one.
+//
+// The colour scale is kept rather than the mapping, because where a value sits
+// on a bar is the *ramp's* answer and not the axis's — the two disagree
+// wherever the ramp is compressed. A hit inverts through it at the moment it is
+// asked, which is the same thing a hit in a panel does through the panel's
+// scales.
+func (ix *Index) ColorbarEntry(cs scale.ColorScale, class int, lo, hi float64, area ir.Rect) {
+	m := mark{
+		kind: Colorbar, layer: -1, cs: cs,
+		class: class, bandLo: lo, bandHi: hi,
+	}
+	if class >= 0 {
+		// A band is one colour standing for one interval, so there is no
+		// gradient inside it to read a position off. The value it reports is
+		// the middle of what it covers — a representative rather than a
+		// measurement — and Lo and Hi are the truth a filter is written
+		// against. Reading a position within the band would invent precision
+		// the scale threw away on purpose.
+		m.value = lo + (hi-lo)/2
+		m.cs = nil
+	}
+	ix.addGuide(m, area)
+}
+
+// SizeKeyEntry implements the render package's optional SizeKeyEntry: it
+// records one row of a size key and the value its sample stands for.
+func (ix *Index) SizeKeyEntry(value float64, label string, area ir.Rect) {
+	ix.addGuide(mark{
+		kind: SizeKey, layer: -1, label: label, value: value, class: -1,
+	}, area)
+}
+
+// addGuide records one piece of actionable furniture.
+//
+// It goes in at panel -1 with its rectangle as its two points: a guide belongs
+// to the chart rather than to a panel, and inverting its position through a
+// panel's scales would report a value from a place no value was drawn.
+func (ix *Index) addGuide(m mark, area ir.Rect) {
+	m.panel = -1
+	m.lo = len(ix.pts)
 	ix.pts = append(ix.pts, area.Min, area.Max)
-	ix.marks = append(ix.marks, mark{
-		panel: -1, layer: layer, kind: Guide, label: label,
-		lo: lo, hi: len(ix.pts), bounds: area, hidden: hidden,
-	})
+	m.hi = len(ix.pts)
+	m.bounds = area
+	ix.marks = append(ix.marks, m)
 }
 
 // LayerAxes implements the render package's LayerAxes: it records which scales
@@ -362,7 +462,8 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 	if tol <= 0 {
 		tol = DefaultTolerance
 	}
-	best := Hit{Distance: float32(math.Inf(1)), Row: -1}
+	best := Hit{Distance: float32(math.Inf(1)), Row: -1, Class: -1}
+	var bestMark mark
 	bestRank := len(ranked)
 	var bestBounds ir.Rect
 	var bestX, bestY scale.Scale
@@ -384,14 +485,30 @@ func (ix *Index) At(pt ir.Point, tol float32) (Hit, bool) {
 		best, found = Hit{
 			Panel: m.panel, Layer: m.layer, Series: m.label,
 			Kind: m.kind, At: at, Distance: d, Row: -1,
-			Hidden: m.hidden,
+			Hidden: m.hidden, Class: m.class,
+			Lo: m.bandLo, Hi: m.bandHi, Value: m.value,
 		}, true
+		bestMark = m
 		bestX, bestY = m.x, m.y
 	}
 	if !found {
 		return Hit{}, false
 	}
-	if p := ix.panelOf(best.Panel); p != nil && p.X != nil && p.Y != nil {
+	// A continuous colourbar reads its value off the ramp rather than off the
+	// axis beside it: the two disagree wherever the ramp is compressed, and
+	// the ramp is what the reader is pointing at. The bar runs bottom to top,
+	// so the top of the rectangle is position 1.
+	//
+	// A classed band carries its value already and has no cs, because a band
+	// has no gradient to read.
+	if best.Kind == Colorbar && bestMark.cs != nil {
+		bounds := bestMark.bounds
+		if h := bounds.Max.Y - bounds.Min.Y; h > 0 {
+			t := float64((bounds.Max.Y - pt.Y) / h)
+			best.Value = scale.ColorValueOf(bestMark.cs, clamp01(t))
+		}
+	}
+	if p := ix.panelOf(best.Panel); !best.Kind.Guides() && p != nil && p.X != nil && p.Y != nil {
 		// Two inversions, not one. The coord undoes the transform that placed
 		// the mark and hands back the pair the scales mapped into; the scales
 		// then say what those numbers were. Reading the device position
@@ -556,7 +673,7 @@ func (ix *Index) rowAt(h Hit, pt ir.Point, bounds ir.Rect) int {
 
 // ranked orders the kinds from most specific to least. A vertex is a row; an
 // area is a shape a row produced; a label is writing about one.
-var ranked = [...]Kind{Vertex, Area, Label, Guide}
+var ranked = [...]Kind{Vertex, Area, Label, LegendRow, Colorbar, SizeKey}
 
 func rank(k Kind) int {
 	for i, r := range ranked {
@@ -582,11 +699,11 @@ func (ix *Index) panelOf(i int) *Panel {
 // is and the middle of one is nowhere in particular.
 func (m mark) nearest(pts []ir.Point, pt ir.Point, tol float32) (ir.Point, float32, bool) {
 	switch m.kind {
-	case Guide:
-		// A legend row is its rectangle and nothing subtler: it is a target
-		// rather than a shape, so being in the box is the whole test. The
-		// position reported is the middle of the row, which is where a caller
-		// putting something beside it would want to anchor.
+	case LegendRow, Colorbar, SizeKey:
+		// A guide is its rectangle and nothing subtler: it is a target rather
+		// than a shape, so being in the box is the whole test. The position
+		// reported is the middle of the row, which is where a caller putting
+		// something beside it would want to anchor.
 		if !m.bounds.Contains(pt) {
 			return ir.Point{}, 0, false
 		}
@@ -812,3 +929,15 @@ var (
 	_ ir.Backend   = (*probe)(nil)
 	_ ir.Semantics = (*probe)(nil)
 )
+
+// clamp01 confines a ramp position to the bar, so that a pointer on the border
+// reads the end of the ramp rather than past it.
+func clamp01(t float64) float64 {
+	switch {
+	case t < 0:
+		return 0
+	case t > 1:
+		return 1
+	}
+	return t
+}

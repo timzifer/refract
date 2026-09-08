@@ -244,6 +244,39 @@ type LegendEntry interface {
 	LegendEntry(layer int, label string, area ir.Rect, hidden bool)
 }
 
+// ColorbarEntry is an optional interface beside [Observer]: an observer that
+// implements it is told where a colourbar was drawn.
+//
+// A classed colourbar reports one call per band, because a band is a discrete
+// thing a reader can mean — the rows between these two numbers. A continuous
+// one reports a single call for the whole bar, because every point of it means
+// something different and there is nothing discrete to enumerate.
+//
+// It is optional rather than a method on Observer for the reason [LayerAxes],
+// [EndData] and [LegendEntry] are: Observer never gains one.
+type ColorbarEntry interface {
+	// ColorbarEntry reports a colourbar, or one band of a classed one.
+	//
+	// cs is the scale the bar was painted from, so that a caller can ask what
+	// value the ramp reaches at a point of it — which is the ramp's answer
+	// rather than the axis's, and the two disagree wherever the ramp is
+	// compressed.
+	//
+	// class is the band's index and lo and hi its interval; class is -1 for a
+	// continuous bar, and lo and hi are then the scale's whole domain.
+	ColorbarEntry(cs scale.ColorScale, class int, lo, hi float64, area ir.Rect)
+}
+
+// SizeKeyEntry is an optional interface beside [Observer]: an observer that
+// implements it is told where each row of a size key was drawn, and what value
+// the row's sample stands for.
+type SizeKeyEntry interface {
+	// SizeKeyEntry reports one row of a size key: the value its sample is
+	// drawn for, how that value is spelled, and the rectangle the row
+	// occupies.
+	SizeKeyEntry(value float64, label string, area ir.Rect)
+}
+
 // Panel is one Cartesian area of a multi-panel chart.
 type Panel struct {
 	// Row and Col place the panel in the grid.

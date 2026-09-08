@@ -41,9 +41,15 @@ type guide struct {
 	samples []sizeSample
 }
 
-// sizeSample is one row of a size key.
+// sizeSample is one row of a size key: the value it stands for, how that value
+// is spelled, and the diameter it is drawn at.
+//
+// The value is kept beside the label because a pointer asking what a row means
+// wants the number rather than its spelling — a filter written against "1.2k"
+// is a filter against a string.
 type sizeSample struct {
 	label string
+	value float64
 	size  float32
 }
 
@@ -180,12 +186,12 @@ func sizeSamples(g geom.SizeGuide, th theme.Theme) []sizeSample {
 		if t.Minor || t.Label == "" || t.Value <= lo || t.Value > hi {
 			continue
 		}
-		out = append(out, sizeSample{label: t.Label, size: g.Scale.Size(t.Value)})
+		out = append(out, sizeSample{label: t.Label, value: t.Value, size: g.Scale.Size(t.Value)})
 	}
 	if len(out) == 0 {
 		// A domain no round number falls inside still has an extreme, and the
 		// extreme is the sample that matters.
-		return []sizeSample{{label: fmt.Sprintf("%g", hi), size: g.Scale.Size(hi)}}
+		return []sizeSample{{label: fmt.Sprintf("%g", hi), value: hi, size: g.Scale.Size(hi)}}
 	}
 	// Thin from the small end, keeping the largest: the big samples are the
 	// ones a reader measures against.
@@ -235,9 +241,9 @@ func drawGuide(b ir.Backend, box ir.Rect, th theme.Theme, g guide, obs Observer,
 	}
 	switch g.kind {
 	case layout.GuideColorbar:
-		drawColorbar(b, box, th, g.color)
+		drawColorbar(b, box, th, g.color, obs)
 	case layout.GuideSize:
-		drawSizeKey(b, box, th, g)
+		drawSizeKey(b, box, th, g, obs)
 	default:
 		drawLegend(b, box, th, g, obs, hidden)
 	}
@@ -281,7 +287,7 @@ const colorbarStops = 32
 // The bar runs bottom to top, low value at the bottom, because that is the
 // direction the Y axis beside it runs and a reader should not have to change
 // convention halfway across a chart.
-func drawColorbar(b ir.Backend, box ir.Rect, th theme.Theme, g geom.ColorGuide) {
+func drawColorbar(b ir.Backend, box ir.Rect, th theme.Theme, g geom.ColorGuide, obs Observer) {
 	tickFont := th.Font(th.TickSize)
 
 	top := guideTitle(b, box, th, g.Label)
@@ -294,10 +300,19 @@ func drawColorbar(b ir.Backend, box ir.Rect, th theme.Theme, g geom.ColorGuide) 
 		return
 	}
 
+	bars, _ := obs.(ColorbarEntry)
 	if c, classed := scale.Classed(g.Scale); classed {
-		drawClassedBar(b, bar, c)
+		drawClassedBar(b, bar, c, bars)
 	} else {
 		drawGradientBar(b, bar, g.Scale)
+		// One call for the whole bar: every point of a continuous ramp means
+		// something different, so there is nothing discrete to enumerate and
+		// the value is read back by inverting the ramp at the point asked
+		// about.
+		if bars != nil {
+			lo, hi := g.Scale.Domain()
+			bars.ColorbarEntry(g.Scale, -1, lo, hi, bar)
+		}
 	}
 
 	var p ir.Path
@@ -366,7 +381,7 @@ func colorbarTicks(cs scale.ColorScale, want int) []scale.Tick {
 // bar — classes of very different widths are what equally many observations in
 // each looks like — and a legend that hid it would be hiding the distribution
 // the scale was chosen to show.
-func drawClassedBar(b ir.Backend, bar ir.Rect, c scale.ClassedColorScale) {
+func drawClassedBar(b ir.Backend, bar ir.Rect, c scale.ClassedColorScale, bars ColorbarEntry) {
 	lo, hi := c.Domain()
 	edges := append(append(make([]float64, 0, c.Classes()+1), lo), c.Breaks()...)
 	edges = append(edges, hi)
@@ -382,6 +397,12 @@ func drawClassedBar(b ir.Backend, bar ir.Rect, c scale.ClassedColorScale) {
 		p.Reset()
 		p.Rect(band)
 		b.FillPath(&p, ir.Solid(c.Color(edges[i]+(edges[i+1]-edges[i])/2)), ir.NonZero)
+		// One call per band. A band is a discrete thing a reader can mean —
+		// the rows between these two numbers — which a point on a continuous
+		// ramp is not.
+		if bars != nil {
+			bars.ColorbarEntry(c, i, edges[i], edges[i+1], band)
+		}
 	}
 }
 
@@ -418,7 +439,7 @@ func drawGradientBar(b ir.Backend, bar ir.Rect, cs scale.ColorScale) {
 // the layer's own colour — because a key whose swatch is not the mark is a key
 // that has to be translated before it can be used. They stack smallest first,
 // which is the direction the colourbar beside them runs in.
-func drawSizeKey(b ir.Backend, box ir.Rect, th theme.Theme, g guide) {
+func drawSizeKey(b ir.Backend, box ir.Rect, th theme.Theme, g guide, obs Observer) {
 	if len(g.samples) == 0 {
 		return
 	}
@@ -434,11 +455,19 @@ func drawSizeKey(b ir.Backend, box ir.Rect, th theme.Theme, g guide) {
 	fill := ir.Fade(g.size.Color, sizeKeyFillOpacity)
 	stroke := ir.Stroke{Color: g.size.Color, Width: 1}
 
+	rows, _ := obs.(SizeKeyEntry)
+
 	x := box.Min.X + th.LegendPadding
 	y := top + th.LegendPadding
 	for _, s := range g.samples {
 		h := max(s.size, textH)
 		cy := y + h/2
+		// The row's own rectangle, spanning the key so that the gap between a
+		// sample and its label is part of the same target — the same rule a
+		// legend row follows.
+		if rows != nil {
+			rows.SizeKeyEntry(s.value, s.label, ir.R(box.Min.X, y, box.Max.X, y+h))
+		}
 		if s.size > 0 {
 			var p ir.Path
 			p.Circle(ir.Point{X: x + widest/2, Y: cy}, s.size/2)

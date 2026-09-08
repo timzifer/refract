@@ -1363,11 +1363,41 @@ than filters, one where a series opens something else, or one where only one
 may be shown at a time.
 
 Not in v1.9. A layer contributing several legend rows **toggles as one**: the
-rows are one drawing and there is no way to draw a third of it. A **colourbar
-and a size key are not clickable** — a colourbar row is a value rather than a
-series, so it has no layer to toggle and would need a vocabulary of its own.
-And a hidden layer **still costs its Train**, which is what keeps the axes
-still: hiding a series does not make a slow chart fast, removing it does. ✔
+rows are one drawing and there is no way to draw a third of it. And a hidden
+layer **still costs its Train**, which is what keeps the axes still: hiding a
+series does not make a slow chart fast, removing it does. ✔
+
+### v1.10 — The other two guides — **shipped**
+
+A colourbar and a size key answer to a pointer too, and the reason they needed
+a record of their own is that neither is a series. A legend row stands for a
+layer, which already exists and can be toggled; a colourbar stands for a
+continuum, and clicking one could mean a threshold, a range, a filter or
+nothing. So a guide hit reports a **quantity** and what the quantity means is
+the caller's — the same answer, and load-bearing rather than habitual: a band
+that always filtered would be wrong for a chart where it should select.
+
+A classed bar reports one band per class with the interval it covers, because
+a band is a discrete thing a reader can mean. A continuous one reports itself,
+and the value is read back by inverting the *ramp* — not the axis beside it,
+which disagrees wherever the ramp is compressed
+([ADR 0042](docs/adr/0042-colour-transforms-and-classes.md) settled which of
+the two the reader is looking at). A size key row reports the magnitude its
+sample stands for, which meant `sizeSample` finally carrying its value: a
+filter written against "1.2k" is a filter against a string.
+
+`interact.Kind` gained `Colorbar` and `SizeKey`, and `Guide` was renamed
+`LegendRow` — once there were three kinds of actionable furniture, the general
+name on the specific one was misleading.
+See [ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md).
+
+Not in v1.10. A band reports its **midpoint** rather than a position inside
+itself: one colour stands for one interval and there is no gradient in there to
+read, so `Lo` and `Hi` are the truth. There is **no drag for a range** on a
+continuous bar — the natural gesture, and a brush question rather than a
+vocabulary one. And an **axis is still not clickable**: it is drawn per panel
+rather than once per chart, so a hit would have to carry which panel and which
+axis, which is a third vocabulary. ✔
 
 ### Beyond v1.0
 

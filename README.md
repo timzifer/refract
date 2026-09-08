@@ -317,11 +317,13 @@ picture here cannot drift away from the code that produced it.
   nothing. What an overlay draws is not hit-testable, because a tooltip a
   pointer can hit is a tooltip that flickers
   ([ADR 0046](docs/adr/0046-overlay-layer.md)).
-- **A legend you can click** — a hit on a legend row reports which series it
-  stands for, and `Live.Toggle` puts that series away and brings it back. The
-  row stays, dimmed, and the axes do not move: a toggle is a reading aid, and
-  an axis that rescaled under it would make the two readings incomparable
-  ([ADR 0047](docs/adr/0047-clickable-legend.md)).
+- **Guides you can click** — a hit on a legend row reports which series it
+  stands for, and `Live.Toggle` puts that series away and brings it back; the
+  row stays, dimmed, and the axes do not move
+  ([ADR 0047](docs/adr/0047-clickable-legend.md)). A colourbar and a size key
+  report a *quantity* instead, because neither is a series: a classed band
+  gives the interval it covers, a continuous ramp the value under the pointer
+  ([ADR 0048](docs/adr/0048-clickable-colourbar-and-size-key.md)).
 
 Deliberately **not** here: geographic projections, node-link and Venn diagrams,
 contour plots, 3D, and any engine that links two charts together — a link is a

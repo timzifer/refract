@@ -63,7 +63,7 @@ func TestAGuideIsIndexedAsAGuideAndNotAsAMark(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if hit.Kind == interact.Guide {
+			if hit.Kind == interact.LegendRow {
 				guides++
 				if area.Contains(pt) {
 					t.Fatalf("a guide was hit inside the panel at (%v,%v)", x, y)
@@ -111,7 +111,7 @@ func TestNothingOutsideAPanelIsHitAsData(t *testing.T) {
 			}
 			// A legend row is reachable and is meant to be. Anything else out
 			// here would be furniture indexed as data.
-			if hit.Kind != interact.Guide {
+			if hit.Kind != interact.LegendRow {
 				t.Fatalf("a point well outside every panel, at (%v,%v), hit layer %d as %v — furniture is being indexed as data",
 					x, y, hit.Layer, hit.Kind)
 			}

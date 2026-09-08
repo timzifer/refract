@@ -39,7 +39,7 @@ func (l *Live) Hide(layer int, hide bool) error {
 // It is what a click on a legend row calls:
 //
 //	p.On(refract.Click, func(ev refract.Event) {
-//		if ev.Hit.Kind == refract.Guide {
+//		if ev.Hit.Kind == refract.LegendRow {
 //			live.Toggle(ev.Hit.Layer)
 //		}
 //	})
@@ -50,6 +50,10 @@ func (l *Live) Hide(layer int, hide bool) error {
 // the program's. A legend that always toggled would be wrong for a chart whose
 // legend selects rather than filters, or one where clicking a series should
 // open something.
+//
+// A [Colorbar] or a [SizeKey] hit has no Toggle: neither stands for a layer,
+// so what a click on one means is a range of values or a magnitude rather than
+// a series to put away. See [Hit.Lo], [Hit.Hi] and [Hit.Value].
 func (l *Live) Toggle(layer int) error { return l.Hide(layer, !l.IsHidden(layer)) }
 
 // IsHidden reports whether a layer is currently turned off.

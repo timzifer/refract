@@ -23,12 +23,14 @@ pointer finds a legend row, and what "hidden" means.
 it stands for, its label, the rectangle it occupies, and whether that layer is
 currently hidden.
 
-`interact.Index` indexes those as marks of a new kind, `Guide`, and that
-separation is the whole point. [ADR 0015](0015-hit-testing.md)'s rule — a
+`interact.Index` indexes those as marks of a new kind — `LegendRow`, spelled
+`Guide` when this record was written and renamed by
+[ADR 0048](0048-clickable-colourbar-and-size-key.md) once there were three of
+them — and that separation is the whole point. [ADR 0015](0015-hit-testing.md)'s rule — a
 pointer landing on a guide has not landed on anything a reader would ask about
 — still holds for *data*: a hit on a swatch must not be confusable with a hit
 on the thing the swatch stands for, or a tooltip would describe a row that is
-not under the pointer. So a `Guide` hit reports panel −1, no `X`, no `Y` and no
+not under the pointer. So the hit reports panel −1, no `X`, no `Y` and no
 `Row`; what it carries is `Layer`, `Series` and `Hidden`.
 
 The row's rectangle spans the legend's width rather than hugging the swatch, so
@@ -91,7 +93,7 @@ in the caller:
 
 ```go
 p.On(refract.Click, func(ev refract.Event) {
-	if ev.Hit.Kind == refract.Guide {
+	if ev.Hit.Kind == refract.LegendRow {
 		live.Toggle(ev.Hit.Layer)
 	}
 })
@@ -113,7 +115,7 @@ three of those being possible.
   which is what makes them independent in the data too.
 - **`Index.MarkCount` grows by one per legend row**, and a chart with a legend
   now has reachable marks outside its panels. `TestNothingOutsideAPanelIsHitAsData`
-  is the boundary: out there, a `Guide` is findable and nothing else is.
+  is the boundary: out there, a guide is findable and data is not.
 - **Hiding is per surface.** `Plot.chart()` copies the slice, so two `Live`s
   over one plot are two readers and one of them putting a series away is not
   the other one doing it. `Plot.HideLayer` is the model-level statement, for
@@ -135,7 +137,11 @@ legend. Both are reasonable and they conflict; the way out would be for
 `Hidden` to distinguish "not drawn" from "not counted", which is a second flag
 and a second set of consequences rather than a change to this one.
 
-A colourbar or a size key wanting to be clickable is the other. Neither maps to
-a layer the way a legend row does — a colourbar row is a *value*, not a series
-— so the announcement would need a vocabulary for what was clicked, and that is
-its own record.
+~~A colourbar or a size key wanting to be clickable is the other.~~ **Answered
+by [ADR 0048](0048-clickable-colourbar-and-size-key.md).** The vocabulary it
+needed turned out to be a quantity: a classed bar reports bands with the
+interval they cover, a continuous one reports the value its ramp reaches under
+the pointer, and a size key row reports the magnitude its sample stands for.
+`interact.Guide` was renamed `interact.LegendRow` there, because once there
+were three kinds of actionable furniture the general name on the specific one
+was misleading.
