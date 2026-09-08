@@ -12,7 +12,7 @@
 **A grammar-driven plotting library for Go: one model, many backends, runs
 everywhere — built on the GoGPU stack.**
 
-> **Status: v1.5.0, released.** Every milestone through **v1.0** has shipped,
+> **Status: v1.6.0, released.** Every milestone through **v1.0** has shipped,
 > and the [v1 API audit](docs/v1-api-audit.md) is in: what it asked to change
 > before the freeze has changed. The API was frozen at the `v1.0.0` tag and
 > follows semver from here, so a breaking change means a major version and a
@@ -24,14 +24,18 @@ everywhere — built on the GoGPU stack.**
 > need; `v1.4.0`, **bucket E, the last one in the catalogue**: `geom.Treemap`,
 > `geom.Icicle`, `geom.Sankey` and `geom.Arc`, which are also a sunburst and a
 > chord diagram once the coordinate stage has had them
-> ([ADR 0039](docs/adr/0039-relational-layouts.md)); and `v1.5.0`, two
+> ([ADR 0039](docs/adr/0039-relational-layouts.md)); `v1.5.0`, two
 > diagnostics — `geom.AvoidOverlap` for panel-local label placement
 > ([ADR 0040](docs/adr/0040-label-collision-avoidance.md)) and `geom.QQ` for
-> normal quantile-quantile plots ([ADR 0041](docs/adr/0041-qq-plots.md)).
+> normal quantile-quantile plots ([ADR 0041](docs/adr/0041-qq-plots.md)); and
+> `v1.6.0`, colour ramps that compress their domain (`scale.ColorLog`) or cut
+> it into classes (`scale.Threshold`, `scale.Quantize`, `scale.Quantile`),
+> which is what a heatmap over counts spanning orders of magnitude needed
+> ([ADR 0042](docs/adr/0042-colour-transforms-and-classes.md)).
 > `v1.3.0` and `v1.4.0` tag the core alone; the nested modules are tagged at
-> `v1.5.0` with it: `backend/gg` and `backend/window` share the core's version,
-> the opt-in GPU tier is at `v0.2.0`, and the Arrow adapter at `arrow/v18.0.3`,
-> whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
+> `v1.5.0` and `v1.6.0` with it: `backend/gg` and `backend/window` share the
+> core's version, the opt-in GPU tier is at `v0.3.0`, and the Arrow adapter at
+> `arrow/v18.0.4`, whose major is Arrow's. See [CONCEPT.md](CONCEPT.md) for the design and the
 > road ahead.
 
 The name is the thesis: one beam enters a prism, a spectrum comes out. One chart

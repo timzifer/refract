@@ -51,6 +51,7 @@ depends on.
 | [0039](0039-relational-layouts.md) | A relational layout is a stat in the unit square, and the coord decides what it looks like | Accepted | — |
 | [0040](0040-label-collision-avoidance.md) | Participating text layers share a deterministic panel-local label layout | Accepted | — |
 | [0041](0041-qq-plots.md) | QQ plots rank the sample before it is drawn | Accepted | — |
+| [0042](0042-colour-transforms-and-classes.md) | A colour ramp may compress its domain or cut it into classes | Accepted | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the
