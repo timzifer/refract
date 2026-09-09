@@ -182,3 +182,67 @@ accepted it names the set instead, and the sentence that matters — *a seam
 whose shape is wrong is corrected rather than papered over with a parallel
 path* — is unchanged by the list getting longer. So is the reason it is
 affordable now and will not be later.
+
+## What the resolver does, and what that costs the nested modules
+
+A major version is a different module with a different import path, so **no Go
+command ever crosses one**. `go get -u`, `go get -u ./...` and `go list -m -u
+all` upgrade within v1 and never see v2 as an update; a caller moves by running
+`go get github.com/timzifer/refract/v2` and rewriting every import line. Both
+majors may sit in one build — they are different packages, and their types do
+not interconvert — which is what makes a partial migration possible and is also
+the only way to get one by accident. The single automatic signpost is
+pkg.go.dev, which notes on the v1 page that a higher major is tagged.
+
+That is fine for the core. It is not fine for the nested modules, and ADR 0051
+currently says it is:
+
+> `backend/gg`, `backend/window` and `arrow/v18` re-require the core and tag
+> again. Their own APIs do not change.
+
+**Their own APIs do change**, because each names a core type in its signatures:
+
+| Module | Exported signature | Core type |
+|---|---|---|
+| `backend/gg` | `PNG`, `JPEG`, `Writer` | return `ir.Target` |
+| `backend/window` | `Window`, `Handler` | take the core's backends and events |
+| `arrow/v18` | `Source`, `TableSource`, `Materialize` | return `data.Source`, `*data.Table` |
+
+A `backend/gg v1.8.0` that requires the core at v2 returns **v2's** `ir.Target`,
+which a caller still on core v1 cannot pass anywhere. That is a breaking change
+published as a minor — and because `go get -u` *does* move within a major, a
+caller on core v1 who runs it lands on that release, pulls a second copy of the
+core into the graph, and gets a type error naming two identically spelled types.
+The resolver being unable to cross a major is what makes this silent: nothing
+warns, because from Go's point of view nothing unusual happened.
+
+So the rule for the release is one line: **a module that names a core type in
+its exported API tags a major of its own alongside the core.** `backend/gg` and
+`backend/window` become `…/backend/gg/v2` and `…/backend/window/v2`.
+`backend/gg/gpu` is at `v0.x`, where breaking is permitted, and simply moves to
+`v0.4.0`.
+
+### `arrow/v18` cannot follow, and does not have to
+
+Its major is Apache Arrow's ([ADR 0030](adr/0030-arrow-major-version.md)), so it
+cannot spend one on refract's break without claiming an Arrow release that does
+not exist. The way out is available only because this audit puts `data.Source`
+under KEEP:
+
+**Go interfaces are structural.** A concrete type with `Len`, `Columns`,
+`Float64Column`, `TimeColumn` and `StringColumn` satisfies v1's `data.Source`
+and v2's, because neither changed. So `Source` and `TableSource` return their
+own exported concrete type instead of the core's interface, the module stops
+importing the core altogether, and it works against both majors — and against
+every major after them, for as long as `data.Source` holds still. `Materialize`
+is the one casualty: `*data.Table` is a struct, and a structurally identical
+struct in another module is a different type. It moves into the core or it goes.
+
+That is not a workaround for v2. It is the fix for ADR 0030's conflict in
+general, and v2 is when it becomes cheap.
+
+**`backend/gg` has no such escape**, and the reason marks the line exactly: it
+consumes `ir.Point`, `ir.Stroke`, `ir.Rect` and `ir.TextRun`, which are structs.
+Only a boundary made entirely of interfaces can be crossed structurally. This is
+independent of WIDEN 7 — gg needs a major of its own whether or not
+`ir.Target.Open` widens, so nothing above is an argument against widening it.
