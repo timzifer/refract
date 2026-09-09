@@ -3,6 +3,34 @@
 // module, GPU and a native window through later ones — from the same model,
 // with the same geometry.
 //
+// # This library is now github.com/timzifer/figure
+//
+// Development continues under a new name and a new import path. v1.8.0 is the
+// last release here; it is v1.7.0 plus this notice, and nothing else changed.
+//
+//	go get github.com/timzifer/figure
+//
+// Everything under this path keeps working and keeps its tags. It receives no
+// fixes and no features.
+//
+// Migrating is an import-path change and a compiler pass. Beyond the path,
+// what moved is the shape of the seams a caller implements — Geom.Train,
+// Observer.Panel and Layer, Coord.Frame and Furniture, Target.Open,
+// Typesetter.Typeset, Rows.Marks and Scale.Ticks each take one growable struct
+// now instead of positional arguments — and data.Source, which answers one
+// Column call rather than three typed ones. The release notes for figure
+// v0.8.0 carry the table, and the compiler finds every site:
+//
+//	https://github.com/timzifer/figure/releases/tag/v0.8.0
+//
+// The reason for the rename is written down rather than left to guess: the old
+// name argued a thesis about prisms that the library had outgrown, and the
+// three seams a third dimension breaks were cheaper to correct under a new
+// import path than under a major version that would have carried a /v2 suffix
+// for the rest of the library's life.
+//
+// # What it is
+//
 // The core module is pure Go and depends on nothing but the standard library.
 // Both vector emitters are built in and need no rendering engine and no font
 // stack, so a server that wants a chart as SVG or a report generator that
@@ -90,8 +118,9 @@
 //
 // # Status
 //
-// Pre-alpha. Every release below v1.0.0 may contain breaking changes without
-// a deprecation cycle. See CONCEPT.md for the design and the roadmap.
+// Closed. v1.8.0 is the last release under this path; the API is frozen where
+// v1.0.0 froze it and stays that way, because nothing further will be built
+// here. See github.com/timzifer/figure for the library that continues.
 package refract
 
 import (

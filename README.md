@@ -4,6 +4,29 @@
 
 # refract
 
+> ## This library is now [`github.com/timzifer/figure`](https://github.com/timzifer/figure)
+>
+> Development continues under a new name and a new import path. **`v1.8.0` is
+> the last release here** — it is `v1.7.0` plus this notice.
+>
+> ```sh
+> go get github.com/timzifer/figure
+> ```
+>
+> Everything under this path keeps working and keeps its tags. It receives no
+> fixes and no features.
+>
+> Migrating is an import-path change and a compiler pass. Beyond the path, what
+> moved is the shape of the seams a caller implements, and `data.Source`. The
+> [figure v0.8.0 release notes](https://github.com/timzifer/figure/releases/tag/v0.8.0)
+> carry the table; the compiler finds every site.
+>
+> **Why:** the old name argued a thesis about prisms the library had outgrown,
+> and the three seams a third dimension breaks were cheaper to correct under a
+> new import path than under a major version carrying a `/v2` suffix for the
+> rest of the library's life. The reasoning is
+> [ADR 0059](https://github.com/timzifer/figure/blob/main/docs/adr/0059-renaming-and-restarting-the-version.md).
+
 [![CI](https://github.com/timzifer/refract/actions/workflows/ci.yml/badge.svg)](https://github.com/timzifer/refract/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftimzifer%2Frefract%2Fmain%2Fdocs%2Fcoverage.json)](https://github.com/timzifer/refract/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/timzifer/refract.svg)](https://pkg.go.dev/github.com/timzifer/refract)
