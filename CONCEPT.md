@@ -1418,10 +1418,13 @@ axis, which is a third vocabulary. ✔
   ([ADR 0018](docs/adr/0018-coordinate-systems.md)) and the **Smith chart** in
   v1.2 ([ADR 0033](docs/adr/0033-smith-charts.md)) — the third `Coord`, and the
   same shape of seam: it maps a *mapped pair* through Γ = (z−1)/(z+1), and its
-  grid is the two axes' own ticks, so `render` was not touched. A projection is
+  grid is the two axes' own ticks, so `render` was not touched. A **barycentric
+  coord** is the fourth and is planned, on the same seam and cheaper than
+  either — the map is affine, so an edge stays a straight line and only the
+  clip changes ([ADR 0051](docs/adr/0051-barycentric-coord.md)). A projection is
   still the wider one — it transforms every point with no linear interval
   underneath it, and its graticule has no tick behind it — and is argued on its
-  own evidence rather than smuggled in as a fourth.
+  own evidence rather than smuggled in as a fifth.
 - Node-link diagrams and Venn/UpSet, which are what is left of the relational
   family after v1.4 shipped the rest of it
   ([ADR 0039](docs/adr/0039-relational-layouts.md)). A force layout's whole
@@ -1430,8 +1433,40 @@ axis, which is a third vocabulary. ✔
   [ADR 0012](docs/adr/0012-parallel-panels.md) has to be answered on its own
   terms before it lands. Venn is a circle-packing optimiser and UpSet is a
   matrix chart rather than a relational layout at all.
+
+  **That refusal was one size too large**, and the correction is planned: it
+  binds *force* layouts, and a **tidy tree** is not one. Reingold–Tilford in
+  Buchheim's linear-time form is O(n), deterministic, bounded and a pure
+  function of its input, which is `stat.Squarify`'s shape exactly — so a
+  dendrogram, a phylogram, an org chart and, under a polar coord, a radial
+  dendrogram are one mark reading the channels v1.4 already defined
+  ([ADR 0053](docs/adr/0053-tidy-tree-layout.md)). The clustered heatmap that
+  falls out of it has been one missing band away since v0.10.
 - More stats: contour. Normal QQ plots shipped in v1.5, with a general
   quantile-function API in `stat` ([ADR 0041](docs/adr/0041-qq-plots.md)).
+  Beside contour, a bucket of **domain reductions** is planned — the
+  Kaplan–Meier estimator, the SPC control-limit family, ACF and PACF, ROC and
+  Lorenz — none of which needs a shape refract does not already draw. The
+  record is mostly about where the line is, because "put the field's arithmetic
+  in `stat`" has no natural end: a reduction belongs there when its output is
+  the chart's geometry and there is no reading of it that is not the chart
+  ([ADR 0054](docs/adr/0054-statistical-instruments.md)).
+- A **locus** — a family of curves given by a formula rather than by data, of
+  which `geom.HLine` has been the degenerate member since v0.1. It is what a
+  Nichols diagram's closed-loop contours are, and what the VSWR circles,
+  constant-Q arcs and ZY overlay ADR 0033 declined are. The answer it reaches
+  is not the one 0033 predicted: they are not furniture, they are annotations
+  defined in data space, so the coordinate stage draws them and `render` keeps
+  its two tick lists ([ADR 0050](docs/adr/0050-locus-annotations.md)).
+- A **probability scale**, beside `Log` and `SymLog`: an axis warped by
+  Φ⁻¹, the logit, the complementary log-log or the Gumbel link, so that a
+  distribution's cumulative function plots straight. It is `geom.QQ` turned
+  round — that mark warps the sample and leaves the axis linear; this warps the
+  axis and leaves the sample alone — and it is worth having both because a mark
+  does one job and a scale composes with every mark there is. Weibull, normal
+  and extreme-value probability paper cost no new mark at all: each of them is
+  `geom.ECDF` on a warped axis
+  ([ADR 0052](docs/adr/0052-probability-scales.md)).
 - ~~The rest of bucket H~~ — **shipped in v1.8**: the overlay layer the chart
   itself owns, a tooltip, a crosshair and a brush rectangle
   ([ADR 0046](docs/adr/0046-overlay-layer.md)). Linked brushing turned out not

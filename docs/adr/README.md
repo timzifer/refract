@@ -59,6 +59,11 @@ depends on.
 | [0047](0047-clickable-legend.md) | A legend answers to a pointer; hiding is the chart's, toggling the caller's | Accepted | — |
 | [0048](0048-clickable-colourbar-and-size-key.md) | A colourbar and a size key report a quantity, because neither is a series | Accepted | — |
 | [0049](0049-paths-colour-in-classes.md) | A path colours in classes, and the scale decides where the colour changes | Accepted | — |
+| [0050](0050-locus-annotations.md) | A locus is an annotation, and the coord draws it | Proposed | — |
+| [0051](0051-barycentric-coord.md) | A ternary chart is a barycentric coord, and its third grid family is not furniture | Proposed | — |
+| [0052](0052-probability-scales.md) | A probability scale warps the axis, where a QQ plot warps the sample | Proposed | — |
+| [0053](0053-tidy-tree-layout.md) | A tidy tree is a bounded deterministic layout, and it is not a force simulation | Proposed | — |
+| [0054](0054-statistical-instruments.md) | A domain reduction belongs in `stat` when its output is the chart | Proposed | — |
 
 Nothing in §17 is open any more. **§17.7**, the third-party geom and backend
 extension API, was the last, and it was held open on purpose until the
@@ -68,3 +73,23 @@ deadline — the first widens `geom.Frame` because it had to be widened before
 the freeze, the second declines to widen `Geom` because an optional interface
 does the same work without spending it — and 0029 is the answer. A decision
 that opens after v1.0 gets a record here before it gets code.
+
+## Proposed records
+
+**0050 to 0054 are proposed, not accepted, and no code implements them.** They
+are written down because the alternative is worse: each one answers a question
+an earlier record left open — 0033's "Revisit if" for the first two, 0039's for
+the fourth, 0041's serialisation rule for the third — and a question answered in
+a conversation and not in the repository gets answered again, differently, later.
+
+They are also deliberately written as a set, because four of the five lean on
+each other. 0050 introduces the mark 0051 keeps as its escape hatch for a
+ternary chart's third grid family and 0053 uses for a funnel plot's contours;
+0051 and 0053 both cite 0041's rule that a named member of a closed family
+serialises and an arbitrary Go function does not; 0053 narrows a category 0039
+refused rather than reopening it. Reading any one of them alone will make it
+look more expensive than it is.
+
+A proposed record becomes accepted when it is implemented, or is deleted with a
+sentence saying what it got wrong. Neither is urgent: nothing in v1.7 depends on
+any of them, and each is additive by construction.
