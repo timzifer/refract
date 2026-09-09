@@ -278,6 +278,25 @@ all`, and pkg.go.dev banners the whole module page with it.
 release that carries nothing else. That release is part of tagging v2, not an
 afterthought to it: without it, none of the three effects above happen.
 
+What it actually does, measured against `github.com/golang/protobuf@v1.5.4`,
+which carries exactly this marker:
+
+| Command | Says it? | Result |
+|---|---|---|
+| `go get <v1 path>` | **yes**, naming the successor | installs **v1** |
+| `go get <v1 path>@latest` | **yes**, naming the successor | stays on v1 |
+| `go get -u ./...` | **yes**, naming the successor, even when it upgrades nothing | stays on v1 |
+| `go list -m -u all` | marks the line `(deprecated)` — **without** the successor path | — |
+| `go mod tidy` | **no** | pulls v1 silently |
+| `go build` | **no** | — |
+
+So nothing ever installs v2, and nothing ever offers to. A caller who asks for
+the v1 path gets v1 and a sentence telling them where v2 is; a caller who writes
+the import first and runs `go mod tidy` gets v1 and **silence**. That second path
+is the one a newcomer copying an example actually takes, and it is why channel 3
+below is not a formality: the deprecation marker covers the `go get` route, and
+the documentation is the only thing covering the other one.
+
 **2. pkg.go.dev's own note**, "The highest tagged major version is …/v2".
 Automatic, and quiet.
 
