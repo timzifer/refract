@@ -114,7 +114,7 @@ party has to read.
 
 | Seam | Verdict | Why |
 |---|---|---|
-| `ir.Backend` — all ten methods | **KEEP** | Its parameters are already structs (`Stroke`, `Fill`, `MarkerStyle`, `TextRun`), it has not grown a parameter since v0.1, and ADR 0051 makes "every backend renders 3D on the day `three` compiles" the invariant the whole design rests on. `FillPath`'s `rule` and `Markers`' `shape` could fold into their style structs; that is tidying, and it would cost every third-party backend a rewrite in exchange for nothing it can observe. |
+| `ir.Backend` — all ten methods | **KEEP** | Nothing is pending against it. Its parameters are already structs (`Stroke`, `Fill`, `MarkerStyle`, `TextRun`), it has not grown a parameter since v0.1, and ADR 0051 makes "every backend renders 3D on the day `three` compiles" the invariant the whole design rests on. `FillPath`'s `rule` and `Markers`' `shape` could fold into their style structs; that is tidying, and it would cost every third-party backend a rewrite in exchange for nothing it can observe. |
 | `data.Source` — five methods | **KEEP** | A column accessor takes a name and returns `(data, ok)`. A fourth column kind is a capability, not a parameter, and the v1 audit already routed it to an optional interface. That routing is correct. |
 | `scale.Scale.Train`, `SetRange`, `Domain`, `Map`, `Invert` | **KEEP** | Scalar calls on the hot path. `Map` is called once per row per frame; wrapping its argument is the allocation the IR's whole design exists to avoid, and none of them has anywhere to grow. A third axis is a third `Scale`, which is what [ADR 0018](adr/0018-coordinate-systems.md) bought. |
 | `scale.ColorScale`, `SizeScale`, and the classed and discrete extensions | **KEEP** | Same shape, same reason. `ClassedColorScale` and `ColorTransformer` are capabilities and stay optional interfaces. |
@@ -135,16 +135,19 @@ If instead the coord is the stage a third dimension passes through, then WIDEN
 2 is mandatory and `Point`/`Points` move out of KEEP. **The answer changes this
 table, so it is decided in ADR 0051 before any of this is implemented.**
 
-**Q2 — `scale.Scale.Ticks(want int) []Tick`.** A tick search that knew the
-device width available for labels could stop proposing labels that will
-collide, which is a real problem [ADR 0040](adr/0040-label-collision-avoidance.md)
-solves for marks and not for axes. That argues for `Ticks(req TickRequest)`.
-Against it: every tick concern so far — locale, pinned values, formatting — has
-been absorbed by `scale.Locale`, `TickValues` and the `Labeller` optional
-interface without touching the signature, and there is no request open for the
-rest. **Verdict: DEFER**, and the condition for flipping it is written here —
-if axis label collision is taken up before v2 tags, `Ticks` widens with the
-rest, because afterwards it cannot.
+**Q2 — `scale.Scale.Ticks(want int) []Tick`.** Resolved below, under what the
+toll costs: **WIDEN**. A tick search that knew the device width available for
+labels could stop proposing labels that will collide — the problem
+[ADR 0040](adr/0040-label-collision-avoidance.md) solves for marks and not for
+axes, and the one growth this signature has a name for. Every tick concern so
+far has been absorbed by `scale.Locale`, `TickValues` and the `Labeller`
+optional interface without touching it, which is the case for DEFER; the case
+against DEFER is that the next one cannot be, and the toll for finding that out
+is a whole major version. `Ticks(req TickRequest) []Tick`.
+
+The principle does not generalise to widening everything that *could* grow.
+It generalises to widening what has a named pending growth, which is why
+`ir.Backend` stays KEEP and this does not.
 
 ## What this does not propose
 
@@ -246,3 +249,63 @@ consumes `ir.Point`, `ir.Stroke`, `ir.Rect` and `ir.TextRun`, which are structs.
 Only a boundary made entirely of interfaces can be crossed structurally. This is
 independent of WIDEN 7 — gg needs a major of its own whether or not
 `ir.Target.Open` widens, so nothing above is an argument against widening it.
+
+
+## The toll on a newcomer, and why it argues for one break
+
+Go has no forwarding from a major version to the next. A newcomer who copies
+`go get github.com/timzifer/refract` gets v1 and is told nothing, and no
+`replace`, no field in `go.mod` and no tag can change that. It is the import
+compatibility rule working as designed, and it is the part of the design that
+costs a library something real.
+
+Four channels exist. Only the first is in-band:
+
+**1. Deprecate the v1 module.** A comment paragraph beginning `Deprecated: `
+directly above the `module` line:
+
+```
+// Deprecated: use github.com/timzifer/refract/v2 instead.
+module github.com/timzifer/refract
+```
+
+It is a first-class field of `go.mod` — `go mod edit -json` reports it as
+`ModPath.Deprecated` — and `github.com/golang/protobuf@v1.5.4` is the reference
+example in the wild. The go command prints it from `go get` and `go list -m -u
+all`, and pkg.go.dev banners the whole module page with it.
+
+**It is read from the module's *latest* version**, so it needs a final v1
+release that carries nothing else. That release is part of tagging v2, not an
+afterthought to it: without it, none of the three effects above happen.
+
+**2. pkg.go.dev's own note**, "The highest tagged major version is …/v2".
+Automatic, and quiet.
+
+**3. The documentation that actually gets copied.** In practice the install line
+comes from the README, the badges and the first example — so all of them carry
+`/v2`, including `go.mod`'s module line in every snippet and the package doc.
+It is the least clever channel and the one with the most traffic.
+
+**4. Optionally, `// Deprecated:` on v1's exported identifiers** in that final
+release, so an editor strikes them through for whoever is already on v1. It
+costs one pass and breaks nothing.
+
+**`retract` is not one of these.** It means "these versions are broken", not
+"these versions are old". v1 is not broken, and retracting it would put a
+warning in the builds of everyone who did nothing wrong, in service of a claim
+that is false.
+
+### What that implies
+
+The toll is paid per major version, and its size is *adoption × time spent on
+the old path*. Both factors are near zero today and only grow. That is ADR 0051's
+argument arriving from the other side: not only is the break cheap now, the
+**toll** is cheap now, and it is the toll — not the migration — that is
+permanent.
+
+Which is what this audit is actually for. Its value is not tidiness; it is that
+**v2 should be the last major version this library needs**. Every seam left in
+the wrong shape today is a second toll later, collected from a larger population
+than the one that would pay it now. That is the reasoning that moves Q2 from
+DEFER to WIDEN, and it is the standard the rest of the table should be re-read
+against before anything is implemented.
